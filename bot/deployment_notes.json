@@ -1,0 +1,18 @@
+{
+  "title": "Ticket System Improvements",
+  "summary": "The ticket experience has been made more reliable and easier for the team to manage.",
+  "added": [
+    "Staff can use /tickets to add an existing channel to a ticket category or remove it later.",
+    "Staff can use /hr and /leadership to share the available position lists."
+  ],
+  "changed": [
+    "Update announcements now describe what was added, changed, or removed instead of saying that the bot is running.",
+    "The ticket category menu resets after each choice, so it is ready to use again.",
+    "Ticket notifications no longer mention the same staff role twice.",
+    "Tickets now finish closing after a clear five-second countdown, and closure messages give members more helpful information.",
+    "Every bot update now notifies the Bot Updates role."
+  ],
+  "removed": [
+    "Tickets no longer stay open indefinitely while waiting for an optional rating."
+  ]
+}
