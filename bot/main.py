@@ -1061,6 +1061,10 @@ intents.message_content = True
 class DeltaBot(commands.Bot):
     def __init__(self) -> None:
         super().__init__(command_prefix="!", intents=intents, help_command=None)
+        # ``on_ready`` can run again after every gateway reconnect.  Mark the
+        # announcement as handled before doing any network I/O so overlapping
+        # ready events cannot send the same deployment notice twice.
+        self._deployment_announcement_started = asyncio.Event()
 
     async def setup_hook(self) -> None:
         self.add_view(AssistancePanelView())
@@ -1079,48 +1083,45 @@ class DeltaBot(commands.Bot):
             )
         )
         
-        # Post deployment update to updates channel
-        await post_deployment_update()
+        await self.post_deployment_update()
 
+    async def post_deployment_update(self) -> None:
+        """Post this process's deployment announcement at most once."""
+        if self._deployment_announcement_started.is_set():
+            log.debug("Deployment announcement already handled; skipping.")
+            return
+        self._deployment_announcement_started.set()
 
-async def post_deployment_update() -> None:
-    """Automatically post a deployment update to the updates channel."""
-    try:
-        # Small delay to ensure bot is fully ready
-        await asyncio.sleep(2)
-        
-        # Get the bot instance through discord.ext.commands
-        bot = commands.Bot.instance() if hasattr(commands.Bot, 'instance') else None
-        if bot is None:
-            # Try to get from the global scope
-            for obj in list(globals().values()):
-                if isinstance(obj, DeltaBot):
-                    bot = obj
-                    break
-        
-        if bot is None or not bot.user:
-            log.warning("Could not post deployment update: bot instance not found")
-            return
-        
-        # Find a guild to get the updates channel
-        guild = None
-        for g in bot.guilds:
-            guild = g
-            break
-        
-        if guild is None:
-            log.warning("Bot is not in any guilds yet")
-            return
-        
-        updates_channel = guild.get_channel(UPDATES_CHANNEL_ID)
+        updates_channel = self.get_channel(UPDATES_CHANNEL_ID)
+        if updates_channel is None:
+            try:
+                updates_channel = await self.fetch_channel(UPDATES_CHANNEL_ID)
+            except discord.Forbidden:
+                log.warning(
+                    "Cannot access updates channel %s: permission denied.",
+                    UPDATES_CHANNEL_ID,
+                )
+                return
+            except discord.NotFound:
+                log.warning("Updates channel %s was not found.", UPDATES_CHANNEL_ID)
+                return
+            except discord.HTTPException as exc:
+                log.warning(
+                    "Discord HTTP error while fetching updates channel %s: %s",
+                    UPDATES_CHANNEL_ID,
+                    exc,
+                )
+                return
+
         if not isinstance(updates_channel, discord.TextChannel):
-            log.warning(f"Updates channel {UPDATES_CHANNEL_ID} not found or not a text channel")
+            log.warning("Updates channel %s is not a text channel.", UPDATES_CHANNEL_ID)
             return
-        
-        # Post the banner
-        await updates_channel.send(embed=assistance_panel_banner_embed())
-        
-        # Post the deployment update
+
+        deployment_id = (
+            os.getenv("RENDER_GIT_COMMIT")
+            or os.getenv("RENDER_SERVICE_ID")
+            or "Non-Render start"
+        )
         deploy_embed = _base_embed(
             title="🚀  Bot Deployed",
             description=(
@@ -1130,13 +1131,25 @@ async def post_deployment_update() -> None:
                 "*Thank you for flying with Delta Air Lines — Keep Climbing.*"
             ),
         )
-        deploy_embed.set_image(url=DIVIDER_URL)
-        
-        await updates_channel.send(embed=deploy_embed)
-        log.info("Deployment update posted to updates channel")
-        
-    except Exception as exc:
-        log.warning(f"Failed to post deployment update: {exc}")
+        deploy_embed.add_field(
+            name="Deployment Identifier",
+            value=deployment_id,
+            inline=False,
+        )
+        # Keep the visual banner and deployment details in one message so a
+        # partial send cannot leave an orphaned banner behind.
+        deploy_embed.set_image(url=BANNER_URL)
+
+        try:
+            await updates_channel.send(embed=deploy_embed)
+        except discord.Forbidden:
+            log.warning("Cannot post deployment update: permission denied.")
+        except discord.NotFound:
+            log.warning("Cannot post deployment update: updates channel was deleted.")
+        except discord.HTTPException as exc:
+            log.warning("Discord HTTP error while posting deployment update: %s", exc)
+        else:
+            log.info("Deployment update posted to updates channel")
 
 
 def run_health_server() -> None:
