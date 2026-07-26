@@ -13,6 +13,8 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Private Tickets | Auto-created per-category channels with correct role permissions |
 | Duplicate Guard | Prevents users from opening multiple simultaneous tickets |
 | Close Ticket | Button *and* `/close` slash command; DMs the user on close |
+| Channel Setup | `/tickets` adds an existing channel to a ticket category or removes it |
+| Deployment Notes | Posts plain-language added, changed, and removed notes from `deployment_notes.json` |
 | Staff Commands | `/connected`, `/resolved`, `/assistance panel` — staff role-gated |
 | Delta Branding | Red (#C8102E), banner/divider images, consistent footer on every embed |
 | Persistent Views | Buttons and dropdowns survive bot restarts |
@@ -89,6 +91,9 @@ python main.py
 | `/close` | Close the current ticket | Ticket owner, staff, or Manage Channels |
 | `/connected` | Notify the user that an agent has connected | Staff only |
 | `/resolved` | Mark the ticket as resolved | Staff only |
+| `/tickets <channel> <action> <category>` | Add or remove an existing ticket channel | Staff only |
+| `/hr` | Post the available Human Resources positions | Staff only |
+| `/leadership` | Post the available Delta Leadership positions | Staff only |
 
 ---
 
@@ -104,6 +109,11 @@ All IDs and constants are in **`config.py`**:
 | `DELTA_RED` | `0xC8102E` | Embed accent colour |
 
 To add a new ticket category, add an entry to the `TICKET_CONFIG` dict in `config.py`. The rest of the bot picks it up automatically.
+
+Before deploying, update **`deployment_notes.json`** with short, plain-language
+items under `added`, `changed`, and `removed`. The bot posts those notes once
+when the new process connects; it does not post generic online or command-sync
+status messages to the updates channel.
 
 ---
 
