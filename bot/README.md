@@ -94,6 +94,7 @@ python main.py
 | `/tickets <channel> <action> <category>` | Add or remove an existing ticket channel | Staff only |
 | `/hr` | Post the available Human Resources positions | Staff only |
 | `/leadership` | Post the available Delta Leadership positions | Staff only |
+| `/bot-updates post` | Post an update and notify the Bot Updates role | Staff only |
 
 ---
 

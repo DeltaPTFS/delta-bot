@@ -8,7 +8,9 @@
   "changed": [
     "Update announcements now describe what was added, changed, or removed instead of saying that the bot is running.",
     "The ticket category menu resets after each choice, so it is ready to use again.",
-    "Ticket notifications no longer mention the same staff role twice."
+    "Ticket notifications no longer mention the same staff role twice.",
+    "Tickets now finish closing after a clear five-second countdown, and closure messages give members more helpful information.",
+    "Every bot update now notifies the Bot Updates role."
   ],
   "removed": [
     "Tickets no longer stay open indefinitely while waiting for an optional rating."

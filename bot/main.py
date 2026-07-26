@@ -17,6 +17,7 @@ import logging
 import os
 from pathlib import Path
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import discord
@@ -48,6 +49,8 @@ STAFF_ROLE_ID           = 1520094641305817278
 GENERAL_SUPPORT_ROLE_ID = 1436480867240251493
 TRANSCRIPT_CHANNEL_ID   = 1524489806711754752
 UPDATES_CHANNEL_ID      = 1529943543593041990
+UPDATES_ROLE_ID         = 1530210954422518042
+TICKET_CLOSE_DELAY      = 5
 
 # Human-written release notes are intentionally kept separate from the code.
 # Edit this file as part of a deployment to tell members what actually changed.
@@ -246,7 +249,8 @@ def ticket_closed_channel() -> discord.Embed:
     embed = _base_embed(
         title="🔒  Ticket Closing",
         description=(
-            "This ticket has been marked as **closed** and will be deleted shortly.\n\n"
+            f"This ticket has been marked as **closed** and will be deleted in "
+            f"**{TICKET_CLOSE_DELAY} seconds**.\n\n"
             "Thank you for contacting Delta Air Lines Support."
         ),
     )
@@ -457,8 +461,15 @@ async def _archive_ticket(
                 f"Your support ticket **#{channel.name}** has been closed.\n\n"
                 f"**Reason:** {reason}\n"
                 f"**Your rating:** {rating_line}\n\n"
-                "Thank you for contacting **Delta Air Lines Support**. "
-                "If you need further assistance, please open a new ticket.\n\n"
+                "Thank you for taking the time to contact **Delta Air Lines Support**. "
+                "We appreciate the opportunity to assist you and hope our team gave you "
+                "the information or resolution you needed.\n\n"
+                "This conversation has now ended and its channel has been removed. "
+                "If you have another question, need clarification, or require more help, "
+                "please return to the assistance panel and open a new ticket. A member "
+                "of our support team will be happy to assist you.\n\n"
+                "Please keep this message for your records, as it includes the reason "
+                "your ticket was closed and any rating you submitted.\n\n"
                 "*Delta Air Lines — Keep Climbing.*"
             ),
         )
@@ -474,6 +485,7 @@ async def _finalize_ticket(
     closer: discord.Member,
     reason: str,
     rating: int | None,
+    close_deadline: float | None = None,
 ) -> None:
     """Archive a ticket when possible, but always attempt to delete it."""
     try:
@@ -482,7 +494,8 @@ async def _finalize_ticket(
         # A transcript/DM failure must not leave a channel stuck open.
         log.warning("Could not fully archive ticket %s: %s", channel.id, exc)
     finally:
-        await asyncio.sleep(3)
+        if close_deadline is not None:
+            await asyncio.sleep(max(0, close_deadline - time.monotonic()))
         try:
             await channel.delete(reason=f"Ticket closed by {closer}: {reason}")
         except discord.NotFound:
@@ -521,10 +534,12 @@ class CloseReasonModal(discord.ui.Modal, title="Close Ticket — Delta Air Lines
                 owner = self._channel.guild.get_member(int(part))
                 break
 
+        close_deadline = time.monotonic() + TICKET_CLOSE_DELAY
         view = RatingView(
             channel=self._channel,
             closer=self._closer,
             reason=self.reason.value,
+            close_deadline=close_deadline,
         )
 
         # Send rating prompt to the owner's DMs
@@ -535,7 +550,11 @@ class CloseReasonModal(discord.ui.Modal, title="Close Ticket — Delta Air Lines
                 description=(
                     f"Your support ticket **#{self._channel.name}** has been closed.\n\n"
                     "Please rate your experience with **Delta Air Lines Support** "
-                    "by selecting a star rating below."
+                    "by selecting a star rating below. Your feedback helps our support "
+                    "team understand what went well and where we can improve.\n\n"
+                    f"This request is optional and is available for {TICKET_CLOSE_DELAY} "
+                    "seconds before the ticket finishes closing. If you need help again, "
+                    "you are always welcome to open a new ticket from the assistance panel."
                 ),
             )
             rating_embed.set_image(url=DIVIDER_URL)
@@ -545,20 +564,28 @@ class CloseReasonModal(discord.ui.Modal, title="Close Ticket — Delta Air Lines
             except discord.Forbidden:
                 pass
 
+        # Always show the same countdown in the ticket, even when the owner
+        # cannot receive the optional rating request.
+        await self._channel.send(embed=ticket_closed_channel())
+
         if dm_sent:
             await interaction.followup.send(
-                embed=success_embed("A rating request has been sent to the ticket owner via DM. The ticket will close once they respond (or after 60 seconds)."),
+                embed=success_embed(f"A rating request was sent by DM. The ticket will close in {TICKET_CLOSE_DELAY} seconds."),
                 ephemeral=True,
             )
-            # Post a brief closing notice in the channel — channel stays alive until rating/timeout
-            await self._channel.send(embed=ticket_closed_channel())
         else:
             # DMs disabled — finalize immediately without rating
             await interaction.followup.send(
                 embed=success_embed("Closing in progress — please wait."),
                 ephemeral=True,
             )
-            await _finalize_ticket(self._channel, self._closer, self.reason.value, rating=None)
+            await _finalize_ticket(
+                self._channel,
+                self._closer,
+                self.reason.value,
+                rating=None,
+                close_deadline=close_deadline,
+            )
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -581,13 +608,15 @@ class RatingView(discord.ui.View):
         channel: discord.TextChannel,
         closer: discord.Member,
         reason: str,
+        close_deadline: float,
     ) -> None:
         # A ticket must never remain open forever just because its owner did
         # not answer the optional rating DM.
-        super().__init__(timeout=60)
+        super().__init__(timeout=TICKET_CLOSE_DELAY)
         self._channel = channel
         self._closer  = closer
         self._reason  = reason
+        self._close_deadline = close_deadline
         self._rated   = False
         self._finalize_lock = asyncio.Lock()
 
@@ -640,18 +669,28 @@ class RatingView(discord.ui.View):
                 )
                 confirm.set_image(url=DIVIDER_URL)
                 await interaction.followup.send(embed=confirm)
-                await _finalize_ticket(self._channel, self._closer, self._reason, rating=stars)
+                await _finalize_ticket(
+                    self._channel,
+                    self._closer,
+                    self._reason,
+                    rating=stars,
+                    close_deadline=self._close_deadline,
+                )
 
         return callback
 
     async def on_timeout(self) -> None:
-        """Close unrated tickets after the promised 60-second window."""
+        """Close unrated tickets after the promised five-second window."""
         async with self._finalize_lock:
             if self._rated:
                 return
             self._rated = True
             await _finalize_ticket(
-                self._channel, self._closer, self._reason, rating=None
+                self._channel,
+                self._closer,
+                self._reason,
+                rating=None,
+                close_deadline=self._close_deadline,
             )
 
 
@@ -1000,7 +1039,11 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         update_embed.set_image(url=DIVIDER_URL)
 
         try:
-            await updates_channel.send(embed=update_embed)
+            await updates_channel.send(
+                content=f"<@&{UPDATES_ROLE_ID}>",
+                embed=update_embed,
+                allowed_mentions=discord.AllowedMentions(roles=True),
+            )
             await interaction.response.send_message(
                 embed=success_embed(f"✅ Update posted to {updates_channel.mention}"),
                 ephemeral=True,
@@ -1349,7 +1392,11 @@ class DeltaBot(commands.Bot):
         deploy_embed.set_image(url=BANNER_URL)
 
         try:
-            await updates_channel.send(embed=deploy_embed)
+            await updates_channel.send(
+                content=f"<@&{UPDATES_ROLE_ID}>",
+                embed=deploy_embed,
+                allowed_mentions=discord.AllowedMentions(roles=True),
+            )
         except discord.Forbidden:
             log.warning("Cannot post deployment update: permission denied.")
         except discord.NotFound:
