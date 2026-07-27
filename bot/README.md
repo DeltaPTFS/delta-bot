@@ -127,6 +127,13 @@ status messages to the updates channel.
 3. Set the **Start Command** to: `python bot/main.py`
 4. Add the `DISCORD_TOKEN` environment variable in the platform dashboard.
 
+### Replit
+
+The repository-level `.replit`, `requirements.txt`, and `runtime.txt` files are
+already configured to install the bot dependencies and start `bot/main.py`.
+Add `DISCORD_TOKEN` as a Replit Secret, then redeploy. Do not replace the
+deployment command with the TypeScript workspace's build command.
+
 ### VPS (systemd)
 
 ```ini
