@@ -51,6 +51,7 @@ TRANSCRIPT_CHANNEL_ID   = 1524489806711754752
 UPDATES_CHANNEL_ID      = 1529943543593041990
 UPDATES_ROLE_ID         = 1530210954422518042
 TICKET_CLOSE_DELAY      = 5
+RATING_TIMEOUT          = 15 * 24 * 60 * 60
 
 # Human-written release notes are intentionally kept separate from the code.
 # Edit this file as part of a deployment to tell members what actually changed.
@@ -410,6 +411,7 @@ async def _archive_ticket(
     reason: str,
     rating: int | None,
 ) -> None:
+    """Generate and log the ticket transcript before deletion."""
     """Generate the transcript and notify the ticket owner before deletion."""
     guild = channel.guild
 
@@ -453,6 +455,22 @@ async def _archive_ticket(
         )
         await log_channel.send(embed=log_embed, file=file)
 
+async def _finalize_ticket(
+    channel: discord.TextChannel,
+    closer: discord.Member,
+    reason: str,
+    rating: int | None,
+    close_deadline: float | None = None,
+) -> None:
+    """Archive a ticket when possible, but always attempt to delete it."""
+    try:
+        await _archive_ticket(channel, closer, reason, rating)
+    except (discord.Forbidden, discord.HTTPException) as exc:
+        # A transcript/DM failure must not leave a channel stuck open.
+        log.warning("Could not fully archive ticket %s: %s", channel.id, exc)
+    finally:
+        if close_deadline is not None:
+            await asyncio.sleep(max(0, close_deadline - time.monotonic()))
     # DM the owner
     if owner is not None:
         dm_embed = _base_embed(
@@ -476,8 +494,8 @@ async def _archive_ticket(
         dm_embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
         dm_embed.set_image(url=DIVIDER_URL)
         try:
-            await owner.send(embed=dm_embed)
-        except discord.Forbidden:
+            await channel.delete(reason=f"Ticket closed by {closer}: {reason}")
+        except discord.NotFound:
             pass
 
 async def _finalize_ticket(
@@ -536,6 +554,7 @@ class CloseReasonModal(discord.ui.Modal, title="Close Ticket — Delta Air Lines
 
         close_deadline = time.monotonic() + TICKET_CLOSE_DELAY
         view = RatingView(
+            owner_id=owner.id if owner is not None else None,
             channel=self._channel,
             closer=self._closer,
             reason=self.reason.value,
@@ -549,6 +568,10 @@ class CloseReasonModal(discord.ui.Modal, title="Close Ticket — Delta Air Lines
                 title="⭐  Rate Your Support Experience",
                 description=(
                     f"Your support ticket **#{self._channel.name}** has been closed.\n\n"
+                    f"**Reason:** {self.reason.value}\n\n"
+                    "Please select a rating below. The buttons remain available for "
+                    "**15 days**. If you need more help, you can open a new ticket.\n\n"
+                    "*Thank you for contacting Delta Air Lines Support.*"
                     "Please rate your experience with **Delta Air Lines Support** "
                     "by selecting a star rating below. Your feedback helps our support "
                     "team understand what went well and where we can improve.\n\n"
@@ -559,7 +582,7 @@ class CloseReasonModal(discord.ui.Modal, title="Close Ticket — Delta Air Lines
             )
             rating_embed.set_image(url=DIVIDER_URL)
             try:
-                await owner.send(embed=rating_embed, view=view)
+                view.message = await owner.send(embed=rating_embed, view=view)
                 dm_sent = True
             except discord.Forbidden:
                 pass
@@ -579,6 +602,15 @@ class CloseReasonModal(discord.ui.Modal, title="Close Ticket — Delta Air Lines
                 embed=success_embed("Closing in progress — please wait."),
                 ephemeral=True,
             )
+        # Closing the channel and expiring the DM rating are independent: the
+        # channel still closes after five seconds, while the one DM remains.
+        await asyncio.sleep(max(0, close_deadline - time.monotonic()))
+        await _finalize_ticket(
+            self._channel,
+            self._closer,
+            self.reason.value,
+            rating=view.rating,
+        )
             await _finalize_ticket(
                 self._channel,
                 self._closer,
@@ -593,7 +625,7 @@ class CloseReasonModal(discord.ui.Modal, title="Close Ticket — Delta Air Lines
 # ════════════════════════════════════════════════════════════════════════════════
 
 class RatingView(discord.ui.View):
-    """Star rating buttons shown in the ticket before it's deleted."""
+    """Star rating buttons kept in the ticket owner's single closure DM."""
 
     STARS = [
         ("1 ⭐", 1, discord.ButtonStyle.secondary),
@@ -603,6 +635,12 @@ class RatingView(discord.ui.View):
         ("5 ⭐", 5, discord.ButtonStyle.success),
     ]
 
+    def __init__(self, owner_id: int | None) -> None:
+        super().__init__(timeout=RATING_TIMEOUT)
+        self._owner_id = owner_id
+        self._rated = False
+        self.rating: int | None = None
+        self.message: discord.Message | None = None
     def __init__(
         self,
         channel: discord.TextChannel,
@@ -636,18 +674,26 @@ class RatingView(discord.ui.View):
                 )
                 return
 
-            # Works in both DM (User) and guild (Member) context
-            user  = interaction.user
-            topic = self._channel.topic or ""
-            is_owner = str(user.id) in topic
-            staff    = isinstance(user, discord.Member) and is_staff(user)
-            if not (is_owner or staff):
+            if self._owner_id is None or interaction.user.id != self._owner_id:
                 await interaction.response.send_message(
                     embed=error_embed("Only the ticket owner can submit a rating."),
                     ephemeral=True,
                 )
                 return
 
+            self._rated = True
+            self.rating = stars
+            self.stop()
+            confirm = _base_embed(
+                title="✅  Rating Submitted",
+                description=(
+                    f"Thank you! You rated your support experience **{stars} / 5 ⭐**.\n\n"
+                    "*Delta Air Lines — Keep Climbing.*"
+                ),
+            )
+            confirm.set_image(url=DIVIDER_URL)
+            # Edit the existing closure embed instead of sending a second DM.
+            await interaction.response.edit_message(embed=confirm, view=None)
             async with self._finalize_lock:
                 if self._rated:
                     await interaction.response.send_message(
@@ -680,6 +726,14 @@ class RatingView(discord.ui.View):
         return callback
 
     async def on_timeout(self) -> None:
+        """Disable the buttons after 15 days without sending another DM."""
+        for item in self.children:
+            item.disabled = True
+        if self.message is not None:
+            try:
+                await self.message.edit(view=self)
+            except (discord.NotFound, discord.HTTPException):
+                pass
         """Close unrated tickets after the promised five-second window."""
         async with self._finalize_lock:
             if self._rated:
