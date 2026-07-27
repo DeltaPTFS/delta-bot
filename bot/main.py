@@ -412,6 +412,7 @@ async def _archive_ticket(
     rating: int | None,
 ) -> None:
     """Generate and log the ticket transcript before deletion."""
+    """Generate the transcript and notify the ticket owner before deletion."""
     guild = channel.guild
 
     # Find ticket owner from topic
