@@ -1,8 +1,14 @@
-modules = ["nodejs-24"]
+modules = ["python-3.12", "nodejs-24"]
+
+# Start the Discord bot when the Run button is used. Keeping this command here
+# also prevents Replit from guessing that the TypeScript workspace is the app.
+run = "python bot/main.py"
 
 [deployment]
 router = "application"
 deploymentTarget = "autoscale"
+build = ["sh", "-c", "python -m pip install -r requirements.txt"]
+run = ["python", "bot/main.py"]
 
 [deployment.postBuild]
 args = ["pnpm", "store", "prune"]
