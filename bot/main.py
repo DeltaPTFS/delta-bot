@@ -1033,6 +1033,29 @@ def register_commands(tree: app_commands.CommandTree) -> None:
     async def leadership(interaction: discord.Interaction) -> None:
         await post_positions(interaction, LEADERSHIP_POSITIONS_MESSAGE)
 
+    async def post_positions(
+        interaction: discord.Interaction,
+        message: str,
+    ) -> None:
+        """Post a position list publicly from a staff-only slash command."""
+        if not isinstance(interaction.channel, discord.TextChannel):
+            await interaction.response.send_message(
+                embed=error_embed("This command can only be used in a text channel."),
+                ephemeral=True,
+            )
+            return
+        await interaction.response.send_message(message)
+
+    @tree.command(name="hr", description="Post the available Human Resources positions.")
+    @staff_only()
+    async def hr(interaction: discord.Interaction) -> None:
+        await post_positions(interaction, HR_POSITIONS_MESSAGE)
+
+    @tree.command(name="leadership", description="Post the available leadership positions.")
+    @staff_only()
+    async def leadership(interaction: discord.Interaction) -> None:
+        await post_positions(interaction, LEADERSHIP_POSITIONS_MESSAGE)
+
     # /bot-updates
     bot_updates_group = app_commands.Group(
         name="bot-updates",
@@ -1095,6 +1118,96 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             )
 
     tree.add_command(bot_updates_group)
+
+    # /tickets — register an existing channel with the ticket system
+    ticket_category_choices = [
+        app_commands.Choice(name=cfg["label"], value=key)
+        for key, cfg in TICKET_CONFIG.items()
+    ]
+
+    @tree.command(name="tickets", description="Add or remove a channel from the ticket system.")
+    @staff_only()
+    @app_commands.describe(
+        channel="The channel to configure.",
+        action="Whether to add or remove the channel.",
+        category="The kind of tickets handled in this channel.",
+    )
+    @app_commands.choices(
+        action=[
+            app_commands.Choice(name="Add", value="add"),
+            app_commands.Choice(name="Remove", value="remove"),
+        ],
+        category=ticket_category_choices,
+    )
+    async def tickets(
+        interaction: discord.Interaction,
+        channel: discord.TextChannel,
+        action: app_commands.Choice[str],
+        category: app_commands.Choice[str],
+    ) -> None:
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message(
+                embed=error_embed("This command must be used inside a server."),
+                ephemeral=True,
+            )
+            return
+
+        marker_prefix = "Delta ticket category:"
+        topic_lines = [
+            line for line in (channel.topic or "").splitlines()
+            if not line.startswith(marker_prefix)
+        ]
+
+        try:
+            if action.value == "remove":
+                await channel.edit(
+                    topic="\n".join(topic_lines) or None,
+                    reason=f"Removed from ticket system by {interaction.user}",
+                )
+                message = f"{channel.mention} was removed from the ticket system."
+            else:
+                destination = guild.get_channel(TICKET_CATEGORY_ID)
+                if not isinstance(destination, discord.CategoryChannel):
+                    raise ValueError("The configured ticket category could not be found.")
+
+                cfg = TICKET_CONFIG[category.value]
+                support_role = guild.get_role(cfg["role_id"])
+                staff_role = guild.get_role(STAFF_ROLE_ID)
+                for role in {support_role, staff_role} - {None}:
+                    await channel.set_permissions(
+                        role,
+                        view_channel=True,
+                        send_messages=True,
+                        read_message_history=True,
+                        manage_channels=True,
+                        reason=f"Added to ticket system by {interaction.user}",
+                    )
+                topic_lines.append(f"{marker_prefix} {category.value}")
+                await channel.edit(
+                    category=destination,
+                    topic="\n".join(topic_lines),
+                    reason=f"Added to ticket system by {interaction.user}",
+                )
+                await channel.send(
+                    embed=success_embed(
+                        f"This channel now uses the **{cfg['label']}** ticket functions."
+                    ),
+                    view=TicketActionView(),
+                )
+                message = (
+                    f"{channel.mention} was added as a **{cfg['label']}** ticket channel."
+                )
+        except (discord.Forbidden, discord.HTTPException, ValueError) as exc:
+            await interaction.response.send_message(
+                embed=error_embed(f"The ticket channel could not be updated: {exc}"),
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.send_message(
+            embed=success_embed(message), ephemeral=True
+        )
 
     # /close
     @tree.command(name="close", description="Close the current support ticket.")
