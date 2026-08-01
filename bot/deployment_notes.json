@@ -1,0 +1,19 @@
+{
+  "title": "Private DM Support Tickets",
+  "summary": "Support tickets now begin and continue privately through direct messages with the bot.",
+  "added": [
+    "Members can message the bot, confirm that they want help, and choose an assistance category in their DMs.",
+    "Messages are relayed both ways between the member's DMs and a staff-only support channel.",
+    "A check mark confirms when a message has been delivered to the other side."
+  ],
+  "changed": [
+    "Ticket channels are now visible only to support staff; members remain in the bot's DMs.",
+    "Only one support agent can claim and reply to a ticket at a time.",
+    "Claiming or unclaiming a ticket updates the button and notifies the member in DMs.",
+    "Deployment announcements now post in the new bot updates channel.",
+    "Bot commands now load safely during deployment without registering the same command twice."
+  ],
+  "removed": [
+    "The public server assistance panel and the channel setup command have been removed."
+  ]
+}
