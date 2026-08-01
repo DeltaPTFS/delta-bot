@@ -185,11 +185,22 @@ def assistance_panel_embed() -> discord.Embed:
         description=(
             "Welcome to the **Delta Air Lines Support Centre**.\n\n"
             "Our dedicated team is here to assist you with any questions, "
-            "concerns, or requests you may have. Please select a category "
-            "from the dropdown menu below to open a private support ticket.\n\n"
-            "A member of our support team will be with you as soon as possible. "
-            "Thank you for choosing Delta Air Lines — *Keep Climbing.*"
+            "concerns, or requests you may have. Select the category that best "
+            "matches your request below.\n\n"
+            "For your privacy, the conversation will not take place in this channel. "
+            "The bot will send you a direct message asking you to confirm the ticket, "
+            "and all further communication will remain in your DMs."
         ),
+    )
+    embed.add_field(
+        name="🔐 Private & Secure",
+        value="Only you and the assigned Delta Support team can take part in the conversation.",
+        inline=False,
+    )
+    embed.add_field(
+        name="📨 Before You Begin",
+        value="Please make sure your Discord privacy settings allow direct messages from this server.",
+        inline=False,
     )
     embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
     embed.set_image(url=DIVIDER_URL)
@@ -407,6 +418,24 @@ async def notify_ticket_owner(
         log.warning("Could not notify DM ticket owner %s: %s", owner_id, exc)
 
 
+async def send_embed_to_ticket_owner(
+    client: discord.Client,
+    channel: discord.TextChannel,
+    embed: discord.Embed,
+) -> bool:
+    """Deliver a ticket command's full embed to the customer in DMs."""
+    owner_id = get_topic_value(channel.topic or "", DM_TICKET_OWNER_MARKER)
+    if owner_id is None or not owner_id.isdigit():
+        return False
+    try:
+        user = client.get_user(int(owner_id)) or await client.fetch_user(int(owner_id))
+        await user.send(embed=embed)
+        return True
+    except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+        log.warning("Could not deliver ticket command to owner %s: %s", owner_id, exc)
+        return False
+
+
 def relay_description(message: discord.Message) -> str:
     """Build safe relay text containing message content and attachment links."""
     parts = [message.content] if message.content else []
@@ -422,6 +451,8 @@ async def relay_customer_message(message: discord.Message, channel: discord.Text
     )
     embed.set_author(name=str(message.author), icon_url=message.author.display_avatar.url)
     embed.add_field(name="Customer ID", value=str(message.author.id), inline=False)
+    embed.set_image(url=DIVIDER_URL)
+    embed.timestamp = message.created_at
     await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
     await message.add_reaction("✅")
 
@@ -439,11 +470,72 @@ async def relay_support_message(
         )
         display_name = getattr(message.author, "display_name", message.author.name)
         embed.set_author(name=display_name, icon_url=message.author.display_avatar.url)
+        embed.add_field(
+            name="Private Support Conversation",
+            value="Reply directly in this DM to send another message to your assigned support agent.",
+            inline=False,
+        )
+        embed.set_image(url=DIVIDER_URL)
+        embed.timestamp = message.created_at
         await user.send(embed=embed)
         await message.add_reaction("✅")
     except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
         await message.add_reaction("❌")
         log.warning("Could not relay support message to %s: %s", owner_id, exc)
+
+
+async def open_dm_ticket(
+    bot: "DeltaBot",
+    user: discord.abc.User,
+    category_key: str,
+) -> discord.TextChannel:
+    """Create and introduce a staff relay channel for a confirmed DM ticket."""
+    category = bot.get_channel(TICKET_CATEGORY_ID)
+    if not isinstance(category, discord.CategoryChannel):
+        raise ValueError("The configured ticket category could not be found.")
+    guild = category.guild
+    existing = await find_existing_ticket(guild, user)
+    if existing is not None:
+        return existing
+
+    cfg = TICKET_CONFIG[category_key]
+    channel = await create_dm_ticket_channel(
+        guild=guild,
+        user=user,
+        category_key=category_key,
+        prefix=cfg["prefix"],
+        support_role_id=cfg["role_id"],
+    )
+    mention_ids = [cfg["role_id"], STAFF_ROLE_ID]
+    mentions = [
+        role.mention
+        for role_id in dict.fromkeys(mention_ids)
+        if (role := guild.get_role(role_id)) is not None
+    ]
+    await channel.send(" ".join(mentions))
+    embed = _base_embed(
+        title=f"{cfg['emoji']}  {cfg['label']} | Private DM Support",
+        description=(
+            f"A new private support request has been received from **{user}**.\n\n"
+            "The customer will remain in the bot's direct messages. Messages they send "
+            "will appear here automatically, and replies from the assigned agent will "
+            "be delivered back to their DMs."
+        ),
+    )
+    embed.add_field(name="Customer", value=f"{user} (`{user.id}`)", inline=True)
+    embed.add_field(name="Department", value=cfg["label"], inline=True)
+    embed.add_field(
+        name="Support Instructions",
+        value=(
+            "1. Select **Claim Ticket** before replying.\n"
+            "2. Send replies normally in this channel.\n"
+            "3. A ✅ confirms delivery to the customer."
+        ),
+        inline=False,
+    )
+    embed.set_image(url=DIVIDER_URL)
+    await channel.send(embed=embed, view=TicketActionView())
+    return channel
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -897,21 +989,8 @@ class AssistanceSelect(discord.ui.Select):
             except (discord.Forbidden, discord.NotFound, discord.HTTPException):
                 log.warning("Unable to reset assistance dropdown on message %s", interaction.message.id)
 
-        existing = await find_existing_ticket(guild, user)
-        if existing is not None:
-            await interaction.followup.send(
-                embed=error_embed("You already have an open ticket. Send your next message here and it will be forwarded to support."),
-            )
-            return
-
         try:
-            channel = await create_dm_ticket_channel(
-                guild=guild,
-                user=user,
-                category_key=selected_key,
-                prefix=cfg["prefix"],
-                support_role_id=cfg["role_id"],
-            )
+            await open_dm_ticket(self.bot, user, selected_key)
         except Exception as exc:
             self.bot._dm_prompted_users.discard(user.id)
             await interaction.followup.send(
@@ -919,25 +998,6 @@ class AssistanceSelect(discord.ui.Select):
             )
             return
 
-        # Build mentions by ID so a category using the leadership role does not
-        # ping that role twice.
-        mention_ids = [cfg["role_id"], STAFF_ROLE_ID]
-        unique_role_mentions = [
-            role.mention
-            for role_id in dict.fromkeys(mention_ids)
-            if (role := guild.get_role(role_id)) is not None
-        ]
-        await channel.send(" ".join(unique_role_mentions))
-        embed = _base_embed(
-            title=f"{cfg['emoji']}  {cfg['label']} | DM Support Ticket",
-            description=(
-                f"**Customer:** {user} (`{user.id}`)\n\n"
-                "This is a private staff relay channel. Messages from the customer appear here, "
-                "and staff replies are delivered to the customer's DMs. Claim the ticket before replying."
-            ),
-        )
-        embed.set_image(url=DIVIDER_URL)
-        await channel.send(embed=embed, view=TicketActionView())
         self.bot._dm_prompted_users.discard(user.id)
         await interaction.followup.send(
             embed=success_embed(
@@ -957,11 +1017,88 @@ class DMAssistancePanelView(discord.ui.View):
         self.bot._dm_prompted_users.discard(self.user_id)
 
 
+class ServerAssistanceSelect(discord.ui.Select):
+    """Public panel selector that moves the confirmation into the user's DMs."""
+
+    def __init__(self, bot: "DeltaBot") -> None:
+        self.bot = bot
+        options = [
+            discord.SelectOption(
+                label=cfg["label"],
+                value=key,
+                emoji=cfg["emoji"],
+                description=cfg["description"],
+            )
+            for key, cfg in TICKET_CONFIG.items()
+        ]
+        super().__init__(
+            placeholder="✈️  Select an Assistance Category",
+            options=options,
+            custom_id="delta:server_assistance_select",
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        selected_key = self.values[0]
+        cfg = TICKET_CONFIG[selected_key]
+        prompt = _base_embed(
+            title="✈️  Confirm Your Private Support Request",
+            description=(
+                f"You selected **{cfg['label']}** from the Delta Assistance Panel.\n\n"
+                "Would you like us to create a private support ticket? Your conversation "
+                "will take place entirely in this DM and will only be shared with the "
+                "appropriate Delta Support team."
+            ),
+        )
+        prompt.add_field(
+            name="Selected Department",
+            value=f"{cfg['emoji']} {cfg['label']}",
+            inline=False,
+        )
+        prompt.set_image(url=DIVIDER_URL)
+        try:
+            await interaction.user.send(
+                embed=prompt,
+                view=DMTicketPromptView(self.bot, interaction.user.id, selected_key),
+            )
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                embed=error_embed(
+                    "I could not send you a DM. Enable direct messages from server members and try again."
+                ),
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.send_message(
+            embed=success_embed(
+                "I sent a private confirmation to your DMs. Open it and choose **Yes, make a ticket** to continue."
+            ),
+            ephemeral=True,
+        )
+        if interaction.message is not None:
+            try:
+                await interaction.message.edit(view=ServerAssistancePanelView(self.bot))
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+                pass
+
+
+class ServerAssistancePanelView(discord.ui.View):
+    def __init__(self, bot: "DeltaBot") -> None:
+        super().__init__(timeout=None)
+        self.add_item(ServerAssistanceSelect(bot))
+
+
 class DMTicketPromptView(discord.ui.View):
-    def __init__(self, bot: "DeltaBot", user_id: int) -> None:
+    def __init__(
+        self,
+        bot: "DeltaBot",
+        user_id: int,
+        category_key: str | None = None,
+    ) -> None:
         super().__init__(timeout=600)
         self.bot = bot
         self.user_id = user_id
+        self.category_key = category_key
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id == self.user_id:
@@ -971,8 +1108,45 @@ class DMTicketPromptView(discord.ui.View):
 
     @discord.ui.button(label="✅ Yes, make a ticket", style=discord.ButtonStyle.success)
     async def yes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.category_key is not None:
+            cfg = TICKET_CONFIG[self.category_key]
+            await interaction.response.defer()
+            try:
+                await open_dm_ticket(self.bot, interaction.user, self.category_key)
+            except Exception as exc:
+                self.bot._dm_prompted_users.discard(self.user_id)
+                await interaction.followup.send(
+                    embed=error_embed(f"Your private ticket could not be created: {exc}")
+                )
+                return
+            self.bot._dm_prompted_users.discard(self.user_id)
+            confirmation = _base_embed(
+                title="✅  Your Private Support Ticket Is Open",
+                description=(
+                    f"Your request has been routed to **{cfg['label']}**. A support agent "
+                    "will review it as soon as possible.\n\n"
+                    "Continue by sending your question, details, and any relevant attachments "
+                    "directly in this DM. A ✅ reaction means your message was delivered to support."
+                ),
+            )
+            confirmation.add_field(
+                name="What Happens Next?",
+                value="An agent will claim your ticket, and their replies will appear here automatically.",
+                inline=False,
+            )
+            confirmation.set_image(url=DIVIDER_URL)
+            await interaction.edit_original_response(embed=confirmation, view=None)
+            self.stop()
+            return
+
         await interaction.response.edit_message(
-            embed=success_embed("Choose the type of assistance you need below."),
+            embed=_base_embed(
+                title="📋  Choose Your Support Department",
+                description=(
+                    "Select the category that best matches your request. This helps us route "
+                    "your private conversation to the right support team without delay."
+                ),
+            ),
             view=None,
         )
         await interaction.followup.send(embed=assistance_panel_banner_embed())
@@ -1013,6 +1187,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
     # registration safe if startup is retried or the tree was populated earlier,
     # instead of letting CommandAlreadyRegistered terminate the deployment.
     for command_name in (
+        "assistance",
         "hr",
         "leadership",
         "bot-updates",
@@ -1022,6 +1197,43 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         "revoke",
     ):
         tree.remove_command(command_name, type=discord.AppCommandType.chat_input)
+
+    assistance_group = app_commands.Group(
+        name="assistance",
+        description="Delta Leadership assistance-panel controls.",
+    )
+
+    @assistance_group.command(
+        name="panel",
+        description="Post the private DM Assistance Panel in this channel.",
+    )
+    @staff_only()
+    async def assistance_panel(interaction: discord.Interaction) -> None:
+        if not isinstance(interaction.channel, discord.TextChannel):
+            await interaction.response.send_message(
+                embed=error_embed("The Assistance Panel can only be posted in a server text channel."),
+                ephemeral=True,
+            )
+            return
+        await interaction.response.send_message(
+            embed=success_embed("The private DM Assistance Panel was posted successfully."),
+            ephemeral=True,
+        )
+        await interaction.channel.send(embed=assistance_panel_banner_embed())
+        await interaction.channel.send(
+            embed=assistance_panel_embed(),
+            view=ServerAssistancePanelView(interaction.client),
+        )
+
+    @tree.command(name="hr", description="Post the available Human Resources positions.")
+    @staff_only()
+    async def hr(interaction: discord.Interaction) -> None:
+        await post_positions(interaction, HR_POSITIONS_MESSAGE)
+
+    @tree.command(name="leadership", description="Post the available leadership positions.")
+    @staff_only()
+    async def leadership(interaction: discord.Interaction) -> None:
+        await post_positions(interaction, LEADERSHIP_POSITIONS_MESSAGE)
 
     async def post_positions(
         interaction: discord.Interaction,
@@ -1236,20 +1448,30 @@ def register_commands(tree: app_commands.CommandTree) -> None:
                 ephemeral=True,
             )
             return
+        embed = _base_embed(
+            title="🛫  Your Support Agent Is Connected",
+            description=(
+                "A **Delta Air Lines Support Agent** is now actively reviewing your "
+                "private ticket and is ready to assist you.\n\n"
+                "Continue sending your questions, details, screenshots, or documents "
+                "in this DM. Everything you send will be delivered securely to the agent."
+            ),
+        )
+        embed.add_field(
+            name="📨 Message Delivery",
+            value="Look for a ✅ reaction to confirm that your message reached the support channel.",
+            inline=False,
+        )
+        embed.set_image(url=DIVIDER_URL)
+        delivered = await send_embed_to_ticket_owner(interaction.client, channel, embed)
         await interaction.response.send_message(
-            embed=success_embed("Message sent successfully."),
+            embed=success_embed(
+                "The connected notice was delivered to the customer's DMs."
+                if delivered else
+                "The notice was posted here, but the customer's DMs could not be reached."
+            ),
             ephemeral=True,
         )
-        embed = discord.Embed(
-            title="🛫  Agent Connected",
-            description=(
-                "A **Delta Air Lines Support Agent** has connected to your ticket "
-                "and will be assisting you shortly.\n\n"
-                "Please feel free to continue describing your issue."
-            ),
-            color=DELTA_RED,
-        )
-        embed.set_footer(text=FOOTER_TEXT)
         await channel.send(embed=embed)
 
     # /resolved
@@ -1263,20 +1485,32 @@ def register_commands(tree: app_commands.CommandTree) -> None:
                 ephemeral=True,
             )
             return
+        embed = _base_embed(
+            title="✅  Your Support Request Was Resolved",
+            description=(
+                "A Delta Support team member has marked your request as **resolved**. "
+                "We hope the information and assistance provided addressed your needs."
+            ),
+        )
+        embed.add_field(
+            name="Need More Assistance?",
+            value=(
+                "If something remains unresolved, reply in this DM before the ticket is closed. "
+                "You can also begin a new request later from the Assistance Panel."
+            ),
+            inline=False,
+        )
+        embed.add_field(name="Thank You", value="Thank you for contacting Delta Air Lines Support — *Keep Climbing.*", inline=False)
+        embed.set_image(url=DIVIDER_URL)
+        delivered = await send_embed_to_ticket_owner(interaction.client, channel, embed)
         await interaction.response.send_message(
-            embed=success_embed("Message sent successfully."),
+            embed=success_embed(
+                "The resolution notice was delivered to the customer's DMs."
+                if delivered else
+                "The notice was posted here, but the customer's DMs could not be reached."
+            ),
             ephemeral=True,
         )
-        embed = discord.Embed(
-            title="✅  Ticket Resolved",
-            description=(
-                "Your support request has been marked as **resolved** by our team.\n\n"
-                "If you have any further questions, please open a new ticket. "
-                "Thank you for flying with Delta Air Lines — *Keep Climbing.*"
-            ),
-            color=DELTA_RED,
-        )
-        embed.set_footer(text=FOOTER_TEXT)
         await channel.send(embed=embed)
 
     # /revoke — leadership only: remove a user's access from a ticket channel
@@ -1369,6 +1603,7 @@ class DeltaBot(commands.Bot):
 
     async def setup_hook(self) -> None:
         self.add_view(TicketActionView())
+        self.add_view(ServerAssistancePanelView(self))
         register_commands(self.tree)
         synced = await self.tree.sync()
         log.info("Synced %d application command(s).", len(synced))
@@ -1408,9 +1643,25 @@ class DeltaBot(commands.Bot):
             if message.author.id not in self._dm_prompted_users:
                 self._dm_prompted_users.add(message.author.id)
                 prompt = _base_embed(
-                    title="✈️  Delta Air Lines Support",
-                    description="Would you like to create a private support ticket?",
+                    title="✈️  Welcome to Delta Air Lines Support",
+                    description=(
+                        "Thank you for contacting us. Our support team can assist with general "
+                        "questions, applications, partnerships, purchases, roles, and technical issues.\n\n"
+                        "Would you like to create a **private support ticket**? If you continue, "
+                        "your messages will be securely relayed to the appropriate support team."
+                    ),
                 )
+                prompt.add_field(
+                    name="🔐 Your Privacy",
+                    value="The support conversation will remain in this DM; you will not be added to a server ticket channel.",
+                    inline=False,
+                )
+                prompt.add_field(
+                    name="⏱️ What Happens Next",
+                    value="Choose Yes, select a department, and send the details of your request.",
+                    inline=False,
+                )
+                prompt.set_image(url=DIVIDER_URL)
                 await message.channel.send(
                     embed=prompt,
                     view=DMTicketPromptView(self, message.author.id),

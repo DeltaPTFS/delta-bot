@@ -9,7 +9,7 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 
 | Feature | Details |
 |---|---|
-| Assistance Panel | Sent privately after a member DMs the bot and confirms they want a ticket |
+| Assistance Panel | DL Leadership can post it anywhere with `/assistance panel`; confirmation continues in DMs |
 | Private Tickets | Members stay in DMs while staff work from a hidden relay channel |
 | Duplicate Guard | Prevents users from opening multiple simultaneous tickets |
 | Close Ticket | Button *and* `/close` slash command; DMs the user on close |
@@ -87,6 +87,7 @@ python main.py
 
 | Command | Description | Who Can Use |
 |---|---|---|
+| `/assistance panel` | Post the private-ticket Assistance Panel in the current channel | DL Leadership only |
 | `/close` | Close the current ticket | Staff or Manage Channels |
 | `/connected` | Notify the user that an agent has connected | Staff only |
 | `/resolved` | Mark the ticket as resolved | Staff only |
@@ -112,8 +113,8 @@ To add a new ticket category, add an entry to the `TICKET_CONFIG` dictionary in 
 
 ## DM Ticket Flow
 
-1. A member sends the bot a direct message and chooses **Yes, make a ticket**.
-2. The bot sends the Assistance Panel in DMs and the member chooses a category.
+1. DL Leadership posts `/assistance panel`, or a member messages the bot directly.
+2. A panel selection sends a private confirmation to the member's DMs; direct DM users choose a category there.
 3. A staff-only relay channel is created. The member never receives access to it.
 4. Each customer DM is copied to that channel and receives a ✅ when delivered.
 5. One support agent claims the ticket. Only that agent can reply until they unclaim it.
