@@ -1,19 +1,18 @@
 {
-  "title": "Ticket System Improvements",
-  "summary": "The ticket experience has been made more reliable and easier for the team to manage.",
+  "title": "Private DM Support Tickets",
+  "summary": "Support tickets now begin and continue privately through direct messages with the bot.",
   "added": [
-    "Staff can use /tickets to add an existing channel to a ticket category or remove it later.",
-    "Staff can use /hr and /leadership to share the available position lists."
+    "Members can message the bot, confirm that they want help, and choose an assistance category in their DMs.",
+    "Messages are relayed both ways between the member's DMs and a staff-only support channel.",
+    "A check mark confirms when a message has been delivered to the other side."
   ],
   "changed": [
-    "Update announcements now describe what was added, changed, or removed instead of saying that the bot is running.",
-    "The ticket category menu resets after each choice, so it is ready to use again.",
-    "Ticket notifications no longer mention the same staff role twice.",
-    "Tickets now finish closing after a clear five-second countdown, and closure messages give members more helpful information.",
-    "Every bot update now notifies the Bot Updates role.",
-    "Ticket closure now uses one shorter direct-message embed, and its rating buttons remain available for 15 days."
+    "Ticket channels are now visible only to support staff; members remain in the bot's DMs.",
+    "Only one support agent can claim and reply to a ticket at a time.",
+    "Claiming or unclaiming a ticket updates the button and notifies the member in DMs.",
+    "Deployment announcements now post in the new bot updates channel."
   ],
   "removed": [
-    "Tickets no longer stay open indefinitely while waiting for an optional rating."
+    "The public server assistance panel and the channel setup command have been removed."
   ]
 }
