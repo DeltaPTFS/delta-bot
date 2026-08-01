@@ -1,0 +1,9 @@
+{
+  "title": "Bot Updates Channel",
+  "summary": "Bot release announcements now appear in the correct channel.",
+  "added": [],
+  "changed": [
+    "New deployment and staff-posted bot updates are now sent to the designated updates channel."
+  ],
+  "removed": []
+}
