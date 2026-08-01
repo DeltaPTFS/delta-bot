@@ -12,7 +12,7 @@
     "Only one support agent can claim and reply to a ticket at a time.",
     "Claiming or unclaiming a ticket updates the button and notifies the member in DMs.",
     "Deployment announcements now post in the new bot updates channel.",
-    "Bot commands now load safely during deployment without registering the same command twice.",
+    "Bot startup now safely replaces duplicate commands instead of allowing them to stop the deployment.",
     "Support ticket commands now send their full notices to the member's DMs as well as the staff channel.",
     "Assistance, relay, connection, and resolution messages now use more detailed professional embeds."
   ],

@@ -1592,9 +1592,25 @@ intents.members = True
 intents.message_content = True
 
 
+class DeltaCommandTree(app_commands.CommandTree):
+    """Command tree that safely replaces stale or duplicate local commands."""
+
+    def add_command(self, command, *args, **kwargs) -> None:
+        # A previously mis-resolved merge left duplicate decorators in the
+        # deployed source. Enforce replacement at the tree itself so no command
+        # decorator can crash startup with CommandAlreadyRegistered.
+        kwargs["override"] = True
+        super().add_command(command, *args, **kwargs)
+
+
 class DeltaBot(commands.Bot):
     def __init__(self) -> None:
-        super().__init__(command_prefix="!", intents=intents, help_command=None)
+        super().__init__(
+            command_prefix="!",
+            intents=intents,
+            help_command=None,
+            tree_cls=DeltaCommandTree,
+        )
         # ``on_ready`` can run again after every gateway reconnect.  Mark the
         # announcement as handled before doing any network I/O so overlapping
         # ready events cannot send the same deployment notice twice.
