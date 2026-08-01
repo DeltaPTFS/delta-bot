@@ -9,13 +9,15 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 
 | Feature | Details |
 |---|---|
-| Assistance Panel | Dropdown with 7 support categories, posted via `/assistance panel` |
-| Private Tickets | Auto-created per-category channels with correct role permissions |
+| Assistance Panel | DL Leadership can post it anywhere with `/assistance panel`; confirmation continues in DMs |
+| Private Tickets | Members stay in DMs while staff work from a hidden relay channel |
 | Duplicate Guard | Prevents users from opening multiple simultaneous tickets |
 | Close Ticket | Button *and* `/close` slash command; DMs the user on close |
-| Staff Commands | `/connected`, `/resolved`, `/assistance panel` — staff role-gated |
+| Message Relay | Customer and claimed-agent messages are delivered both ways with ✅ confirmation |
+| Deployment Notes | Posts plain-language added, changed, and removed notes from `deployment_notes.json` |
+| Staff Commands | `/connected`, `/resolved`, `/hr`, and `/leadership` — staff role-gated |
 | Delta Branding | Red (#C8102E), banner/divider images, consistent footer on every embed |
-| Persistent Views | Buttons and dropdowns survive bot restarts |
+| Claim State | Claim ownership is stored with the ticket and survives bot restarts |
 
 ---
 
@@ -85,25 +87,43 @@ python main.py
 
 | Command | Description | Who Can Use |
 |---|---|---|
-| `/assistance panel` | Post the Assistance Panel in the current channel | Staff only |
-| `/close` | Close the current ticket | Ticket owner, staff, or Manage Channels |
+| `/assistance panel` | Post the private-ticket Assistance Panel in the current channel | DL Leadership only |
+| `/close` | Close the current ticket | Staff or Manage Channels |
 | `/connected` | Notify the user that an agent has connected | Staff only |
 | `/resolved` | Mark the ticket as resolved | Staff only |
+| `/hr` | Post the available Human Resources positions | Staff only |
+| `/leadership` | Post the available Delta Leadership positions | Staff only |
+| `/bot-updates post` | Post an update and notify the Bot Updates role | Staff only |
 
 ---
 
 ## Configuration
 
-All IDs and constants are in **`config.py`**:
+The active single-file bot keeps its IDs and constants in **`main.py`**:
 
 | Constant | Default Value | Purpose |
 |---|---|---|
 | `TICKET_CATEGORY_ID` | `1524489811627475075` | Discord category for all ticket channels |
 | `STAFF_ROLE_ID` | `1436474227971592325` | Role that can run staff-only commands |
 | `GENERAL_SUPPORT_ROLE_ID` | `1436480867240251493` | Role pinged on General Inquiries tickets |
+| `UPDATES_CHANNEL_ID` | `1532958715592966338` | Channel that receives the latest deployment update |
 | `DELTA_RED` | `0xC8102E` | Embed accent colour |
 
-To add a new ticket category, add an entry to the `TICKET_CONFIG` dict in `config.py`. The rest of the bot picks it up automatically.
+To add a new ticket category, add an entry to the `TICKET_CONFIG` dictionary in `main.py`. The rest of the bot picks it up automatically.
+
+## DM Ticket Flow
+
+1. DL Leadership posts `/assistance panel`, or a member messages the bot directly.
+2. A panel selection sends a private confirmation to the member's DMs; direct DM users choose a category there.
+3. A staff-only relay channel is created. The member never receives access to it.
+4. Each customer DM is copied to that channel and receives a ✅ when delivered.
+5. One support agent claims the ticket. Only that agent can reply until they unclaim it.
+6. Staff replies are copied to the member's DMs and receive a ✅ when delivered.
+
+Before deploying, update **`deployment_notes.json`** with short, plain-language
+items under `added`, `changed`, and `removed`. The bot posts those notes once
+when the new process connects; it does not post generic online or command-sync
+status messages to the updates channel.
 
 ---
 
@@ -115,6 +135,13 @@ To add a new ticket category, add an entry to the `TICKET_CONFIG` dict in `confi
 2. Create a new **Web Service** (Render) or **Service** (Railway).
 3. Set the **Start Command** to: `python bot/main.py`
 4. Add the `DISCORD_TOKEN` environment variable in the platform dashboard.
+
+### Replit
+
+The repository-level `.replit`, `requirements.txt`, and `runtime.txt` files are
+already configured to install the bot dependencies and start `bot/main.py`.
+Add `DISCORD_TOKEN` as a Replit Secret, then redeploy. Do not replace the
+deployment command with the TypeScript workspace's build command.
 
 ### VPS (systemd)
 
