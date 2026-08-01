@@ -124,11 +124,6 @@ items under `added`, `changed`, and `removed`. The bot posts those notes once
 when the new process connects; it does not post generic online or command-sync
 status messages to the updates channel.
 
-Before deploying, update **`deployment_notes.json`** with short, plain-language
-items under `added`, `changed`, and `removed`. The bot posts those notes once
-when the new process connects; it does not post generic online or command-sync
-status messages to the updates channel.
-
 ---
 
 ## Deployment

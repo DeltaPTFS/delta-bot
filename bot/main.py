@@ -1009,29 +1009,19 @@ def staff_only() -> app_commands.check:
 
 
 def register_commands(tree: app_commands.CommandTree) -> None:
-
-    async def post_positions(
-        interaction: discord.Interaction,
-        message: str,
-    ) -> None:
-        """Post a position list publicly from a staff-only slash command."""
-        if not isinstance(interaction.channel, discord.TextChannel):
-            await interaction.response.send_message(
-                embed=error_embed("This command can only be used in a text channel."),
-                ephemeral=True,
-            )
-            return
-        await interaction.response.send_message(message)
-
-    @tree.command(name="hr", description="Post the available Human Resources positions.")
-    @staff_only()
-    async def hr(interaction: discord.Interaction) -> None:
-        await post_positions(interaction, HR_POSITIONS_MESSAGE)
-
-    @tree.command(name="leadership", description="Post the available leadership positions.")
-    @staff_only()
-    async def leadership(interaction: discord.Interaction) -> None:
-        await post_positions(interaction, LEADERSHIP_POSITIONS_MESSAGE)
+    # Clear commands owned by this module before rebuilding the tree. This makes
+    # registration safe if startup is retried or the tree was populated earlier,
+    # instead of letting CommandAlreadyRegistered terminate the deployment.
+    for command_name in (
+        "hr",
+        "leadership",
+        "bot-updates",
+        "close",
+        "connected",
+        "resolved",
+        "revoke",
+    ):
+        tree.remove_command(command_name, type=discord.AppCommandType.chat_input)
 
     async def post_positions(
         interaction: discord.Interaction,
