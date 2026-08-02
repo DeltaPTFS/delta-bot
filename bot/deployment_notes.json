@@ -1,0 +1,11 @@
+{
+  "title": "Assistance Panel Command",
+  "summary": "The Assistance Panel now has a simpler command for Delta Leadership.",
+  "added": [
+    "Delta Leadership can now post the private Assistance Panel anywhere with /panel."
+  ],
+  "changed": [
+    "Members who select a category from the panel are directed to their DMs to continue their ticket."
+  ],
+  "removed": []
+}
