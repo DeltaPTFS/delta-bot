@@ -106,7 +106,7 @@ The active single-file bot keeps its IDs and constants in **`main.py`**:
 | `TICKET_CATEGORY_ID` | `1524489811627475075` | Discord category for all ticket channels |
 | `STAFF_ROLE_ID` | `1436474227971592325` | Role that can run staff-only commands |
 | `GENERAL_SUPPORT_ROLE_ID` | `1436480867240251493` | Role pinged on General Inquiries tickets |
-| `UPDATES_CHANNEL_ID` | `1532958715592966338` | Channel that receives the latest deployment update |
+| `UPDATES_CHANNEL_ID` | `1524489806711754752` | Channel that receives the latest deployment update |
 | `DELTA_RED` | `0xC8102E` | Embed accent colour |
 
 To add a new ticket category, add an entry to the `TICKET_CONFIG` dictionary in `main.py`. The rest of the bot picks it up automatically.
