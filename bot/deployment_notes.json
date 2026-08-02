@@ -1,9 +1,11 @@
 {
-  "title": "Bot Updates Channel",
-  "summary": "Bot release announcements now appear in the correct channel.",
-  "added": [],
+  "title": "Assistance Panel Command",
+  "summary": "The Assistance Panel now has a simpler command for Delta Leadership.",
+  "added": [
+    "Delta Leadership can now post the private Assistance Panel anywhere with /panel."
+  ],
   "changed": [
-    "New deployment and staff-posted bot updates are now sent to the designated updates channel."
+    "Members who select a category from the panel are directed to their DMs to continue their ticket."
   ],
   "removed": []
 }

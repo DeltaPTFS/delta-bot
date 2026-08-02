@@ -87,7 +87,7 @@ python main.py
 
 | Command | Description | Who Can Use |
 |---|---|---|
-| `/assistance panel` | Post the private-ticket Assistance Panel in the current channel | DL Leadership only |
+| `/panel` | Post the private-ticket Assistance Panel in the current channel | DL Leadership only |
 | `/close` | Close the current ticket | Staff or Manage Channels |
 | `/connected` | Notify the user that an agent has connected | Staff only |
 | `/resolved` | Mark the ticket as resolved | Staff only |
@@ -113,7 +113,7 @@ To add a new ticket category, add an entry to the `TICKET_CONFIG` dictionary in 
 
 ## DM Ticket Flow
 
-1. DL Leadership posts `/assistance panel`, or a member messages the bot directly.
+1. DL Leadership posts `/panel`, or a member messages the bot directly.
 2. A panel selection sends a private confirmation to the member's DMs; direct DM users choose a category there.
 3. A staff-only relay channel is created. The member never receives access to it.
 4. Each customer DM is copied to that channel and receives a ✅ when delivered.

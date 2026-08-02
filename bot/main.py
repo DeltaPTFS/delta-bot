@@ -1188,6 +1188,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
     # instead of letting CommandAlreadyRegistered terminate the deployment.
     for command_name in (
         "assistance",
+        "panel",
         "hr",
         "leadership",
         "bot-updates",
@@ -1198,17 +1199,12 @@ def register_commands(tree: app_commands.CommandTree) -> None:
     ):
         tree.remove_command(command_name, type=discord.AppCommandType.chat_input)
 
-    assistance_group = app_commands.Group(
-        name="assistance",
-        description="Delta Leadership assistance-panel controls.",
-    )
-
-    @assistance_group.command(
+    @tree.command(
         name="panel",
         description="Post the private DM Assistance Panel in this channel.",
     )
     @staff_only()
-    async def assistance_panel(interaction: discord.Interaction) -> None:
+    async def panel(interaction: discord.Interaction) -> None:
         if not isinstance(interaction.channel, discord.TextChannel):
             await interaction.response.send_message(
                 embed=error_embed("The Assistance Panel can only be posted in a server text channel."),
@@ -1224,16 +1220,6 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             embed=assistance_panel_embed(),
             view=ServerAssistancePanelView(interaction.client),
         )
-
-    @tree.command(name="hr", description="Post the available Human Resources positions.")
-    @staff_only()
-    async def hr(interaction: discord.Interaction) -> None:
-        await post_positions(interaction, HR_POSITIONS_MESSAGE)
-
-    @tree.command(name="leadership", description="Post the available leadership positions.")
-    @staff_only()
-    async def leadership(interaction: discord.Interaction) -> None:
-        await post_positions(interaction, LEADERSHIP_POSITIONS_MESSAGE)
 
     async def post_positions(
         interaction: discord.Interaction,
