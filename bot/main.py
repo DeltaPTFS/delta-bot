@@ -572,7 +572,7 @@ async def _archive_ticket(
     closer: discord.Member,
     reason: str,
     rating: int | None,
-) -> None:
+) -> discord.Message | None:
     """Generate and log the ticket transcript before deletion."""
     guild = channel.guild
 
@@ -614,7 +614,8 @@ async def _archive_ticket(
             fp=__import__("io").BytesIO(transcript_text.encode()),
             filename=f"transcript-{channel.name}.txt",
         )
-        await log_channel.send(embed=log_embed, file=file)
+        return await log_channel.send(embed=log_embed, file=file)
+    return None
 
 async def _finalize_ticket(
     channel: discord.TextChannel,
@@ -622,10 +623,11 @@ async def _finalize_ticket(
     reason: str,
     rating: int | None,
     close_deadline: float | None = None,
-) -> None:
+) -> discord.Message | None:
     """Archive a ticket when possible, but always attempt to delete it."""
+    archive_message: discord.Message | None = None
     try:
-        await _archive_ticket(channel, closer, reason, rating)
+        archive_message = await _archive_ticket(channel, closer, reason, rating)
     except (discord.Forbidden, discord.HTTPException) as exc:
         # A transcript/DM failure must not leave a channel stuck open.
         log.warning("Could not fully archive ticket %s: %s", channel.id, exc)
@@ -638,6 +640,7 @@ async def _finalize_ticket(
             pass
         except (discord.Forbidden, discord.HTTPException) as exc:
             log.error("Could not delete closed ticket %s: %s", channel.id, exc)
+    return archive_message
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -713,7 +716,7 @@ class CloseReasonModal(discord.ui.Modal, title="Close Ticket — Delta Air Lines
         # Closing the channel and expiring the DM rating are independent: the
         # channel still closes after five seconds, while the one DM remains.
         await asyncio.sleep(max(0, close_deadline - time.monotonic()))
-        await _finalize_ticket(
+        view.archive_message = await _finalize_ticket(
             self._channel,
             self._closer,
             self.reason.value,
@@ -742,6 +745,7 @@ class RatingView(discord.ui.View):
         self._rated = False
         self.rating: int | None = None
         self.message: discord.Message | None = None
+        self.archive_message: discord.Message | None = None
 
         for label, value, style in self.STARS:
             button: discord.ui.Button = discord.ui.Button(
@@ -779,8 +783,37 @@ class RatingView(discord.ui.View):
             confirm.set_image(url=DIVIDER_URL)
             # Edit the existing closure embed instead of sending a second DM.
             await interaction.response.edit_message(embed=confirm, view=None)
+            await self._update_archived_rating(stars)
 
         return callback
+
+    async def _update_archived_rating(self, stars: int) -> None:
+        """Keep the staff transcript rating in sync with a later DM rating."""
+        # A member can click while the five-second close/archive task is still
+        # running. Briefly wait for its message reference so that timing never
+        # leaves the staff copy showing "No rating given".
+        for _ in range(TICKET_CLOSE_DELAY * 2 + 2):
+            if self.archive_message is not None:
+                break
+            await asyncio.sleep(0.5)
+        if self.archive_message is None or not self.archive_message.embeds:
+            return
+
+        embed = self.archive_message.embeds[0]
+        description = embed.description or ""
+        lines = description.splitlines()
+        rating_line = f"**Rating:** {'⭐' * stars} ({stars} / 5 ⭐)"
+        for index, line in enumerate(lines):
+            if line.startswith("**Rating:**"):
+                lines[index] = rating_line
+                break
+        else:
+            lines.append(rating_line)
+        embed.description = "\n".join(lines)
+        try:
+            await self.archive_message.edit(embed=embed)
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+            log.warning("Could not update archived ticket rating: %s", exc)
 
     async def on_timeout(self) -> None:
         """Disable the buttons after 15 days without sending another DM."""

@@ -1,11 +1,10 @@
 {
-  "title": "Assistance Panel Command",
-  "summary": "The Assistance Panel now has a simpler command for Delta Leadership.",
-  "added": [
-    "Delta Leadership can now post the private Assistance Panel anywhere with /panel."
-  ],
+  "title": "Ticket Rating Fix",
+  "summary": "Ticket ratings now update properly after a member makes their selection.",
+  "added": [],
   "changed": [
-    "Members who select a category from the panel are directed to their DMs to continue their ticket."
+    "The rating confirmation updates immediately in the member's DM.",
+    "The saved staff transcript now updates when a rating is submitted after the ticket channel closes."
   ],
   "removed": []
 }
