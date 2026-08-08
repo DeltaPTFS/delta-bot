@@ -1,10 +1,10 @@
 {
-  "title": "Ticket Rating Fix",
-  "summary": "Ticket ratings now update properly after a member makes their selection.",
+  "title": "Partnership Ticket Access",
+  "summary": "Partnership Requests now reach the correct support team.",
   "added": [],
   "changed": [
-    "The rating confirmation updates immediately in the member's DM.",
-    "The saved staff transcript now updates when a rating is submitted after the ticket channel closes."
+    "Partnership Requests now notify and grant access to the Partnership Representatives team.",
+    "Category support roles can only claim tickets assigned to their own category, so Partnership Representatives are no longer included in General Inquiries tickets."
   ],
   "removed": []
 }

@@ -106,6 +106,7 @@ The active single-file bot keeps its IDs and constants in **`main.py`**:
 | `TICKET_CATEGORY_ID` | `1524489811627475075` | Discord category for all ticket channels |
 | `STAFF_ROLE_ID` | `1436474227971592325` | Role that can run staff-only commands |
 | `GENERAL_SUPPORT_ROLE_ID` | `1436480867240251493` | Role pinged on General Inquiries tickets |
+| `PARTNERSHIP_REPRESENTATIVES_ROLE_ID` | `1528809872672690247` | Role assigned to Partnership Requests tickets |
 | `UPDATES_CHANNEL_ID` | `1524489806711754752` | Channel that receives the latest deployment update |
 | `DELTA_RED` | `0xC8102E` | Embed accent colour |
 

@@ -47,6 +47,7 @@ DIVIDER_URL = (
 TICKET_CATEGORY_ID      = 1524489811627475075
 STAFF_ROLE_ID           = 1520094641305817278
 GENERAL_SUPPORT_ROLE_ID = 1436480867240251493
+PARTNERSHIP_REPRESENTATIVES_ROLE_ID = 1528809872672690247
 TRANSCRIPT_CHANNEL_ID   = 1524489806711754752
 UPDATES_CHANNEL_ID      = 1524489806711754752
 UPDATES_ROLE_ID         = 1530210954422518042
@@ -129,7 +130,7 @@ TICKET_CONFIG: dict[str, dict] = {
     "partnership_requests": {
         "label":       "Partnership Requests",
         "prefix":      "partnership",
-        "role_id":     STAFF_ROLE_ID,
+        "role_id":     PARTNERSHIP_REPRESENTATIVES_ROLE_ID,
         "emoji":       "🤝",
         "description": "Inquiries regarding business partnerships.",
     },
@@ -861,9 +862,15 @@ class TicketActionView(discord.ui.View):
             )
             return
 
+        category_key = get_topic_value(channel.topic or "", DM_TICKET_CATEGORY_MARKER)
+        category_config = TICKET_CONFIG.get(category_key or "")
+        category_role_id = category_config.get("role_id") if category_config else None
         can_claim = (
             is_staff(member)
-            or any(role.id == GENERAL_SUPPORT_ROLE_ID for role in member.roles)
+            or (
+                isinstance(category_role_id, int)
+                and any(role.id == category_role_id for role in member.roles)
+            )
             or channel.permissions_for(member).manage_channels
         )
         if not can_claim:
