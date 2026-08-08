@@ -1,0 +1,10 @@
+{
+  "title": "Partnership Ticket Access",
+  "summary": "Partnership Requests now reach the correct support team.",
+  "added": [],
+  "changed": [
+    "Partnership Requests now notify and grant access to the Partnership Representatives team.",
+    "Category support roles can only claim tickets assigned to their own category, so Partnership Representatives are no longer included in General Inquiries tickets."
+  ],
+  "removed": []
+}
