@@ -46,7 +46,6 @@ DIVIDER_URL = (
 
 TICKET_CATEGORY_ID      = 1524489811627475075
 STAFF_ROLE_ID           = 1520094641305817278
-GENERAL_SUPPORT_ROLE_ID = 1436480867240251493
 PARTNERSHIP_REPRESENTATIVES_ROLE_ID = 1528809872672690247
 TRANSCRIPT_CHANNEL_ID   = 1524489806711754752
 UPDATES_CHANNEL_ID      = 1524489806711754752
@@ -116,7 +115,7 @@ TICKET_CONFIG: dict[str, dict] = {
     "general_inquiries": {
         "label":       "General Inquiries",
         "prefix":      "general-support",
-        "role_id":     GENERAL_SUPPORT_ROLE_ID,
+        "role_id":     STAFF_ROLE_ID,
         "emoji":       "📋",
         "description": "General questions about Delta Air Lines services.",
     },
