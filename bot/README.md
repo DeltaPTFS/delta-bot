@@ -14,10 +14,10 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Duplicate Guard | Prevents users from opening multiple simultaneous tickets |
 | Close Ticket | Button *and* `/close` slash command; DMs the user on close |
 | Message Relay | Customer and claimed-agent messages are delivered both ways with ✅ confirmation |
-| Deployment Notes | Posts plain-language added, changed, and removed notes from `deployment_notes.json` |
 | Staff Commands | `/connected`, `/resolved`, `/hr`, and `/leadership` — staff role-gated |
-| Delta Branding | Red (#C8102E), banner/divider images, consistent footer on every embed |
+| Delta Branding | Red (#C8102E), optional server-owned images, and a consistent footer |
 | Claim State | Claim ownership is stored with the ticket and survives bot restarts |
+| Transcripts | Closed-ticket transcripts are posted to the private transcript channel |
 
 ---
 
@@ -88,12 +88,11 @@ python main.py
 | Command | Description | Who Can Use |
 |---|---|---|
 | `/panel` | Post the private-ticket Assistance Panel in the current channel | DL Leadership only |
-| `/close` | Close the current ticket | Staff or Manage Channels |
+| `/close` | Close the current ticket | Support/admin role or ticket creator |
 | `/connected` | Notify the user that an agent has connected | Staff only |
 | `/resolved` | Mark the ticket as resolved | Staff only |
 | `/hr` | Post the available Human Resources positions | Staff only |
 | `/leadership` | Post the available Delta Leadership positions | Staff only |
-| `/bot-updates post` | Post an update and notify the Bot Updates role | Staff only |
 
 ---
 
@@ -103,13 +102,15 @@ The active single-file bot keeps its IDs and constants in **`main.py`**:
 
 | Constant | Default Value | Purpose |
 |---|---|---|
-| `TICKET_CATEGORY_ID` | `1524489811627475075` | Discord category for all ticket channels |
-| `STAFF_ROLE_ID` | `1436474227971592325` | Role that can run staff-only commands |
-| `PARTNERSHIP_REPRESENTATIVES_ROLE_ID` | `1528809872672690247` | Role assigned to Partnership Requests tickets |
-| `UPDATES_CHANNEL_ID` | `1524489806711754752` | Channel that receives the latest deployment update |
+| `GUILD_ID` | `1538738611988467782` | The only authorized Discord server |
+| `TICKET_CATEGORY_ID` | `1543674278711529562` | Category for private ticket relay channels |
+| `STAFF_ROLE_ID` | `1539005030189891684` | Support/admin role for commands, access, and ticket pings |
+| `TRANSCRIPT_CHANNEL_ID` | `1543674377953087649` | Channel that receives closed-ticket transcripts |
 | `DELTA_RED` | `0xC8102E` | Embed accent colour |
 
 To add a new ticket category, add an entry to the `TICKET_CONFIG` dictionary in `main.py`. The rest of the bot picks it up automatically.
+
+The bot publishes commands only to `GUILD_ID`, clears its former global commands, leaves other servers, and accepts DM tickets only from members of the authorized server.
 
 ## DM Ticket Flow
 
@@ -119,11 +120,6 @@ To add a new ticket category, add an entry to the `TICKET_CONFIG` dictionary in 
 4. Each customer DM is copied to that channel and receives a ✅ when delivered.
 5. One support agent claims the ticket. Only that agent can reply until they unclaim it.
 6. Staff replies are copied to the member's DMs and receive a ✅ when delivered.
-
-Before deploying, update **`deployment_notes.json`** with short, plain-language
-items under `added`, `changed`, and `removed`. The bot posts those notes once
-when the new process connects; it does not post generic online or command-sync
-status messages to the updates channel.
 
 ---
 
@@ -170,12 +166,9 @@ sudo systemctl enable --now delta-bot
 
 ## Branding Assets
 
-| Asset | URL |
-|---|---|
-| Full Delta banner | `https://cdn.discordapp.com/attachments/1525901449769254922/1525992386948239582/delta_banner.jpg` |
-| Skinny divider | `https://cdn.discordapp.com/attachments/1525901449769254922/1525992387254685869/skinny_delta_banner.jpg` |
-
-Both URLs are defined in `config.py` (`BANNER_URL`, `DIVIDER_URL`).
+Old-server Discord attachments are not built into the bot. Upload replacement
+assets to the authorized server and set `BANNER_URL` and `DIVIDER_URL` to their
+new Discord CDN URLs. Both variables are optional.
 
 ---
 
