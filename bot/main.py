@@ -20,6 +20,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+import aiohttp
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -44,14 +45,18 @@ DIVIDER_URL = (
     "/1525992387254685869/skinny_delta_banner.jpg"
 )
 
-TICKET_CATEGORY_ID      = 1524489811627475075
-STAFF_ROLE_ID           = 1520094641305817278
+TICKET_CATEGORY_ID      = 1543674278711529562
+STAFF_ROLE_ID           = 1539005030189891684
+# Backward-compatible name used by earlier command permission checks. Both
+# names intentionally resolve to the one authorized support/admin role.
+BOT_COMMAND_ROLE_ID     = STAFF_ROLE_ID
 PARTNERSHIP_REPRESENTATIVES_ROLE_ID = 1528809872672690247
-TRANSCRIPT_CHANNEL_ID   = 1524489806711754752
+TRANSCRIPT_CHANNEL_ID   = 1543674377953087649
 UPDATES_CHANNEL_ID      = 1524489806711754752
 UPDATES_ROLE_ID         = 1530210954422518042
 TICKET_CLOSE_DELAY      = 5
 RATING_TIMEOUT          = 15 * 24 * 60 * 60
+DISCORD_RECONNECT_DELAY = 15
 DM_TICKET_OWNER_MARKER  = "Delta DM Ticket Owner:"
 DM_TICKET_CATEGORY_MARKER = "Delta Ticket Category:"
 DM_TICKET_CLAIM_MARKER  = "Delta Ticket Claimed By:"
@@ -302,7 +307,21 @@ def success_embed(message: str) -> discord.Embed:
 # ════════════════════════════════════════════════════════════════════════════════
 
 def is_staff(member: discord.Member) -> bool:
-    return any(role.id == STAFF_ROLE_ID for role in member.roles)
+    return any(role.id == BOT_COMMAND_ROLE_ID for role in member.roles)
+
+
+def get_ticket_owner_id(channel: discord.TextChannel) -> int | None:
+    """Return the ticket creator stored in the channel topic."""
+    topic = channel.topic or ""
+    owner_id = get_topic_value(topic, DM_TICKET_OWNER_MARKER)
+    if owner_id is not None and owner_id.isdigit():
+        return int(owner_id)
+
+    # Retain compatibility with older ticket topics that only stored the owner ID.
+    for part in topic.split():
+        if part.isdigit():
+            return int(part)
+    return None
 
 
 async def find_existing_ticket(
@@ -341,14 +360,12 @@ async def create_dm_ticket_channel(
     user: discord.abc.User,
     category_key: str,
     prefix: str,
-    support_role_id: int,
 ) -> discord.TextChannel:
     """Create a staff-only relay channel for a ticket opened in the bot's DMs."""
     category = guild.get_channel(TICKET_CATEGORY_ID)
     if not isinstance(category, discord.CategoryChannel):
         raise ValueError(f"Ticket category {TICKET_CATEGORY_ID} not found.")
 
-    support_role = guild.get_role(support_role_id)
     safe_name = "".join(c if c.isalnum() or c == "-" else "-" for c in user.name.lower())
     channel_name = f"{prefix}-{safe_name}"[:100]
 
@@ -372,15 +389,6 @@ async def create_dm_ticket_channel(
             manage_permissions=True,
             manage_messages=True,
         )
-    # Also add the category-specific support role if it differs from leadership
-    if support_role is not None and support_role.id != STAFF_ROLE_ID:
-        overwrites[support_role] = discord.PermissionOverwrite(
-            view_channel=True,
-            send_messages=True,
-            read_message_history=True,
-            manage_channels=True,
-        )
-
     channel = await guild.create_text_channel(
         name=channel_name,
         category=category,  # type: ignore[arg-type]
@@ -395,11 +403,7 @@ async def create_dm_ticket_channel(
 
 
 def can_close_ticket(member: discord.Member, channel: discord.TextChannel) -> bool:
-    if is_staff(member):
-        return True
-    if channel.permissions_for(member).manage_channels:
-        return True
-    return False
+    return is_staff(member) or get_ticket_owner_id(channel) == member.id
 
 
 async def notify_ticket_owner(
@@ -504,9 +508,8 @@ async def open_dm_ticket(
         user=user,
         category_key=category_key,
         prefix=cfg["prefix"],
-        support_role_id=cfg["role_id"],
     )
-    mention_ids = [cfg["role_id"], STAFF_ROLE_ID]
+    mention_ids = [STAFF_ROLE_ID]
     mentions = [
         role.mention
         for role_id in dict.fromkeys(mention_ids)
@@ -577,12 +580,8 @@ async def _archive_ticket(
     guild = channel.guild
 
     # Find ticket owner from topic
-    topic = channel.topic or ""
-    owner: discord.Member | None = None
-    for part in topic.split():
-        if part.isdigit():
-            owner = guild.get_member(int(part))
-            break
+    owner_id = get_ticket_owner_id(channel)
+    owner = guild.get_member(owner_id) if owner_id is not None else None
 
     # Generate transcript text
     transcript_text = await generate_transcript(channel)
@@ -666,12 +665,8 @@ class CloseReasonModal(discord.ui.Modal, title="Close Ticket — Delta Air Lines
         await interaction.response.defer(ephemeral=True)
 
         # Find the ticket owner from the channel topic
-        topic = self._channel.topic or ""
-        owner: discord.Member | None = None
-        for part in topic.split():
-            if part.isdigit():
-                owner = self._channel.guild.get_member(int(part))
-                break
+        owner_id = get_ticket_owner_id(self._channel)
+        owner = self._channel.guild.get_member(owner_id) if owner_id is not None else None
 
         close_deadline = time.monotonic() + TICKET_CLOSE_DELAY
         view = RatingView(
@@ -861,18 +856,7 @@ class TicketActionView(discord.ui.View):
             )
             return
 
-        category_key = get_topic_value(channel.topic or "", DM_TICKET_CATEGORY_MARKER)
-        category_config = TICKET_CONFIG.get(category_key or "")
-        category_role_id = category_config.get("role_id") if category_config else None
-        can_claim = (
-            is_staff(member)
-            or (
-                isinstance(category_role_id, int)
-                and any(role.id == category_role_id for role in member.roles)
-            )
-            or channel.permissions_for(member).manage_channels
-        )
-        if not can_claim:
+        if not is_staff(member):
             await interaction.response.send_message(
                 embed=error_embed("Only support team members can claim tickets."),
                 ephemeral=True,
@@ -1217,7 +1201,7 @@ def staff_only() -> app_commands.check:
         member = interaction.user
         if not isinstance(member, discord.Member):
             return False
-        return any(role.id == STAFF_ROLE_ID for role in member.roles)
+        return is_staff(member)
     return app_commands.check(predicate)
 
 
@@ -1399,9 +1383,20 @@ def register_commands(tree: app_commands.CommandTree) -> None:
                     raise ValueError("The configured ticket category could not be found.")
 
                 cfg = TICKET_CONFIG[category.value]
-                support_role = guild.get_role(cfg["role_id"])
                 staff_role = guild.get_role(STAFF_ROLE_ID)
-                for role in {support_role, staff_role} - {None}:
+                await channel.set_permissions(
+                    guild.default_role,
+                    view_channel=False,
+                    reason=f"Restricted to support by {interaction.user}",
+                )
+                category_role = guild.get_role(cfg["role_id"])
+                if category_role is not None and category_role != staff_role:
+                    await channel.set_permissions(
+                        category_role,
+                        overwrite=None,
+                        reason=f"Restricted to support by {interaction.user}",
+                    )
+                for role in {staff_role} - {None}:
                     await channel.set_permissions(
                         role,
                         view_channel=True,
@@ -1921,6 +1916,27 @@ def run_health_server() -> None:
     server.serve_forever()
 
 
+def run_bot_forever(token: str) -> None:
+    """Restart the Discord client when a temporary network failure stops it."""
+    while True:
+        bot = DeltaBot()
+        try:
+            bot.run(token, log_handler=None)
+        except discord.LoginFailure:
+            # A revoked or malformed token requires an operator to update Render.
+            raise
+        except (aiohttp.ClientError, discord.HTTPException, OSError) as exc:
+            log.error(
+                "Discord connection stopped (%s). Restarting in %d seconds.",
+                exc,
+                DISCORD_RECONNECT_DELAY,
+            )
+            time.sleep(DISCORD_RECONNECT_DELAY)
+        else:
+            log.info("Discord client shut down normally.")
+            return
+
+
 def main() -> None:
     token = os.getenv("DISCORD_TOKEN")
     if not token:
@@ -1933,8 +1949,7 @@ def main() -> None:
     thread.start()
     log.info("Health-check server started.")
 
-    bot = DeltaBot()
-    bot.run(token, log_handler=None)
+    run_bot_forever(token)
 
 
 if __name__ == "__main__":
