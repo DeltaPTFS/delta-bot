@@ -1,10 +1,10 @@
 {
-  "title": "General Support Role Access",
-  "summary": "General Support tickets no longer include the Partnership Representative role.",
+  "title": "Bot Command Role Access",
+  "summary": "The newly authorized Discord role can now use staff bot commands.",
   "added": [],
   "changed": [
-    "The Partnership Representative role is no longer pinged when a General Support ticket opens.",
-    "Partnership Representatives no longer receive access to General Support ticket channels and remain assigned only to Partnership Requests."
+    "Role 1539005030189891684 can now use commands restricted to bot staff.",
+    "The authorized role can also use ticket actions that rely on the shared staff permission check."
   ],
   "removed": []
 }
