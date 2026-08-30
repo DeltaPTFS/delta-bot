@@ -46,6 +46,7 @@ DIVIDER_URL = (
 
 TICKET_CATEGORY_ID      = 1524489811627475075
 STAFF_ROLE_ID           = 1520094641305817278
+BOT_COMMAND_ROLE_ID     = 1539005030189891684
 PARTNERSHIP_REPRESENTATIVES_ROLE_ID = 1528809872672690247
 TRANSCRIPT_CHANNEL_ID   = 1524489806711754752
 UPDATES_CHANNEL_ID      = 1524489806711754752
@@ -302,7 +303,8 @@ def success_embed(message: str) -> discord.Embed:
 # ════════════════════════════════════════════════════════════════════════════════
 
 def is_staff(member: discord.Member) -> bool:
-    return any(role.id == STAFF_ROLE_ID for role in member.roles)
+    command_role_ids = {STAFF_ROLE_ID, BOT_COMMAND_ROLE_ID}
+    return any(role.id in command_role_ids for role in member.roles)
 
 
 async def find_existing_ticket(
@@ -1217,7 +1219,7 @@ def staff_only() -> app_commands.check:
         member = interaction.user
         if not isinstance(member, discord.Member):
             return False
-        return any(role.id == STAFF_ROLE_ID for role in member.roles)
+        return is_staff(member)
     return app_commands.check(predicate)
 
 
