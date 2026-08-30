@@ -302,7 +302,8 @@ def success_embed(message: str) -> discord.Embed:
 # ════════════════════════════════════════════════════════════════════════════════
 
 def is_staff(member: discord.Member) -> bool:
-    return any(role.id == STAFF_ROLE_ID for role in member.roles)
+    command_role_ids = {STAFF_ROLE_ID, BOT_COMMAND_ROLE_ID}
+    return any(role.id in command_role_ids for role in member.roles)
 
 
 def get_ticket_owner_id(channel: discord.TextChannel) -> int | None:
