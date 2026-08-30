@@ -1,10 +1,11 @@
 {
-  "title": "Bot Command Role Access",
-  "summary": "The newly authorized Discord role can now use staff bot commands.",
+  "title": "Support Access and Ticket Routing",
+  "summary": "Bot commands and private ticket channels are now restricted to the configured support role.",
   "added": [],
   "changed": [
-    "Role 1539005030189891684 can now use commands restricted to bot staff.",
-    "The authorized role can also use ticket actions that rely on the shared staff permission check."
+    "Role 1539005030189891684 is now the sole support and administrator role for protected slash commands.",
+    "Ticket closing is available only to support or the member who created the ticket.",
+    "New ticket channels are created under category 1543674278711529562 and transcripts are sent to channel 1543674377953087649."
   ],
   "removed": []
 }
