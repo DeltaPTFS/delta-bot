@@ -20,6 +20,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+import aiohttp
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -46,12 +47,16 @@ DIVIDER_URL = (
 
 TICKET_CATEGORY_ID      = 1543674278711529562
 STAFF_ROLE_ID           = 1539005030189891684
+# Backward-compatible name used by earlier command permission checks. Both
+# names intentionally resolve to the one authorized support/admin role.
+BOT_COMMAND_ROLE_ID     = STAFF_ROLE_ID
 PARTNERSHIP_REPRESENTATIVES_ROLE_ID = 1528809872672690247
 TRANSCRIPT_CHANNEL_ID   = 1543674377953087649
 UPDATES_CHANNEL_ID      = 1524489806711754752
 UPDATES_ROLE_ID         = 1530210954422518042
 TICKET_CLOSE_DELAY      = 5
 RATING_TIMEOUT          = 15 * 24 * 60 * 60
+DISCORD_RECONNECT_DELAY = 15
 DM_TICKET_OWNER_MARKER  = "Delta DM Ticket Owner:"
 DM_TICKET_CATEGORY_MARKER = "Delta Ticket Category:"
 DM_TICKET_CLAIM_MARKER  = "Delta Ticket Claimed By:"
@@ -302,8 +307,7 @@ def success_embed(message: str) -> discord.Embed:
 # ════════════════════════════════════════════════════════════════════════════════
 
 def is_staff(member: discord.Member) -> bool:
-    command_role_ids = {STAFF_ROLE_ID, BOT_COMMAND_ROLE_ID}
-    return any(role.id in command_role_ids for role in member.roles)
+    return any(role.id == BOT_COMMAND_ROLE_ID for role in member.roles)
 
 
 def get_ticket_owner_id(channel: discord.TextChannel) -> int | None:
@@ -1912,6 +1916,27 @@ def run_health_server() -> None:
     server.serve_forever()
 
 
+def run_bot_forever(token: str) -> None:
+    """Restart the Discord client when a temporary network failure stops it."""
+    while True:
+        bot = DeltaBot()
+        try:
+            bot.run(token, log_handler=None)
+        except discord.LoginFailure:
+            # A revoked or malformed token requires an operator to update Render.
+            raise
+        except (aiohttp.ClientError, discord.HTTPException, OSError) as exc:
+            log.error(
+                "Discord connection stopped (%s). Restarting in %d seconds.",
+                exc,
+                DISCORD_RECONNECT_DELAY,
+            )
+            time.sleep(DISCORD_RECONNECT_DELAY)
+        else:
+            log.info("Discord client shut down normally.")
+            return
+
+
 def main() -> None:
     token = os.getenv("DISCORD_TOKEN")
     if not token:
@@ -1924,8 +1949,7 @@ def main() -> None:
     thread.start()
     log.info("Health-check server started.")
 
-    bot = DeltaBot()
-    bot.run(token, log_handler=None)
+    run_bot_forever(token)
 
 
 if __name__ == "__main__":
