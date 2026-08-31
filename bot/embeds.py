@@ -10,6 +10,11 @@ from config import (
 )
 
 
+def _set_brand_image(embed: discord.Embed, url: str) -> None:
+    if url:
+        embed.set_image(url=url)
+
+
 def _base_embed(title: str = "", description: str = "") -> discord.Embed:
     """Return an embed pre-loaded with Delta branding."""
     embed = discord.Embed(
@@ -37,14 +42,14 @@ def assistance_panel_embed() -> discord.Embed:
         ),
     )
     embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
-    embed.set_image(url=DIVIDER_URL)
+    _set_brand_image(embed, DIVIDER_URL)
     return embed
 
 
 def assistance_panel_banner_embed() -> discord.Embed:
     """Top banner embed (full Delta banner image)."""
     embed = discord.Embed(color=DELTA_RED)
-    embed.set_image(url=BANNER_URL)
+    _set_brand_image(embed, BANNER_URL)
     return embed
 
 
@@ -66,7 +71,7 @@ def general_inquiries_welcome(member: discord.Member) -> discord.Embed:
         ),
     )
     embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
-    embed.set_image(url=DIVIDER_URL)
+    _set_brand_image(embed, DIVIDER_URL)
     return embed
 
 
@@ -85,7 +90,7 @@ def generic_ticket_welcome(member: discord.Member, label: str, emoji: str) -> di
         ),
     )
     embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
-    embed.set_image(url=DIVIDER_URL)
+    _set_brand_image(embed, DIVIDER_URL)
     return embed
 
 
@@ -103,7 +108,7 @@ def ticket_closed_dm(ticket_name: str) -> discord.Embed:
         ),
     )
     embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
-    embed.set_image(url=DIVIDER_URL)
+    _set_brand_image(embed, DIVIDER_URL)
     return embed
 
 
@@ -115,7 +120,7 @@ def ticket_closed_channel() -> discord.Embed:
             "Thank you for contacting Delta Air Lines Support."
         ),
     )
-    embed.set_image(url=DIVIDER_URL)
+    _set_brand_image(embed, DIVIDER_URL)
     return embed
 
 
