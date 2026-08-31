@@ -12,6 +12,7 @@ Requires a .env file with:
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 import os
 import threading
@@ -59,6 +60,8 @@ DM_TICKET_CATEGORY_MARKER = "Delta Ticket Category:"
 DM_TICKET_CLAIM_MARKER  = "Delta Ticket Claimed By:"
 LEGACY_GUILD_ID          = 1436471549703094477
 INVITE_URL               = "https://discord.gg/hccQX6nGJw"
+PANEL_BANNER_URL         = "https://cdn.discordapp.com/attachments/1539651325615153233/1543872830947590154/delta_banner.jpg?ex=6a96731e&is=6a95219e&hm=d04ff3b4ed550e64196f40c79bb29656454fc102729c758a4a7c64f53462d5c7&"
+PANEL_BOTTOM_URL         = "https://cdn.discordapp.com/attachments/1539651325615153233/1543878240916213861/Delta_Airlines_Banner_Bottom.png?ex=6a967828&is=6a9526a8&hm=923dcd5f959e565e8d8681504d9ba3b9439bb75c6eda5a0e32c8f2966f46db89&"
 
 PANEL_MESSAGE = """## <:DeltaLogo:1540927958116601980> Contact Us | <:SkyTeamLogo:1540927923618316359>
 -# <:Blank:1540951736062312529> <:Connection:1540927881683669013>  1021 N Outer Loop Rd, East Point, GA, 30344.
@@ -273,6 +276,23 @@ def success_embed(message: str) -> discord.Embed:
     return embed
 
 
+def connected_embed() -> discord.Embed:
+    """Customer-facing connection notice used only when a ticket is opened."""
+    return _base_embed(description=CONNECTED_MESSAGE)
+
+
+async def download_panel_asset(url: str, filename: str) -> discord.File:
+    """Download a configured panel image so Discord displays it without a raw URL."""
+    timeout = aiohttp.ClientTimeout(total=20)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(url) as response:
+            response.raise_for_status()
+            data = await response.read()
+    if not data:
+        raise ValueError(f"Panel asset {filename} was empty.")
+    return discord.File(io.BytesIO(data), filename=filename)
+
+
 # ════════════════════════════════════════════════════════════════════════════════
 # UTILITIES
 # ════════════════════════════════════════════════════════════════════════════════
@@ -457,8 +477,13 @@ async def relay_support_message(
             title="💬  Delta Support Reply",
             description=relay_description(message),
         )
-        display_name = getattr(message.author, "display_name", message.author.name)
-        embed.set_author(name=display_name, icon_url=message.author.display_avatar.url)
+        # Never expose the individual agent's identity to the customer. Using the
+        # custom emoji's CDN image as the author icon renders the Support badge
+        # without leaking the raw emoji snowflake into the displayed text.
+        embed.set_author(
+            name="Delta Air Lines Support",
+            icon_url="https://cdn.discordapp.com/emojis/1540927430179553321.png",
+        )
         embed.add_field(
             name="Private Support Conversation",
             value="Reply directly in this DM to send another message to your assigned support agent.",
@@ -477,7 +502,7 @@ async def open_dm_ticket(
     bot: "DeltaBot",
     user: discord.abc.User,
     category_key: str,
-) -> discord.TextChannel:
+) -> tuple[discord.TextChannel, bool]:
     """Create and introduce a staff relay channel for a confirmed DM ticket."""
     category = bot.get_channel(TICKET_CATEGORY_ID)
     if not isinstance(category, discord.CategoryChannel):
@@ -485,7 +510,7 @@ async def open_dm_ticket(
     guild = category.guild
     existing = await find_existing_ticket(guild, user)
     if existing is not None:
-        return existing
+        return existing, False
 
     cfg = TICKET_CONFIG[category_key]
     channel = await create_dm_ticket_channel(
@@ -523,7 +548,7 @@ async def open_dm_ticket(
     )
     _set_brand_image(embed, DIVIDER_URL)
     await channel.send(embed=embed, view=TicketActionView())
-    return channel
+    return channel, True
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -893,10 +918,6 @@ class TicketActionView(discord.ui.View):
                     "They will be assisting the customer through the DM relay."
                 ),
             )
-            owner_title = "🙋  Support Agent Connected"
-            owner_message = (
-                f"**{member.display_name}** has claimed your ticket and will now assist you here in DMs."
-            )
 
         _set_brand_image(status_embed, DIVIDER_URL)
         await channel.send(embed=status_embed)
@@ -991,7 +1012,6 @@ class AssistanceSelect(discord.ui.Select):
         guild = category.guild
 
         selected_key = self.values[0]
-        cfg = TICKET_CONFIG[selected_key]
 
         # Discord keeps a user's last selection highlighted unless the source
         # message is refreshed. Replace the view immediately so this member can
@@ -1003,7 +1023,7 @@ class AssistanceSelect(discord.ui.Select):
                 log.warning("Unable to reset assistance dropdown on message %s", interaction.message.id)
 
         try:
-            await open_dm_ticket(self.bot, user, selected_key)
+            _, created = await open_dm_ticket(self.bot, user, selected_key)
         except Exception as exc:
             self.bot._dm_prompted_users.discard(user.id)
             await interaction.followup.send(
@@ -1012,11 +1032,12 @@ class AssistanceSelect(discord.ui.Select):
             return
 
         self.bot._dm_prompted_users.discard(user.id)
-        await interaction.followup.send(
-            embed=success_embed(
-                f"Your **{cfg['label']}** ticket is open. Send your next message in this DM and I will forward it to support."
-            ),
-        )
+        if created:
+            await interaction.followup.send(embed=connected_embed())
+        else:
+            await interaction.followup.send(
+                embed=success_embed("You are still connected to your existing support ticket. Send your next message here and I will forward it to the same ticket."),
+            )
 
 
 class DMAssistancePanelView(discord.ui.View):
@@ -1045,7 +1066,8 @@ class ServerAssistanceSelect(discord.ui.Select):
             for key, cfg in TICKET_CONFIG.items()
         ]
         super().__init__(
-            placeholder="<:Support:1540927430179553321> Select an Assistance Category (Category Title)",
+            placeholder="Select an Assistance Category",
+
             options=options,
             custom_id="delta:server_assistance_select",
         )
@@ -1155,10 +1177,9 @@ class DMTicketPromptView(discord.ui.View):
     @discord.ui.button(label="✅ Yes, make a ticket", style=discord.ButtonStyle.success)
     async def yes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.category_key is not None:
-            cfg = TICKET_CONFIG[self.category_key]
             await interaction.response.defer()
             try:
-                await open_dm_ticket(self.bot, interaction.user, self.category_key)
+                _, created = await open_dm_ticket(self.bot, interaction.user, self.category_key)
             except Exception as exc:
                 self.bot._dm_prompted_users.discard(self.user_id)
                 await interaction.followup.send(
@@ -1166,14 +1187,8 @@ class DMTicketPromptView(discord.ui.View):
                 )
                 return
             self.bot._dm_prompted_users.discard(self.user_id)
-            confirmation = _base_embed(
-                title="✅  Your Private Support Ticket Is Open",
-                description=(
-                    f"Your request has been routed to **{cfg['label']}**. A support agent "
-                    "will review it as soon as possible.\n\n"
-                    "Continue by sending your question, details, and any relevant attachments "
-                    "directly in this DM. A ✅ reaction means your message was delivered to support."
-                ),
+            confirmation = connected_embed() if created else success_embed(
+                "You are still connected to your existing support ticket. Send your next message here and I will forward it to the same ticket."
             )
             confirmation.add_field(
                 name="What Happens Next?",
@@ -1270,7 +1285,26 @@ def register_commands(tree: app_commands.CommandTree) -> None:
                 ephemeral=True,
             )
             return
-        await interaction.response.send_message(
+        await interaction.response.defer(ephemeral=True)
+        try:
+            banner, bottom = await asyncio.gather(
+                download_panel_asset(PANEL_BANNER_URL, "delta_banner.jpg"),
+                download_panel_asset(PANEL_BOTTOM_URL, "Delta_Airlines_Banner_Bottom.png"),
+            )
+            await interaction.channel.send(file=banner)
+            await interaction.channel.send(PANEL_MESSAGE)
+            await interaction.channel.send(
+                file=bottom,
+                view=ServerAssistancePanelView(interaction.client),
+            )
+        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, discord.HTTPException) as exc:
+            log.error("Could not post the Assistance Panel assets: %s", exc)
+            await interaction.followup.send(
+                embed=error_embed("The Assistance Panel images could not be loaded. Please try again."),
+                ephemeral=True,
+            )
+            return
+        await interaction.followup.send(
             embed=success_embed("The private DM Assistance Panel was posted successfully."),
             ephemeral=True,
         )
