@@ -9,15 +9,17 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 
 | Feature | Details |
 |---|---|
-| Assistance Panel | DL Leadership can post it anywhere with `/assistance panel`; confirmation continues in DMs |
+| Assistance Panel | Support or admins can post the plain-text contact panel with `/panel`; confirmation continues in DMs |
 | Private Tickets | Members stay in DMs while staff work from a hidden relay channel |
 | Duplicate Guard | Prevents users from opening multiple simultaneous tickets |
 | Close Ticket | Button *and* `/close` slash command; DMs the user on close |
 | Message Relay | Customer and claimed-agent messages are delivered both ways with ✅ confirmation |
-| Staff Commands | `/connected`, `/resolved`, `/hr`, and `/leadership` — staff role-gated |
+| Staff Commands | `/ticket add-customer`, `/ticket add-support`, `/ticket close`, `/connected`, and `/resolved` are support role-gated |
+| Admin Commands | `/ticket admin remove`, `punish`, `unpunish`, and `undo` are admin role-gated |
 | Delta Branding | Red (#C8102E), optional server-owned images, and a consistent footer |
 | Claim State | Claim ownership is stored with the ticket and survives bot restarts |
 | Transcripts | Closed-ticket transcripts are posted to the private transcript channel |
+| Server Migration | Cleans the bot's messages from retired server `1436471549703094477`, then leaves it |
 
 ---
 
