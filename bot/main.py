@@ -38,15 +38,20 @@ MAILING_ADDRESS = "P.O. Box 20980, Department 980, Atlanta, GA 30320-2980"
 BANNER_URL = os.getenv("BANNER_URL", "")
 DIVIDER_URL = os.getenv("DIVIDER_URL", "")
 
-GUILD_ID                = 1538738611988467782
-TICKET_CATEGORY_ID      = 1543674278711529562
-STAFF_ROLE_ID           = 1539005030189891684
-ADMIN_ROLE_ID           = 1539005297417519205
+GUILD_ID = 1538738611988467782
+TICKET_CATEGORY_ID = 1543674278711529562
+STAFF_ROLE_ID = 1539005030189891684
+ADMIN_ROLE_ID = 1539005297417519205
+
 # Backward-compatible name used by earlier command permission checks.
-BOT_COMMAND_ROLE_ID     = STAFF_ROLE_ID
-TRANSCRIPT_CHANNEL_ID   = 1543674377953087649
-UPDATE_CHANNEL_ID       = TRANSCRIPT_CHANNEL_ID
-BOT_VERSION             = "2.0.2"
+BOT_COMMAND_ROLE_ID = STAFF_ROLE_ID
+
+PARTNERSHIP_REPRESENTATIVES_ROLE_ID = 1528809872672690247
+TRANSCRIPT_CHANNEL_ID = 1543674377953087649
+UPDATES_CHANNEL_ID = 1524489806711754752
+UPDATES_ROLE_ID = 1530210954422518042
+UPDATE_CHANNEL_ID = TRANSCRIPT_CHANNEL_ID
+BOT_VERSION = "2.0.0"
 TICKET_CLOSE_DELAY      = 5
 RATING_TIMEOUT          = 15 * 24 * 60 * 60
 DISCORD_RECONNECT_DELAY = 15
@@ -65,9 +70,7 @@ PANEL_MESSAGE = """## <:DeltaLogo:1540927958116601980> Contact Us | <:SkyTeamLog
 
 > <:RArrow:1540951788889575504> **Before you begin,** please ensure your **Discord Settings** allow **Direct-Messages** from this **server.**
 
--# <:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines.**
-
-<:Support:1540927430179553321> **Select an Assistance Category**"""
+-# <:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines.**"""
 
 CONNECTED_MESSAGE = """<:Support:1540927430179553321> **You are now connected.**
 
@@ -90,14 +93,17 @@ If you'd like to contact our team or create a support ticket, click the **Create
 
 UPDATE_MESSAGE = f"""# <:DeltaLogo:1540927958116601980> Delta Support Bot — Update {BOT_VERSION}
 
-This is a **patch update** for the version 2 ticket-system release.
+This is a **major update**, so the main version number has advanced to **2**.
 
-## What's Fixed
-- Added the new top and bottom Assistance Panel banners.
-- The bottom banner now appears directly above the category dropdown.
-- Panel text remains a regular Discord message rather than a bot-created embed.
+## What's New
+- Added separate Support and Admin ticket permissions.
+- Added `/ticket` support tools for customers, support members, and ticket closure.
+- Added `/ticket admin` removal, punishment, reversal, and undo controls.
+- Rebuilt the Contact Us panel and assistance categories with the new server emojis.
+- Added the non-member join and ticket guidance flow.
+- Added automatic cleanup and departure from the retired server.
 
--# Version format: major.minor.patch • Patch releases increase the final number."""
+-# Version format: major.minor.patch • Major releases increase the first number."""
 
 # Each key maps to a ticket category. Add new rows here to add new categories.
 TICKET_CONFIG: dict[str, dict] = {
@@ -919,6 +925,12 @@ class TicketActionView(discord.ui.View):
             await interaction.message.edit(view=TicketActionView(claimed=not unclaiming))
         if unclaiming:
             await notify_ticket_owner(interaction.client, owner_id, owner_title, owner_message)
+        elif owner_id is not None and owner_id.isdigit():
+            try:
+                owner = interaction.client.get_user(int(owner_id)) or await interaction.client.fetch_user(int(owner_id))
+                await owner.send(CONNECTED_MESSAGE)
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                log.warning("Could not send connected message to %s: %s", owner_id, exc)
 
     # ── Close ──────────────────────────────────────────────────────────────────────
     @discord.ui.button(
@@ -976,7 +988,7 @@ class AssistanceSelect(discord.ui.Select):
             for key, cfg in TICKET_CONFIG.items()
         ]
         super().__init__(
-            placeholder="Select an Assistance Category",
+            placeholder="<:Support:1540927430179553321> Select an Assistance Category (Category Title)",
             min_values=1,
             max_values=1,
             options=options,
@@ -1055,6 +1067,7 @@ class ServerAssistanceSelect(discord.ui.Select):
         ]
         super().__init__(
             placeholder="Select an Assistance Category",
+
             options=options,
             custom_id="delta:server_assistance_select",
         )
@@ -1177,6 +1190,12 @@ class DMTicketPromptView(discord.ui.View):
             confirmation = connected_embed() if created else success_embed(
                 "You are still connected to your existing support ticket. Send your next message here and I will forward it to the same ticket."
             )
+            confirmation.add_field(
+                name="What Happens Next?",
+                value="An agent will claim your ticket, and their replies will appear here automatically.",
+                inline=False,
+            )
+            _set_brand_image(confirmation, DIVIDER_URL)
             await interaction.edit_original_response(embed=confirmation, view=None)
             self.stop()
             return
@@ -1289,6 +1308,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             embed=success_embed("The private DM Assistance Panel was posted successfully."),
             ephemeral=True,
         )
+        await interaction.channel.send(PANEL_MESSAGE, view=ServerAssistancePanelView(interaction.client))
 
     async def post_positions(
         interaction: discord.Interaction,
