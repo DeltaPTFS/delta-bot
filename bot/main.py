@@ -12,6 +12,7 @@ Requires a .env file with:
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 import os
 import threading
@@ -54,6 +55,8 @@ DM_TICKET_CATEGORY_MARKER = "Delta Ticket Category:"
 DM_TICKET_CLAIM_MARKER  = "Delta Ticket Claimed By:"
 LEGACY_GUILD_ID          = 1436471549703094477
 INVITE_URL               = "https://discord.gg/hccQX6nGJw"
+PANEL_BANNER_URL         = "https://cdn.discordapp.com/attachments/1539651325615153233/1543872830947590154/delta_banner.jpg?ex=6a96731e&is=6a95219e&hm=d04ff3b4ed550e64196f40c79bb29656454fc102729c758a4a7c64f53462d5c7&"
+PANEL_BOTTOM_URL         = "https://cdn.discordapp.com/attachments/1539651325615153233/1543878240916213861/Delta_Airlines_Banner_Bottom.png?ex=6a967828&is=6a9526a8&hm=923dcd5f959e565e8d8681504d9ba3b9439bb75c6eda5a0e32c8f2966f46db89&"
 
 PANEL_MESSAGE = """## <:DeltaLogo:1540927958116601980> Contact Us | <:SkyTeamLogo:1540927923618316359>
 -# <:Blank:1540951736062312529> <:Connection:1540927881683669013>  1021 N Outer Loop Rd, East Point, GA, 30344.
@@ -270,6 +273,18 @@ def success_embed(message: str) -> discord.Embed:
 def connected_embed() -> discord.Embed:
     """Customer-facing connection notice used only when a ticket is opened."""
     return _base_embed(description=CONNECTED_MESSAGE)
+
+
+async def download_panel_asset(url: str, filename: str) -> discord.File:
+    """Download a configured panel image so Discord displays it without a raw URL."""
+    timeout = aiohttp.ClientTimeout(total=20)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(url) as response:
+            response.raise_for_status()
+            data = await response.read()
+    if not data:
+        raise ValueError(f"Panel asset {filename} was empty.")
+    return discord.File(io.BytesIO(data), filename=filename)
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -904,6 +919,12 @@ class TicketActionView(discord.ui.View):
             await interaction.message.edit(view=TicketActionView(claimed=not unclaiming))
         if unclaiming:
             await notify_ticket_owner(interaction.client, owner_id, owner_title, owner_message)
+        elif owner_id is not None and owner_id.isdigit():
+            try:
+                owner = interaction.client.get_user(int(owner_id)) or await interaction.client.fetch_user(int(owner_id))
+                await owner.send(CONNECTED_MESSAGE)
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                log.warning("Could not send connected message to %s: %s", owner_id, exc)
 
     # ── Close ──────────────────────────────────────────────────────────────────────
     @discord.ui.button(
@@ -961,7 +982,9 @@ class AssistanceSelect(discord.ui.Select):
             for key, cfg in TICKET_CONFIG.items()
         ]
         super().__init__(
+
             placeholder="Select an Assistance Category",
+
             min_values=1,
             max_values=1,
             options=options,
@@ -1040,6 +1063,7 @@ class ServerAssistanceSelect(discord.ui.Select):
         ]
         super().__init__(
             placeholder="Select an Assistance Category",
+
             options=options,
             custom_id="delta:server_assistance_select",
         )
@@ -1162,6 +1186,13 @@ class DMTicketPromptView(discord.ui.View):
             confirmation = connected_embed() if created else success_embed(
                 "You are still connected to your existing support ticket. Send your next message here and I will forward it to the same ticket."
             )
+            confirmation.add_field(
+                name="What Happens Next?",
+                value="An agent will claim your ticket, and their replies will appear here automatically.",
+                inline=False,
+            )
+            _set_brand_image(confirmation, DIVIDER_URL)
+
             await interaction.edit_original_response(embed=confirmation, view=None)
             self.stop()
             return
@@ -1289,6 +1320,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             embed=success_embed("The private DM Assistance Panel was posted successfully."),
             ephemeral=True,
         )
+        await interaction.channel.send(PANEL_MESSAGE, view=ServerAssistancePanelView(interaction.client))
 
     async def post_positions(
         interaction: discord.Interaction,
