@@ -16,6 +16,9 @@ DIVIDER_URL = os.getenv("DIVIDER_URL", "")
 # ── Guild / Channel IDs ───────────────────────────────────────────────────────
 GUILD_ID = 1538738611988467782
 TICKET_CATEGORY_ID = 1543674278711529562   # All ticket channels live here
+TRANSCRIPT_CHANNEL_ID = 1543674377953087649
+UPDATE_CHANNEL_ID = TRANSCRIPT_CHANNEL_ID
+BOT_VERSION = "2.0.0"
 
 # ── Role IDs ─────────────────────────────────────────────────────────────────
 STAFF_ROLE_ID           = 1539005030189891684  # May use staff-only commands

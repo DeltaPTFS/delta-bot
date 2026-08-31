@@ -20,6 +20,11 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Claim State | Claim ownership is stored with the ticket and survives bot restarts |
 | Transcripts | Closed-ticket transcripts are posted to the private transcript channel |
 | Server Migration | Cleans the bot's messages from retired server `1436471549703094477`, then leaves it |
+| Release Updates | Posts and pins each release once in channel `1543674377953087649`; the current major release is `2.0.0` |
+
+Versions use `major.minor.patch`. Breaking or especially large releases increase
+the first number, regular feature releases increase the second, and fixes increase
+the third.
 
 ---
 

@@ -44,6 +44,8 @@ ADMIN_ROLE_ID           = 1539005297417519205
 # Backward-compatible name used by earlier command permission checks.
 BOT_COMMAND_ROLE_ID     = STAFF_ROLE_ID
 TRANSCRIPT_CHANNEL_ID   = 1543674377953087649
+UPDATE_CHANNEL_ID       = TRANSCRIPT_CHANNEL_ID
+BOT_VERSION             = "2.0.0"
 TICKET_CLOSE_DELAY      = 5
 RATING_TIMEOUT          = 15 * 24 * 60 * 60
 DISCORD_RECONNECT_DELAY = 15
@@ -80,6 +82,20 @@ If you'd like to join our community, click the **Join Delta Air Lines** button b
 If you'd like to contact our team or create a support ticket, click the **Create Ticket** button below.
 
 <:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines.**"""
+
+UPDATE_MESSAGE = f"""# <:DeltaLogo:1540927958116601980> Delta Support Bot — Update {BOT_VERSION}
+
+This is a **major update**, so the main version number has advanced to **2**.
+
+## What's New
+- Added separate Support and Admin ticket permissions.
+- Added `/ticket` support tools for customers, support members, and ticket closure.
+- Added `/ticket admin` removal, punishment, reversal, and undo controls.
+- Rebuilt the Contact Us panel and assistance categories with the new server emojis.
+- Added the non-member join and ticket guidance flow.
+- Added automatic cleanup and departure from the retired server.
+
+-# Version format: major.minor.patch • Major releases increase the first number."""
 
 # Each key maps to a ticket category. Add new rows here to add new categories.
 TICKET_CONFIG: dict[str, dict] = {
@@ -1759,12 +1775,50 @@ class DeltaBot(commands.Bot):
             )
         )
 
+        await self._post_release_update()
+
         for guild in tuple(self.guilds):
             if guild.id != GUILD_ID:
                 log.warning("Leaving unauthorized guild %s (%s).", guild.name, guild.id)
                 if guild.id == LEGACY_GUILD_ID:
                     await self._delete_legacy_messages(guild)
                 await guild.leave()
+
+    async def _post_release_update(self) -> None:
+        """Post this release once to the update/transcript channel."""
+        channel = self.get_channel(UPDATE_CHANNEL_ID)
+        if not isinstance(channel, discord.TextChannel):
+            try:
+                fetched = await self.fetch_channel(UPDATE_CHANNEL_ID)
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                log.warning("Could not find update channel %s: %s", UPDATE_CHANNEL_ID, exc)
+                return
+            channel = fetched if isinstance(fetched, discord.TextChannel) else None
+        if channel is None or channel.guild.id != GUILD_ID or self.user is None:
+            return
+
+        marker = f"Update {BOT_VERSION}"
+        try:
+            pinned = await channel.pins()
+            recent = [message async for message in channel.history(limit=200)]
+        except (discord.Forbidden, discord.HTTPException) as exc:
+            log.warning("Could not check existing update announcements: %s", exc)
+            return
+        if any(
+            message.author.id == self.user.id and marker in message.content
+            for message in (*pinned, *recent)
+        ):
+            return
+
+        try:
+            announcement = await channel.send(UPDATE_MESSAGE)
+            try:
+                await announcement.pin(reason=f"Delta Support Bot release {BOT_VERSION}")
+            except (discord.Forbidden, discord.HTTPException):
+                log.warning("Posted update %s but could not pin it.", BOT_VERSION)
+            log.info("Posted release update %s to channel %s.", BOT_VERSION, UPDATE_CHANNEL_ID)
+        except (discord.Forbidden, discord.HTTPException) as exc:
+            log.warning("Could not post release update %s: %s", BOT_VERSION, exc)
 
     async def _delete_legacy_messages(self, guild: discord.Guild) -> None:
         """Best-effort removal of this bot's history from the explicitly retired server."""
