@@ -12,10 +12,8 @@ Requires a .env file with:
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
-from pathlib import Path
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -36,135 +34,103 @@ DELTA_RED       = 0xC8102E
 FOOTER_TEXT     = "Delta Air Lines • Keep Climbing"
 MAILING_ADDRESS = "P.O. Box 20980, Department 980, Atlanta, GA 30320-2980"
 
-BANNER_URL = (
-    "https://cdn.discordapp.com/attachments/1525901449769254922"
-    "/1525992386948239582/delta_banner.jpg"
-)
-DIVIDER_URL = (
-    "https://cdn.discordapp.com/attachments/1525901449769254922"
-    "/1525992387254685869/skinny_delta_banner.jpg"
-)
+BANNER_URL = os.getenv("BANNER_URL", "")
+DIVIDER_URL = os.getenv("DIVIDER_URL", "")
 
-TICKET_CATEGORY_ID      = 1543674278711529562
-STAFF_ROLE_ID           = 1539005030189891684
-# Backward-compatible name used by earlier command permission checks. Both
-# names intentionally resolve to the one authorized support/admin role.
-BOT_COMMAND_ROLE_ID     = STAFF_ROLE_ID
+GUILD_ID = 1538738611988467782
+TICKET_CATEGORY_ID = 1543674278711529562
+STAFF_ROLE_ID = 1539005030189891684
+ADMIN_ROLE_ID = 1539005297417519205
+
+# Backward-compatible name used by earlier command permission checks.
+BOT_COMMAND_ROLE_ID = STAFF_ROLE_ID
+
 PARTNERSHIP_REPRESENTATIVES_ROLE_ID = 1528809872672690247
-TRANSCRIPT_CHANNEL_ID   = 1543674377953087649
-UPDATES_CHANNEL_ID      = 1524489806711754752
-UPDATES_ROLE_ID         = 1530210954422518042
+TRANSCRIPT_CHANNEL_ID = 1543674377953087649
+UPDATES_CHANNEL_ID = 1524489806711754752
+UPDATES_ROLE_ID = 1530210954422518042
+UPDATE_CHANNEL_ID = TRANSCRIPT_CHANNEL_ID
+BOT_VERSION = "2.0.0"
 TICKET_CLOSE_DELAY      = 5
 RATING_TIMEOUT          = 15 * 24 * 60 * 60
 DISCORD_RECONNECT_DELAY = 15
 DM_TICKET_OWNER_MARKER  = "Delta DM Ticket Owner:"
 DM_TICKET_CATEGORY_MARKER = "Delta Ticket Category:"
 DM_TICKET_CLAIM_MARKER  = "Delta Ticket Claimed By:"
+LEGACY_GUILD_ID          = 1436471549703094477
+INVITE_URL               = "https://discord.gg/hccQX6nGJw"
 
-# Human-written release notes are intentionally kept separate from the code.
-# Edit this file as part of a deployment to tell members what actually changed.
-DEPLOYMENT_NOTES_FILE = Path(__file__).with_name("deployment_notes.json")
+PANEL_MESSAGE = """## <:DeltaLogo:1540927958116601980> Contact Us | <:SkyTeamLogo:1540927923618316359>
+-# <:Blank:1540951736062312529> <:Connection:1540927881683669013>  1021 N Outer Loop Rd, East Point, GA, 30344.
 
-HR_POSITIONS_MESSAGE = """<:support:1451295269550555249> **Ready to become an HR?**
+> <:BArrow:1540951845147639809> **Have a question about our airline?** Or interested in **joining our team?** Contact Us and our **Delta Support Team** will offer **24/7 Customer Assistance,** ready to answer and solve **any Inquiry** you may have.
 
--# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+> <:RArrow:1540951788889575504> **Before you begin,** please ensure your **Discord Settings** allow **Direct-Messages** from this **server.**
 
-> <:Tail:1450093803469017168> **Below,** we have provided a **full** list of **all** avaliable **Human Resources Positions.** If you would like to proceed with applying, we encourage you to and will assist you **right away.**
+-# <:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines.**"""
 
-**Human Resources - Delta Air Lines**
-
-> <:barrow:1525642772223365311> **Delta Techical Operations -** [AVAL]
-> <:barrow:1525642772223365311> **SVP Flight Operations -** [AVAL]
-> <:barrow:1525642772223365311> **SVP Inflight Services -** [AVAL]
-> <:barrow:1525642772223365311> **SVP Ground Operations -** [AVAL]
-> <:barrow:1525642772223365311> **Department Overseer -** [AVAL]
-> <:barrow:1525642772223365311> **Flight Dispatcher -** [AVAL]
-
--# Thank you for contacting Delta Support."""
-
-LEADERSHIP_POSITIONS_MESSAGE = """<:support:1451295269550555249> **Ready to become a Leadership Member?**
+CONNECTED_MESSAGE = """<:Support:1540927430179553321> **You are now connected.**
 
 -# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
 
-> <:Tail:1450093803469017168> **Below,** we have provided a **full** list of **all** avaliable **Delta Leadership Positions.** If you would like to proceed with applying, we encourage you to and will assist you **right away.**
-
-**Leadership - Delta Air Lines**
-
-> <:barrow:1525642772223365311> **Chief of Operations -** [AVAL]
-> <:barrow:1525642772223365311> **Chairman Delta Tech-Ops -** [TAKEN]
-> <:barrow:1525642772223365311> **Chief Technology Officer -** [AVAL]
-> <:barrow:1525642772223365311> **Chief Finnancial Officer -** [TAKEN]
-> <:barrow:1525642772223365311> **Chief People Officer -** [TAKEN]
-> <:barrow:1525642772223365311> **Chief Marketing Officer -** [TAKEN]
-> <:barrow:1525642772223365311> **Chief Communications Officer -** [AVAL]
-> <:barrow:1525642772223365311> **Executive Vice President -** [AVAL]
+> <:DeltaLogo:1540927958116601980> **You have officially been connected to our Delta Support Agency.** If you have not already done so, **please state your inquiry below.**
 
 -# Thank you for contacting Delta Support."""
 
+NON_MEMBER_MESSAGE = """# <:DeltaLogo:1540927958116601980> Delta Air Lines | Direct Messages <:SkyTeamLogo:1540927923618316359>
 
-def load_deployment_notes() -> dict[str, object] | None:
-    """Load plain-language notes supplied by the person deploying the bot."""
-    try:
-        notes = json.loads(DEPLOYMENT_NOTES_FILE.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        log.warning("Could not read deployment notes: %s", exc)
-        return None
+> <:BArrow:1540951845147639809> **Hey there! It looks like you're currently not in the Delta Air Lines server.**
 
-    if not isinstance(notes, dict):
-        log.warning("Deployment notes must contain a JSON object.")
-        return None
-    return notes
+If you'd like to join our community, click the **Join Delta Air Lines** button below to get started!
+
+<:Support:1540927430179553321> **Need Assistance?**
+If you'd like to contact our team or create a support ticket, click the **Create Ticket** button below.
+
+<:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines.**"""
+
+UPDATE_MESSAGE = f"""# <:DeltaLogo:1540927958116601980> Delta Support Bot — Update {BOT_VERSION}
+
+This is a **major update**, so the main version number has advanced to **2**.
+
+## What's New
+- Added separate Support and Admin ticket permissions.
+- Added `/ticket` support tools for customers, support members, and ticket closure.
+- Added `/ticket admin` removal, punishment, reversal, and undo controls.
+- Rebuilt the Contact Us panel and assistance categories with the new server emojis.
+- Added the non-member join and ticket guidance flow.
+- Added automatic cleanup and departure from the retired server.
+
+-# Version format: major.minor.patch • Major releases increase the first number."""
 
 # Each key maps to a ticket category. Add new rows here to add new categories.
 TICKET_CONFIG: dict[str, dict] = {
     "general_inquiries": {
-        "label":       "General Inquiries",
+        "label":       "General Inquires",
         "prefix":      "general-support",
         "role_id":     STAFF_ROLE_ID,
-        "emoji":       "📋",
+        "emoji":       "<:Plane:1540926994332651580>",
         "description": "General questions about Delta Air Lines services.",
     },
-    "lead_support": {
-        "label":       "Lead Support",
-        "prefix":      "lead-support",
+    "skymiles": {
+        "label":       "SkyMiles",
+        "prefix":      "skymiles",
         "role_id":     STAFF_ROLE_ID,
-        "emoji":       "🏅",
-        "description": "Escalated issues requiring a lead team member.",
+        "emoji":       "<:CreditCard:1540927195357253702>",
+        "description": "Questions about SkyMiles accounts and benefits.",
     },
     "partnership_requests": {
-        "label":       "Partnership Requests",
+        "label":       "Partner Request",
         "prefix":      "partnership",
-        "role_id":     PARTNERSHIP_REPRESENTATIVES_ROLE_ID,
-        "emoji":       "🤝",
+        "role_id":     STAFF_ROLE_ID,
+        "emoji":       "<:Partners:1540927071822549114>",
         "description": "Inquiries regarding business partnerships.",
     },
-    "class_purchases": {
-        "label":       "Class Purchases",
-        "prefix":      "class-purchase",
+    "careers": {
+        "label":       "Careers",
+        "prefix":      "careers",
         "role_id":     STAFF_ROLE_ID,
-        "emoji":       "💺",
-        "description": "Purchase or upgrade a cabin class.",
-    },
-    "application_status": {
-        "label":       "Application Status",
-        "prefix":      "application",
-        "role_id":     STAFF_ROLE_ID,
-        "emoji":       "📄",
-        "description": "Check the status of a submitted application.",
-    },
-    "jobs_roles": {
-        "label":       "Jobs & Roles",
-        "prefix":      "jobs",
-        "role_id":     STAFF_ROLE_ID,
-        "emoji":       "💼",
-        "description": "Inquiries about open positions and roles.",
-    },
-    "bug_reports": {
-        "label":       "Bug Reports",
-        "prefix":      "bug-report",
-        "role_id":     STAFF_ROLE_ID,
-        "emoji":       "🐛",
-        "description": "Report a bug or technical issue.",
+        "emoji":       "<:Nametag:1541175704622993428>",
+        "description": "Questions about careers and applications.",
     },
 }
 
@@ -178,9 +144,14 @@ def _base_embed(title: str = "", description: str = "") -> discord.Embed:
     return embed
 
 
+def _set_brand_image(embed: discord.Embed, url: str) -> None:
+    if url:
+        embed.set_image(url=url)
+
+
 def assistance_panel_banner_embed() -> discord.Embed:
     embed = discord.Embed(color=DELTA_RED)
-    embed.set_image(url=BANNER_URL)
+    _set_brand_image(embed, BANNER_URL)
     return embed
 
 
@@ -208,7 +179,7 @@ def assistance_panel_embed() -> discord.Embed:
         inline=False,
     )
     embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
-    embed.set_image(url=DIVIDER_URL)
+    _set_brand_image(embed, DIVIDER_URL)
     return embed
 
 
@@ -228,7 +199,7 @@ def general_inquiries_welcome(member: discord.Member) -> discord.Embed:
         ),
     )
     embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
-    embed.set_image(url=DIVIDER_URL)
+    _set_brand_image(embed, DIVIDER_URL)
     return embed
 
 
@@ -245,7 +216,7 @@ def generic_ticket_welcome(member: discord.Member, label: str, emoji: str) -> di
         ),
     )
     embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
-    embed.set_image(url=DIVIDER_URL)
+    _set_brand_image(embed, DIVIDER_URL)
     return embed
 
 
@@ -261,7 +232,7 @@ def ticket_closed_dm(ticket_name: str) -> discord.Embed:
         ),
     )
     embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
-    embed.set_image(url=DIVIDER_URL)
+    _set_brand_image(embed, DIVIDER_URL)
     return embed
 
 
@@ -274,7 +245,7 @@ def ticket_closed_channel() -> discord.Embed:
             "Thank you for contacting Delta Air Lines Support."
         ),
     )
-    embed.set_image(url=DIVIDER_URL)
+    _set_brand_image(embed, DIVIDER_URL)
     return embed
 
 
@@ -308,6 +279,10 @@ def success_embed(message: str) -> discord.Embed:
 
 def is_staff(member: discord.Member) -> bool:
     return any(role.id == BOT_COMMAND_ROLE_ID for role in member.roles)
+
+
+def is_admin(member: discord.Member) -> bool:
+    return any(role.id == ADMIN_ROLE_ID for role in member.roles)
 
 
 def get_ticket_owner_id(channel: discord.TextChannel) -> int | None:
@@ -389,6 +364,16 @@ async def create_dm_ticket_channel(
             manage_permissions=True,
             manage_messages=True,
         )
+    admin_role = guild.get_role(ADMIN_ROLE_ID)
+    if admin_role is not None:
+        overwrites[admin_role] = discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=True,
+            read_message_history=True,
+            manage_channels=True,
+            manage_permissions=True,
+            manage_messages=True,
+        )
     channel = await guild.create_text_channel(
         name=channel_name,
         category=category,  # type: ignore[arg-type]
@@ -403,7 +388,7 @@ async def create_dm_ticket_channel(
 
 
 def can_close_ticket(member: discord.Member, channel: discord.TextChannel) -> bool:
-    return is_staff(member) or get_ticket_owner_id(channel) == member.id
+    return is_staff(member) or is_admin(member) or get_ticket_owner_id(channel) == member.id
 
 
 async def notify_ticket_owner(
@@ -455,7 +440,7 @@ async def relay_customer_message(message: discord.Message, channel: discord.Text
     )
     embed.set_author(name=str(message.author), icon_url=message.author.display_avatar.url)
     embed.add_field(name="Customer ID", value=str(message.author.id), inline=False)
-    embed.set_image(url=DIVIDER_URL)
+    _set_brand_image(embed, DIVIDER_URL)
     embed.timestamp = message.created_at
     await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
     await message.add_reaction("✅")
@@ -479,7 +464,7 @@ async def relay_support_message(
             value="Reply directly in this DM to send another message to your assigned support agent.",
             inline=False,
         )
-        embed.set_image(url=DIVIDER_URL)
+        _set_brand_image(embed, DIVIDER_URL)
         embed.timestamp = message.created_at
         await user.send(embed=embed)
         await message.add_reaction("✅")
@@ -536,7 +521,7 @@ async def open_dm_ticket(
         ),
         inline=False,
     )
-    embed.set_image(url=DIVIDER_URL)
+    _set_brand_image(embed, DIVIDER_URL)
     await channel.send(embed=embed, view=TicketActionView())
     return channel
 
@@ -608,7 +593,7 @@ async def _archive_ticket(
                 f"**Rating:** {stars} ({rating_line})"
             ),
         )
-        log_embed.set_image(url=DIVIDER_URL)
+        _set_brand_image(log_embed, DIVIDER_URL)
         file = discord.File(
             fp=__import__("io").BytesIO(transcript_text.encode()),
             filename=f"transcript-{channel.name}.txt",
@@ -686,7 +671,7 @@ class CloseReasonModal(discord.ui.Modal, title="Close Ticket — Delta Air Lines
                     "*Thank you for contacting Delta Air Lines Support.*"
                 ),
             )
-            rating_embed.set_image(url=DIVIDER_URL)
+            _set_brand_image(rating_embed, DIVIDER_URL)
             try:
                 view.message = await owner.send(embed=rating_embed, view=view)
                 dm_sent = True
@@ -775,7 +760,7 @@ class RatingView(discord.ui.View):
                     "*Delta Air Lines — Keep Climbing.*"
                 ),
             )
-            confirm.set_image(url=DIVIDER_URL)
+            _set_brand_image(confirm, DIVIDER_URL)
             # Edit the existing closure embed instead of sending a second DM.
             await interaction.response.edit_message(embed=confirm, view=None)
             await self._update_archived_rating(stars)
@@ -913,13 +898,18 @@ class TicketActionView(discord.ui.View):
                 f"**{member.display_name}** has claimed your ticket and will now assist you here in DMs."
             )
 
-        status_embed.set_image(url=DIVIDER_URL)
+        _set_brand_image(status_embed, DIVIDER_URL)
         await channel.send(embed=status_embed)
         if interaction.message is not None:
             await interaction.message.edit(view=TicketActionView(claimed=not unclaiming))
-        await notify_ticket_owner(
-            interaction.client, owner_id, owner_title, owner_message
-        )
+        if unclaiming:
+            await notify_ticket_owner(interaction.client, owner_id, owner_title, owner_message)
+        elif owner_id is not None and owner_id.isdigit():
+            try:
+                owner = interaction.client.get_user(int(owner_id)) or await interaction.client.fetch_user(int(owner_id))
+                await owner.send(CONNECTED_MESSAGE)
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                log.warning("Could not send connected message to %s: %s", owner_id, exc)
 
     # ── Close ──────────────────────────────────────────────────────────────────────
     @discord.ui.button(
@@ -977,7 +967,7 @@ class AssistanceSelect(discord.ui.Select):
             for key, cfg in TICKET_CONFIG.items()
         ]
         super().__init__(
-            placeholder="✈️  Select an Assistance Category",
+            placeholder="<:Support:1540927430179553321> Select an Assistance Category (Category Title)",
             min_values=1,
             max_values=1,
             options=options,
@@ -1055,7 +1045,7 @@ class ServerAssistanceSelect(discord.ui.Select):
             for key, cfg in TICKET_CONFIG.items()
         ]
         super().__init__(
-            placeholder="✈️  Select an Assistance Category",
+            placeholder="<:Support:1540927430179553321> Select an Assistance Category (Category Title)",
             options=options,
             custom_id="delta:server_assistance_select",
         )
@@ -1077,7 +1067,7 @@ class ServerAssistanceSelect(discord.ui.Select):
             value=f"{cfg['emoji']} {cfg['label']}",
             inline=False,
         )
-        prompt.set_image(url=DIVIDER_URL)
+        _set_brand_image(prompt, DIVIDER_URL)
         try:
             await interaction.user.send(
                 embed=prompt,
@@ -1109,6 +1099,39 @@ class ServerAssistancePanelView(discord.ui.View):
     def __init__(self, bot: "DeltaBot") -> None:
         super().__init__(timeout=None)
         self.add_item(ServerAssistanceSelect(bot))
+
+
+class NonMemberView(discord.ui.View):
+    """Actions shown to people who DM the bot before joining the server."""
+
+    def __init__(self, bot: "DeltaBot", user_id: int) -> None:
+        super().__init__(timeout=600)
+        self.bot = bot
+        self.user_id = user_id
+        def named_emoji(name: str) -> discord.Emoji | None:
+            return next((emoji for emoji in bot.emojis if emoji.name == name), None)
+
+        join = discord.ui.Button(
+            label="Join Delta Air Lines",
+            style=discord.ButtonStyle.link,
+            url=INVITE_URL,
+            emoji=named_emoji("ExternalLink~1") or named_emoji("ExternalLink"),
+        )
+        self.add_item(join)
+        self.create_ticket.emoji = named_emoji("Ticket~1") or named_emoji("Ticket")
+
+    @discord.ui.button(
+        label="Create Ticket",
+        style=discord.ButtonStyle.success,
+    )
+    async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This button belongs to another user.")
+            return
+        await interaction.response.send_message(
+            "Please join Delta Air Lines first. Once you have joined, press this button again or DM me to create a ticket.",
+            view=NonMemberView(self.bot, self.user_id),
+        )
 
 
 class DMTicketPromptView(discord.ui.View):
@@ -1157,7 +1180,7 @@ class DMTicketPromptView(discord.ui.View):
                 value="An agent will claim your ticket, and their replies will appear here automatically.",
                 inline=False,
             )
-            confirmation.set_image(url=DIVIDER_URL)
+            _set_brand_image(confirmation, DIVIDER_URL)
             await interaction.edit_original_response(embed=confirmation, view=None)
             self.stop()
             return
@@ -1201,7 +1224,20 @@ def staff_only() -> app_commands.check:
         member = interaction.user
         if not isinstance(member, discord.Member):
             return False
-        return is_staff(member)
+        bot = interaction.client
+        restriction = getattr(bot, "ticket_restrictions", {}).get(member.id)
+        if restriction is not None:
+            kind, expires_at = restriction
+            if expires_at is None or expires_at > time.time():
+                return False
+            bot.ticket_restrictions.pop(member.id, None)
+        return is_staff(member) or is_admin(member)
+    return app_commands.check(predicate)
+
+
+def admin_only() -> app_commands.check:
+    async def predicate(interaction: discord.Interaction) -> bool:
+        return isinstance(interaction.user, discord.Member) and is_admin(interaction.user)
     return app_commands.check(predicate)
 
 
@@ -1214,11 +1250,11 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         "panel",
         "hr",
         "leadership",
-        "bot-updates",
         "close",
         "connected",
         "resolved",
         "revoke",
+        "ticket",
     ):
         tree.remove_command(command_name, type=discord.AppCommandType.chat_input)
 
@@ -1238,11 +1274,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             embed=success_embed("The private DM Assistance Panel was posted successfully."),
             ephemeral=True,
         )
-        await interaction.channel.send(embed=assistance_panel_banner_embed())
-        await interaction.channel.send(
-            embed=assistance_panel_embed(),
-            view=ServerAssistancePanelView(interaction.client),
-        )
+        await interaction.channel.send(PANEL_MESSAGE, view=ServerAssistancePanelView(interaction.client))
 
     async def post_positions(
         interaction: discord.Interaction,
@@ -1266,69 +1298,6 @@ def register_commands(tree: app_commands.CommandTree) -> None:
     @staff_only()
     async def leadership(interaction: discord.Interaction) -> None:
         await post_positions(interaction, LEADERSHIP_POSITIONS_MESSAGE)
-
-    # /bot-updates
-    bot_updates_group = app_commands.Group(
-        name="bot-updates",
-        description="Post bot updates to the updates channel (staff only).",
-    )
-
-    @bot_updates_group.command(name="post", description="Post a bot update announcement.")
-    @staff_only()
-    @app_commands.describe(
-        title="Update title (e.g., Feature Release, Bug Fix)",
-        update="Detailed description of the update",
-    )
-    async def post_bot_update(
-        interaction: discord.Interaction,
-        title: str,
-        update: str,
-    ) -> None:
-        guild = interaction.guild
-        if guild is None:
-            await interaction.response.send_message(
-                embed=error_embed("This command must be used inside a server."),
-                ephemeral=True,
-            )
-            return
-
-        updates_channel = guild.get_channel(UPDATES_CHANNEL_ID)
-        if not isinstance(updates_channel, discord.TextChannel):
-            await interaction.response.send_message(
-                embed=error_embed(f"Updates channel not found (ID: {UPDATES_CHANNEL_ID})."),
-                ephemeral=True,
-            )
-            return
-
-        # Post the banner first
-        await updates_channel.send(embed=assistance_panel_banner_embed())
-
-        # Create and send the update embed
-        update_embed = _base_embed(title=f"🤖  {title}", description=update)
-        update_embed.add_field(
-            name="📋 Posted By",
-            value=f"{interaction.user.mention}",
-            inline=False,
-        )
-        update_embed.set_image(url=DIVIDER_URL)
-
-        try:
-            await updates_channel.send(
-                content=f"<@&{UPDATES_ROLE_ID}>",
-                embed=update_embed,
-                allowed_mentions=discord.AllowedMentions(roles=True),
-            )
-            await interaction.response.send_message(
-                embed=success_embed(f"✅ Update posted to {updates_channel.mention}"),
-                ephemeral=True,
-            )
-        except discord.Forbidden:
-            await interaction.response.send_message(
-                embed=error_embed("I don't have permission to send messages in the updates channel."),
-                ephemeral=True,
-            )
-
-    tree.add_command(bot_updates_group)
 
     # /tickets — register an existing channel with the ticket system
     ticket_category_choices = [
@@ -1482,7 +1451,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             value="Look for a ✅ reaction to confirm that your message reached the support channel.",
             inline=False,
         )
-        embed.set_image(url=DIVIDER_URL)
+        _set_brand_image(embed, DIVIDER_URL)
         delivered = await send_embed_to_ticket_owner(interaction.client, channel, embed)
         await interaction.response.send_message(
             embed=success_embed(
@@ -1521,7 +1490,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             inline=False,
         )
         embed.add_field(name="Thank You", value="Thank you for contacting Delta Air Lines Support — *Keep Climbing.*", inline=False)
-        embed.set_image(url=DIVIDER_URL)
+        _set_brand_image(embed, DIVIDER_URL)
         delivered = await send_embed_to_ticket_owner(interaction.client, channel, embed)
         await interaction.response.send_message(
             embed=success_embed(
@@ -1572,8 +1541,158 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             title="🚫  Access Revoked",
             description=f"{user.mention} has had their access to this ticket removed by {interaction.user.mention}.",
         )
-        embed.set_image(url=DIVIDER_URL)
+        _set_brand_image(embed, DIVIDER_URL)
         await channel.send(embed=embed)
+
+    ticket_group = app_commands.Group(name="ticket", description="Manage a support ticket.")
+    admin_group = app_commands.Group(name="admin", description="Administrative ticket controls.", parent=ticket_group)
+
+    def selected_ticket(
+        interaction: discord.Interaction,
+        channel: discord.TextChannel | None,
+    ) -> discord.TextChannel | None:
+        if channel is not None:
+            return channel
+        return interaction.channel if isinstance(interaction.channel, discord.TextChannel) else None
+
+    @ticket_group.command(name="add-customer", description="Add or replace the customer for this ticket.")
+    @staff_only()
+    async def ticket_add_customer(
+        interaction: discord.Interaction,
+        customer: discord.User,
+        channel: discord.TextChannel | None = None,
+    ) -> None:
+        target = selected_ticket(interaction, channel)
+        if target is None:
+            await interaction.response.send_message("Choose a ticket channel.", ephemeral=True)
+            return
+        await target.edit(
+            topic=set_topic_value(target.topic or "", DM_TICKET_OWNER_MARKER, str(customer.id)),
+            reason=f"Customer added by {interaction.user}",
+        )
+        try:
+            await customer.send(
+                f"You have been added to Delta Support ticket **#{target.name}**. Reply in this DM to contact the support team."
+            )
+            delivery = "The customer was notified by DM."
+        except (discord.Forbidden, discord.HTTPException):
+            delivery = "The customer was added, but their DMs are closed."
+        await interaction.response.send_message(f"Added {customer.mention}. {delivery}", ephemeral=True)
+        await target.send(f"{interaction.user.mention} added customer {customer.mention} (`{customer.id}`).")
+
+    @ticket_group.command(name="add-support", description="Add another support member to this ticket.")
+    @staff_only()
+    async def ticket_add_support(
+        interaction: discord.Interaction,
+        member: discord.Member,
+        channel: discord.TextChannel | None = None,
+    ) -> None:
+        target = selected_ticket(interaction, channel)
+        if target is None or not (is_staff(member) or is_admin(member)):
+            await interaction.response.send_message("Choose a ticket and a support/admin member.", ephemeral=True)
+            return
+        await target.set_permissions(member, view_channel=True, send_messages=True, read_message_history=True)
+        await interaction.response.send_message(f"Added {member.mention} to {target.mention}.", ephemeral=True)
+        await target.send(f"{interaction.user.mention} added support member {member.mention}.")
+
+    @ticket_group.command(name="close", description="Close a ticket and record the reason.")
+    @staff_only()
+    async def ticket_close(
+        interaction: discord.Interaction,
+        channel: discord.TextChannel | None = None,
+    ) -> None:
+        target = selected_ticket(interaction, channel)
+        if target is None or not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message("Choose a ticket channel.", ephemeral=True)
+            return
+        await interaction.response.send_modal(CloseReasonModal(target, interaction.user))
+
+    @admin_group.command(name="remove", description="Remove a customer or support member from a ticket.")
+    @admin_only()
+    async def admin_remove(
+        interaction: discord.Interaction,
+        member: discord.Member,
+        channel: discord.TextChannel | None = None,
+    ) -> None:
+        target = selected_ticket(interaction, channel)
+        if target is None:
+            await interaction.response.send_message("Choose a ticket channel.", ephemeral=True)
+            return
+        topic = target.topic or ""
+        previous_overwrite = target.overwrites_for(member)
+        interaction.client.admin_undo_actions.append(
+            ("remove", target.id, member.id, topic, previous_overwrite)
+        )
+        if get_topic_value(topic, DM_TICKET_OWNER_MARKER) == str(member.id):
+            topic = set_topic_value(topic, DM_TICKET_OWNER_MARKER, None)
+        if get_topic_value(topic, DM_TICKET_CLAIM_MARKER) == str(member.id):
+            topic = set_topic_value(topic, DM_TICKET_CLAIM_MARKER, None)
+            async for message in target.history(limit=25):
+                if message.author == interaction.client.user and message.components:
+                    await message.edit(view=TicketActionView(claimed=False))
+                    break
+        await target.edit(topic=topic, reason=f"Ticket member removed by {interaction.user}")
+        await target.set_permissions(member, overwrite=None)
+        await interaction.response.send_message(f"Removed {member.mention} from {target.mention}.", ephemeral=True)
+        await target.send(f"{interaction.user.mention} removed {member.mention} from this ticket.")
+
+    @admin_group.command(name="punish", description="Block a user from tickets/support temporarily or permanently.")
+    @admin_only()
+    @app_commands.choices(action=[
+        app_commands.Choice(name="Temporary ban", value="temporary ban"),
+        app_commands.Choice(name="Timeout", value="timeout"),
+        app_commands.Choice(name="Permanent ban", value="permanent ban"),
+    ])
+    async def admin_punish(
+        interaction: discord.Interaction,
+        user: discord.User,
+        action: app_commands.Choice[str],
+        minutes: app_commands.Range[int, 0, 525600] = 60,
+    ) -> None:
+        permanent = action.value == "permanent ban"
+        expires = None if permanent else time.time() + max(1, minutes) * 60
+        previous = interaction.client.ticket_restrictions.get(user.id)
+        interaction.client.admin_undo_actions.append(("punish", user.id, previous))
+        interaction.client.ticket_restrictions[user.id] = (action.value, expires)
+        duration = "permanently" if permanent else f"for {max(1, minutes)} minute(s)"
+        await interaction.response.send_message(f"{user.mention} received a {action.value} {duration}.", ephemeral=True)
+
+    @admin_group.command(name="unpunish", description="Remove a ticket punishment immediately.")
+    @admin_only()
+    async def admin_unpunish(interaction: discord.Interaction, user: discord.User) -> None:
+        previous = interaction.client.ticket_restrictions.get(user.id)
+        interaction.client.admin_undo_actions.append(("punish", user.id, previous))
+        interaction.client.ticket_restrictions.pop(user.id, None)
+        await interaction.response.send_message(f"Removed all ticket restrictions from {user.mention}.", ephemeral=True)
+
+    @admin_group.command(name="undo", description="Undo the most recent admin remove or punishment action.")
+    @admin_only()
+    async def admin_undo(interaction: discord.Interaction) -> None:
+        if not interaction.client.admin_undo_actions:
+            await interaction.response.send_message("There is no recent admin action to undo.", ephemeral=True)
+            return
+        record = interaction.client.admin_undo_actions.pop()
+        if record[0] == "punish":
+            _, user_id, previous = record
+            if previous is None:
+                interaction.client.ticket_restrictions.pop(user_id, None)
+            else:
+                interaction.client.ticket_restrictions[user_id] = previous
+            message = f"Restored the previous ticket restriction state for `{user_id}`."
+        else:
+            _, channel_id, member_id, old_topic, old_overwrite = record
+            channel = interaction.client.get_channel(channel_id)
+            guild = interaction.guild
+            member = guild.get_member(member_id) if guild is not None else None
+            if not isinstance(channel, discord.TextChannel) or member is None:
+                await interaction.response.send_message("That action can no longer be undone.", ephemeral=True)
+                return
+            await channel.edit(topic=old_topic or None, reason=f"Admin action undone by {interaction.user}")
+            await channel.set_permissions(member, overwrite=old_overwrite)
+            message = f"Restored {member.mention} in {channel.mention}."
+        await interaction.response.send_message(message, ephemeral=True)
+
+    tree.add_command(ticket_group)
 
     # Global error handler
     @tree.error
@@ -1622,6 +1741,10 @@ class DeltaCommandTree(app_commands.CommandTree):
         kwargs["override"] = True
         super().add_command(command, *args, **kwargs)
 
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Reject application commands invoked outside the configured server."""
+        return interaction.guild_id == GUILD_ID
+
 
 class DeltaBot(commands.Bot):
     def __init__(self) -> None:
@@ -1631,18 +1754,21 @@ class DeltaBot(commands.Bot):
             help_command=None,
             tree_cls=DeltaCommandTree,
         )
-        # ``on_ready`` can run again after every gateway reconnect.  Mark the
-        # announcement as handled before doing any network I/O so overlapping
-        # ready events cannot send the same deployment notice twice.
-        self._deployment_announcement_started = asyncio.Event()
         self._dm_prompted_users: set[int] = set()
+        # Runtime ticket sanctions. Values are (kind, UNIX expiry); None expiry is permanent.
+        self.ticket_restrictions: dict[int, tuple[str, float | None]] = {}
+        self.admin_undo_actions: list[tuple] = []
 
     async def setup_hook(self) -> None:
         self.add_view(TicketActionView())
         self.add_view(ServerAssistancePanelView(self))
         register_commands(self.tree)
-        synced = await self.tree.sync()
-        log.info("Synced %d application command(s).", len(synced))
+        target_guild = discord.Object(id=GUILD_ID)
+        self.tree.copy_global_to(guild=target_guild)
+        self.tree.clear_commands(guild=None)
+        await self.tree.sync()
+        synced = await self.tree.sync(guild=target_guild)
+        log.info("Synced %d application command(s) to guild %s.", len(synced), GUILD_ID)
 
     async def on_ready(self) -> None:
         log.info("Logged in as %s (ID: %s)", self.user, self.user.id if self.user else "unknown")
@@ -1653,8 +1779,71 @@ class DeltaBot(commands.Bot):
                 name="✈️  Delta Air Lines Support",
             )
         )
-        
-        await self.post_deployment_update()
+
+        await self._post_release_update()
+
+        for guild in tuple(self.guilds):
+            if guild.id != GUILD_ID:
+                log.warning("Leaving unauthorized guild %s (%s).", guild.name, guild.id)
+                if guild.id == LEGACY_GUILD_ID:
+                    await self._delete_legacy_messages(guild)
+                await guild.leave()
+
+    async def _post_release_update(self) -> None:
+        """Post this release once to the update/transcript channel."""
+        channel = self.get_channel(UPDATE_CHANNEL_ID)
+        if not isinstance(channel, discord.TextChannel):
+            try:
+                fetched = await self.fetch_channel(UPDATE_CHANNEL_ID)
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                log.warning("Could not find update channel %s: %s", UPDATE_CHANNEL_ID, exc)
+                return
+            channel = fetched if isinstance(fetched, discord.TextChannel) else None
+        if channel is None or channel.guild.id != GUILD_ID or self.user is None:
+            return
+
+        marker = f"Update {BOT_VERSION}"
+        try:
+            pinned = await channel.pins()
+            recent = [message async for message in channel.history(limit=200)]
+        except (discord.Forbidden, discord.HTTPException) as exc:
+            log.warning("Could not check existing update announcements: %s", exc)
+            return
+        if any(
+            message.author.id == self.user.id and marker in message.content
+            for message in (*pinned, *recent)
+        ):
+            return
+
+        try:
+            announcement = await channel.send(UPDATE_MESSAGE)
+            try:
+                await announcement.pin(reason=f"Delta Support Bot release {BOT_VERSION}")
+            except (discord.Forbidden, discord.HTTPException):
+                log.warning("Posted update %s but could not pin it.", BOT_VERSION)
+            log.info("Posted release update %s to channel %s.", BOT_VERSION, UPDATE_CHANNEL_ID)
+        except (discord.Forbidden, discord.HTTPException) as exc:
+            log.warning("Could not post release update %s: %s", BOT_VERSION, exc)
+
+    async def _delete_legacy_messages(self, guild: discord.Guild) -> None:
+        """Best-effort removal of this bot's history from the explicitly retired server."""
+        if self.user is None:
+            return
+        for channel in guild.text_channels:
+            try:
+                async for message in channel.history(limit=None):
+                    if message.author.id == self.user.id:
+                        await message.delete()
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                log.warning("Could not fully clean legacy channel %s: %s", channel.id, exc)
+
+    async def on_guild_join(self, guild: discord.Guild) -> None:
+        """Immediately leave every server except the configured target guild."""
+        if guild.id != GUILD_ID:
+            log.warning("Declining unauthorized guild %s (%s).", guild.name, guild.id)
+            if guild.id == LEGACY_GUILD_ID:
+                await self._delete_legacy_messages(guild)
+            await guild.leave()
 
     async def on_message(self, message: discord.Message) -> None:
         """Relay customer DMs and claimed support-channel replies."""
@@ -1662,12 +1851,40 @@ class DeltaBot(commands.Bot):
             return
 
         if isinstance(message.channel, discord.DMChannel):
+            target_guild = self.get_guild(GUILD_ID)
+            if target_guild is None:
+                await message.channel.send(embed=error_embed("The ticket system is unavailable right now."))
+                return
+            try:
+                member = target_guild.get_member(message.author.id) or await target_guild.fetch_member(
+                    message.author.id
+                )
+            except discord.NotFound:
+                await message.channel.send(NON_MEMBER_MESSAGE, view=NonMemberView(self, message.author.id))
+                return
+            except discord.HTTPException as exc:
+                log.warning("Could not verify server membership for %s: %s", message.author.id, exc)
+                await message.channel.send(embed=error_embed("I could not verify your server membership."))
+                return
+
             category = self.get_channel(TICKET_CATEGORY_ID)
-            if not isinstance(category, discord.CategoryChannel):
+            if (
+                not isinstance(category, discord.CategoryChannel)
+                or category.guild.id != target_guild.id
+            ):
                 await message.channel.send(embed=error_embed("The ticket system is unavailable right now."))
                 return
 
-            ticket = await find_existing_ticket(category.guild, message.author)
+            restriction = self.ticket_restrictions.get(message.author.id)
+            if restriction is not None:
+                kind, expires_at = restriction
+                if expires_at is None or expires_at > time.time():
+                    duration = "permanently" if expires_at is None else f"for another {max(1, int((expires_at - time.time()) / 60) + 1)} minute(s)"
+                    await message.channel.send(f"You have been **{kind}** from creating tickets {duration}.")
+                    return
+                self.ticket_restrictions.pop(message.author.id, None)
+
+            ticket = await find_existing_ticket(category.guild, member)
             if ticket is not None:
                 try:
                     await relay_customer_message(message, ticket)
@@ -1697,7 +1914,7 @@ class DeltaBot(commands.Bot):
                     value="Choose Yes, select a department, and send the details of your request.",
                     inline=False,
                 )
-                prompt.set_image(url=DIVIDER_URL)
+                _set_brand_image(prompt, DIVIDER_URL)
                 await message.channel.send(
                     embed=prompt,
                     view=DMTicketPromptView(self, message.author.id),
@@ -1727,79 +1944,6 @@ class DeltaBot(commands.Bot):
                 return
             await relay_support_message(self, message, owner_id)
 
-    async def post_deployment_update(self) -> None:
-        """Post human-written release notes for this deployment at most once."""
-        if self._deployment_announcement_started.is_set():
-            log.debug("Deployment announcement already handled; skipping.")
-            return
-        self._deployment_announcement_started.set()
-
-        updates_channel = self.get_channel(UPDATES_CHANNEL_ID)
-        if updates_channel is None:
-            try:
-                updates_channel = await self.fetch_channel(UPDATES_CHANNEL_ID)
-            except discord.Forbidden:
-                log.warning(
-                    "Cannot access updates channel %s: permission denied.",
-                    UPDATES_CHANNEL_ID,
-                )
-                return
-            except discord.NotFound:
-                log.warning("Updates channel %s was not found.", UPDATES_CHANNEL_ID)
-                return
-            except discord.HTTPException as exc:
-                log.warning(
-                    "Discord HTTP error while fetching updates channel %s: %s",
-                    UPDATES_CHANNEL_ID,
-                    exc,
-                )
-                return
-
-        if not isinstance(updates_channel, discord.TextChannel):
-            log.warning("Updates channel %s is not a text channel.", UPDATES_CHANNEL_ID)
-            return
-
-        notes = load_deployment_notes()
-        if notes is None:
-            log.info("No deployment notes found; no update announcement will be posted.")
-            return
-
-        deploy_embed = _base_embed(
-            title=f"📣  {notes.get('title', 'Bot Updates')}",
-            description=str(notes.get("summary", "Here is what changed in this update.")),
-        )
-        sections = (("added", "➕ Added"), ("changed", "✏️ Changed"), ("removed", "➖ Removed"))
-        has_changes = False
-        for key, heading in sections:
-            items = notes.get(key, [])
-            if isinstance(items, list) and items:
-                has_changes = True
-                deploy_embed.add_field(
-                    name=heading,
-                    value="\n".join(f"• {item}" for item in items),
-                    inline=False,
-                )
-        if not has_changes:
-            log.info("Deployment notes contain no changes; no announcement will be posted.")
-            return
-        # Keep the visual banner and deployment details in one message so a
-        # partial send cannot leave an orphaned banner behind.
-        deploy_embed.set_image(url=BANNER_URL)
-
-        try:
-            await updates_channel.send(
-                content=f"<@&{UPDATES_ROLE_ID}>",
-                embed=deploy_embed,
-                allowed_mentions=discord.AllowedMentions(roles=True),
-            )
-        except discord.Forbidden:
-            log.warning("Cannot post deployment update: permission denied.")
-        except discord.NotFound:
-            log.warning("Cannot post deployment update: updates channel was deleted.")
-        except discord.HTTPException as exc:
-            log.warning("Discord HTTP error while posting deployment update: %s", exc)
-        else:
-            log.info("Plain-language deployment update posted to updates channel")
 
 
 def run_health_server() -> None:
