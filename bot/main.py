@@ -38,20 +38,15 @@ MAILING_ADDRESS = "P.O. Box 20980, Department 980, Atlanta, GA 30320-2980"
 BANNER_URL = os.getenv("BANNER_URL", "")
 DIVIDER_URL = os.getenv("DIVIDER_URL", "")
 
-GUILD_ID = 1538738611988467782
-TICKET_CATEGORY_ID = 1543674278711529562
-STAFF_ROLE_ID = 1539005030189891684
-ADMIN_ROLE_ID = 1539005297417519205
-
+GUILD_ID                = 1538738611988467782
+TICKET_CATEGORY_ID      = 1543674278711529562
+STAFF_ROLE_ID           = 1539005030189891684
+ADMIN_ROLE_ID           = 1539005297417519205
 # Backward-compatible name used by earlier command permission checks.
-BOT_COMMAND_ROLE_ID = STAFF_ROLE_ID
-
-PARTNERSHIP_REPRESENTATIVES_ROLE_ID = 1528809872672690247
-TRANSCRIPT_CHANNEL_ID = 1543674377953087649
-UPDATES_CHANNEL_ID = 1524489806711754752
-UPDATES_ROLE_ID = 1530210954422518042
-UPDATE_CHANNEL_ID = TRANSCRIPT_CHANNEL_ID
-BOT_VERSION = "2.0.0"
+BOT_COMMAND_ROLE_ID     = STAFF_ROLE_ID
+TRANSCRIPT_CHANNEL_ID   = 1543674377953087649
+UPDATE_CHANNEL_ID       = TRANSCRIPT_CHANNEL_ID
+BOT_VERSION             = "2.0.2"
 TICKET_CLOSE_DELAY      = 5
 RATING_TIMEOUT          = 15 * 24 * 60 * 60
 DISCORD_RECONNECT_DELAY = 15
@@ -70,7 +65,9 @@ PANEL_MESSAGE = """## <:DeltaLogo:1540927958116601980> Contact Us | <:SkyTeamLog
 
 > <:RArrow:1540951788889575504> **Before you begin,** please ensure your **Discord Settings** allow **Direct-Messages** from this **server.**
 
--# <:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines.**"""
+-# <:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines.**
+
+<:Support:1540927430179553321> **Select an Assistance Category**"""
 
 CONNECTED_MESSAGE = """<:Support:1540927430179553321> **You are now connected.**
 
@@ -93,17 +90,14 @@ If you'd like to contact our team or create a support ticket, click the **Create
 
 UPDATE_MESSAGE = f"""# <:DeltaLogo:1540927958116601980> Delta Support Bot — Update {BOT_VERSION}
 
-This is a **major update**, so the main version number has advanced to **2**.
+This is a **patch update** for the version 2 ticket-system release.
 
-## What's New
-- Added separate Support and Admin ticket permissions.
-- Added `/ticket` support tools for customers, support members, and ticket closure.
-- Added `/ticket admin` removal, punishment, reversal, and undo controls.
-- Rebuilt the Contact Us panel and assistance categories with the new server emojis.
-- Added the non-member join and ticket guidance flow.
-- Added automatic cleanup and departure from the retired server.
+## What's Fixed
+- `/panel` now accepts the top and bottom banner images chosen by the command user.
+- The bottom banner now appears directly above the category dropdown.
+- Panel text remains a regular Discord message rather than a bot-created embed.
 
--# Version format: major.minor.patch • Major releases increase the first number."""
+-# Version format: major.minor.patch • Patch releases increase the final number."""
 
 # Each key maps to a ticket category. Add new rows here to add new categories.
 TICKET_CONFIG: dict[str, dict] = {
@@ -988,7 +982,9 @@ class AssistanceSelect(discord.ui.Select):
             for key, cfg in TICKET_CONFIG.items()
         ]
         super().__init__(
-            placeholder="<:Support:1540927430179553321> Select an Assistance Category (Category Title)",
+
+            placeholder="Select an Assistance Category",
+
             min_values=1,
             max_values=1,
             options=options,
@@ -1196,6 +1192,7 @@ class DMTicketPromptView(discord.ui.View):
                 inline=False,
             )
             _set_brand_image(confirmation, DIVIDER_URL)
+
             await interaction.edit_original_response(embed=confirmation, view=None)
             self.stop()
             return
@@ -1275,29 +1272,44 @@ def register_commands(tree: app_commands.CommandTree) -> None:
 
     @tree.command(
         name="panel",
-        description="Post the private DM Assistance Panel in this channel.",
+        description="Post the Assistance Panel with your chosen top and bottom banners.",
     )
     @staff_only()
-    async def panel(interaction: discord.Interaction) -> None:
+    @app_commands.describe(
+        top_banner="The image to display above the panel message.",
+        bottom_banner="The image to display below the message and above the dropdown.",
+    )
+    async def panel(
+        interaction: discord.Interaction,
+        top_banner: discord.Attachment,
+        bottom_banner: discord.Attachment,
+    ) -> None:
         if not isinstance(interaction.channel, discord.TextChannel):
             await interaction.response.send_message(
                 embed=error_embed("The Assistance Panel can only be posted in a server text channel."),
                 ephemeral=True,
             )
             return
+        if any(
+            attachment.content_type is not None
+            and not attachment.content_type.startswith("image/")
+            for attachment in (top_banner, bottom_banner)
+        ):
+            await interaction.response.send_message(
+                embed=error_embed("Both banner attachments must be image files."),
+                ephemeral=True,
+            )
+            return
         await interaction.response.defer(ephemeral=True)
         try:
-            banner, bottom = await asyncio.gather(
-                download_panel_asset(PANEL_BANNER_URL, "delta_banner.jpg"),
-                download_panel_asset(PANEL_BOTTOM_URL, "Delta_Airlines_Banner_Bottom.png"),
-            )
+            banner, bottom = await asyncio.gather(top_banner.to_file(), bottom_banner.to_file())
             await interaction.channel.send(file=banner)
             await interaction.channel.send(PANEL_MESSAGE)
             await interaction.channel.send(
                 file=bottom,
                 view=ServerAssistancePanelView(interaction.client),
             )
-        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, discord.HTTPException) as exc:
+        except (discord.HTTPException, ValueError) as exc:
             log.error("Could not post the Assistance Panel assets: %s", exc)
             await interaction.followup.send(
                 embed=error_embed("The Assistance Panel images could not be loaded. Please try again."),

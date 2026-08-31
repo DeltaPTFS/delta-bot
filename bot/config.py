@@ -21,7 +21,6 @@ UPDATE_CHANNEL_ID = TRANSCRIPT_CHANNEL_ID
 
 BOT_VERSION = "2.0.2"
 
-
 # ── Role IDs ─────────────────────────────────────────────────────────────────
 STAFF_ROLE_ID           = 1539005030189891684  # May use staff-only commands
 ADMIN_ROLE_ID           = 1539005297417519205  # May use ticket administration commands
