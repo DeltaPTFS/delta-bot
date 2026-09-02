@@ -9,11 +9,7 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 
 | Feature | Details |
 |---|---|
-| Assistance Panel | Support or admins use `/panel` and upload their chosen top and bottom banner images; confirmation continues in DMs |
-| Private Tickets | Members stay in DMs while staff work from a hidden relay channel |
-| Duplicate Guard | Prevents users from opening multiple simultaneous tickets |
-| Close Ticket | Button *and* `/close` slash command; DMs the user on close |
-| Message Relay | Customer and claimed-agent messages are delivered both ways with delivery confirmation |
+| Assistance Panel | Support or admins can post the plain-text contact panel or upload custom top and bottom banner images with `/panel`; confirmation continues in DMs |
 | Agent Privacy | Customer DMs identify replies as Delta Air Lines Support and never expose the individual agent's name |
 | Ticket Reuse | Repeat creation attempts reconnect the customer to their existing ticket instead of opening a duplicate |
 | Staff Commands | `/ticket add-customer`, `/ticket add-support`, `/ticket close`, `/connected`, and `/resolved` are support role-gated |
