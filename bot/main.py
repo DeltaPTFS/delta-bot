@@ -46,7 +46,7 @@ ADMIN_ROLE_ID           = 1539005297417519205
 BOT_COMMAND_ROLE_ID     = STAFF_ROLE_ID
 TRANSCRIPT_CHANNEL_ID   = 1543674377953087649
 UPDATE_CHANNEL_ID       = TRANSCRIPT_CHANNEL_ID
-BOT_VERSION             = "2.0.2"
+BOT_VERSION             = "2.0.3"
 TICKET_CLOSE_DELAY      = 5
 RATING_TIMEOUT          = 15 * 24 * 60 * 60
 DISCORD_RECONNECT_DELAY = 15
@@ -57,6 +57,11 @@ LEGACY_GUILD_ID          = 1436471549703094477
 INVITE_URL               = "https://discord.gg/hccQX6nGJw"
 PANEL_BANNER_URL         = "https://cdn.discordapp.com/attachments/1539651325615153233/1543872830947590154/delta_banner.jpg?ex=6a96731e&is=6a95219e&hm=d04ff3b4ed550e64196f40c79bb29656454fc102729c758a4a7c64f53462d5c7&"
 PANEL_BOTTOM_URL         = "https://cdn.discordapp.com/attachments/1539651325615153233/1543878240916213861/Delta_Airlines_Banner_Bottom.png?ex=6a967828&is=6a9526a8&hm=923dcd5f959e565e8d8681504d9ba3b9439bb75c6eda5a0e32c8f2966f46db89&"
+
+SUPPORT_EMOJI             = "<:Support:1540927430179553321>"
+RIGHT_ARROW_EMOJI         = "<:RArrow:1540951788889575504>"
+BLUE_ARROW_EMOJI          = "<:BArrow:1540951845147639809>"
+WING_PIN_EMOJI            = "<:WingPinLogo:1540927847709802607>"
 
 PANEL_MESSAGE = """## <:DeltaLogo:1540927958116601980> Contact Us | <:SkyTeamLogo:1540927923618316359>
 -# <:Blank:1540951736062312529> <:Connection:1540927881683669013>  1021 N Outer Loop Rd, East Point, GA, 30344.
@@ -96,6 +101,9 @@ This is a **patch update** for the version 2 ticket-system release.
 - `/panel` now accepts the top and bottom banner images chosen by the command user.
 - The bottom banner now appears directly above the category dropdown.
 - Panel text remains a regular Discord message rather than a bot-created embed.
+- Replaced casual system emoji with the Delta server emoji set.
+- Buttons and rating controls now use real component emoji so raw IDs stay hidden.
+- Removed custom emoji markup from UI locations that Discord cannot render.
 
 -# Version format: major.minor.patch • Patch releases increase the final number."""
 
@@ -154,7 +162,7 @@ def assistance_panel_banner_embed() -> discord.Embed:
 
 def assistance_panel_embed() -> discord.Embed:
     embed = _base_embed(
-        title="✈️  Delta Air Lines — HelpDesk",
+        title="<:DeltaLogo:1540927958116601980>  Delta Air Lines — HelpDesk",
         description=(
             "Welcome to the **Delta Air Lines Support Centre**.\n\n"
             "Our dedicated team is here to assist you with any questions, "
@@ -166,23 +174,23 @@ def assistance_panel_embed() -> discord.Embed:
         ),
     )
     embed.add_field(
-        name="🔐 Private & Secure",
+        name="<:Connection:1540927881683669013> Private & Secure",
         value="Only you and the assigned Delta Support team can take part in the conversation.",
         inline=False,
     )
     embed.add_field(
-        name="📨 Before You Begin",
+        name="<:Support:1540927430179553321> Before You Begin",
         value="Please make sure your Discord privacy settings allow direct messages from this server.",
         inline=False,
     )
-    embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
+embed.add_field(name="<:Connection:1540927881683669013> Mailing Address", value=MAILING_ADDRESS, inline=False)
     _set_brand_image(embed, DIVIDER_URL)
     return embed
 
 
 def general_inquiries_welcome(member: discord.Member) -> discord.Embed:
     embed = _base_embed(
-        title="📋  General Inquiries | Support Ticket",
+        title="<:Support:1540927430179553321>  General Inquiries | Support Ticket",
         description=(
             f"Welcome, {member.mention}! Thank you for reaching out to "
             "**Delta Air Lines Support**.\n\n"
@@ -195,7 +203,7 @@ def general_inquiries_welcome(member: discord.Member) -> discord.Embed:
             "The more information you share, the faster our team can assist you."
         ),
     )
-    embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
+embed.add_field(name="<:Connection:1540927881683669013> Mailing Address", value=MAILING_ADDRESS, inline=False)
     _set_brand_image(embed, DIVIDER_URL)
     return embed
 
@@ -212,14 +220,14 @@ def generic_ticket_welcome(member: discord.Member, label: str, emoji: str) -> di
             "*We appreciate your patience and thank you for flying Delta.*"
         ),
     )
-    embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
+embed.add_field(name="<:Connection:1540927881683669013> Mailing Address", value=MAILING_ADDRESS, inline=False)
     _set_brand_image(embed, DIVIDER_URL)
     return embed
 
 
 def ticket_closed_dm(ticket_name: str) -> discord.Embed:
     embed = _base_embed(
-        title="🔒  Ticket Closed",
+        title="<:RArrow:1540951788889575504>  Ticket Closed",
         description=(
             f"Your support ticket **#{ticket_name}** has been successfully closed.\n\n"
             "Thank you for contacting **Delta Air Lines Support**. "
@@ -228,14 +236,14 @@ def ticket_closed_dm(ticket_name: str) -> discord.Embed:
             "*Delta Air Lines — Keep Climbing.*"
         ),
     )
-    embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
+embed.add_field(name="<:Connection:1540927881683669013> Mailing Address", value=MAILING_ADDRESS, inline=False)
     _set_brand_image(embed, DIVIDER_URL)
     return embed
 
 
 def ticket_closed_channel() -> discord.Embed:
     embed = _base_embed(
-        title="🔒  Ticket Closing",
+        title="<:RArrow:1540951788889575504>  Ticket Closing",
         description=(
             f"This ticket has been marked as **closed** and will be deleted in "
             f"**{TICKET_CLOSE_DELAY} seconds**.\n\n"
@@ -248,7 +256,7 @@ def ticket_closed_channel() -> discord.Embed:
 
 def already_open_ticket(channel: discord.TextChannel) -> discord.Embed:
     embed = _base_embed(
-        title="⚠️  Active Ticket Found",
+        title="<:RArrow:1540951788889575504>  Active Ticket Found",
         description=(
             f"You already have an open support ticket: {channel.mention}\n\n"
             "Please continue your conversation there. "
@@ -259,13 +267,13 @@ def already_open_ticket(channel: discord.TextChannel) -> discord.Embed:
 
 
 def error_embed(message: str) -> discord.Embed:
-    embed = discord.Embed(title="❌  Error", description=message, color=DELTA_RED)
+    embed = discord.Embed(title="<:RArrow:1540951788889575504>  Error", description=message, color=DELTA_RED)
     embed.set_footer(text=FOOTER_TEXT)
     return embed
 
 
 def success_embed(message: str) -> discord.Embed:
-    embed = discord.Embed(title="✅  Success", description=message, color=DELTA_RED)
+    embed = discord.Embed(title="<:BArrow:1540951845147639809>  Success", description=message, color=DELTA_RED)
     embed.set_footer(text=FOOTER_TEXT)
     return embed
 
@@ -285,8 +293,6 @@ async def download_panel_asset(url: str, filename: str) -> discord.File:
     if not data:
         raise ValueError(f"Panel asset {filename} was empty.")
     return discord.File(io.BytesIO(data), filename=filename)
-
-
 # ════════════════════════════════════════════════════════════════════════════════
 # UTILITIES
 # ════════════════════════════════════════════════════════════════════════════════
@@ -442,14 +448,14 @@ async def send_embed_to_ticket_owner(
 def relay_description(message: discord.Message) -> str:
     """Build safe relay text containing message content and attachment links."""
     parts = [message.content] if message.content else []
-    parts.extend(f"📎 [{attachment.filename}]({attachment.url})" for attachment in message.attachments)
+    parts.extend(f"<:Connection:1540927881683669013> [{attachment.filename}]({attachment.url})" for attachment in message.attachments)
     description = "\n".join(parts) or "*(No text content)*"
     return description if len(description) <= 4000 else f"{description[:3997]}..."
 
 
 async def relay_customer_message(message: discord.Message, channel: discord.TextChannel) -> None:
     embed = _base_embed(
-        title="📨  New Customer Message",
+        title="<:Support:1540927430179553321>  New Customer Message",
         description=relay_description(message),
     )
     embed.set_author(name=str(message.author), icon_url=message.author.display_avatar.url)
@@ -457,7 +463,7 @@ async def relay_customer_message(message: discord.Message, channel: discord.Text
     _set_brand_image(embed, DIVIDER_URL)
     embed.timestamp = message.created_at
     await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-    await message.add_reaction("✅")
+    await message.add_reaction("<:BArrow:1540951845147639809>")
 
 
 async def relay_support_message(
@@ -468,7 +474,7 @@ async def relay_support_message(
     try:
         user = client.get_user(int(owner_id)) or await client.fetch_user(int(owner_id))
         embed = _base_embed(
-            title="💬  Delta Support Reply",
+            title="<:Support:1540927430179553321>  Delta Support Reply",
             description=relay_description(message),
         )
         # Never expose the individual agent's identity to the customer. Using the
@@ -486,9 +492,9 @@ async def relay_support_message(
         _set_brand_image(embed, DIVIDER_URL)
         embed.timestamp = message.created_at
         await user.send(embed=embed)
-        await message.add_reaction("✅")
+        await message.add_reaction("<:BArrow:1540951845147639809>")
     except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
-        await message.add_reaction("❌")
+        await message.add_reaction("<:RArrow:1540951788889575504>")
         log.warning("Could not relay support message to %s: %s", owner_id, exc)
 
 
@@ -536,7 +542,7 @@ async def open_dm_ticket(
         value=(
             "1. Select **Claim Ticket** before replying.\n"
             "2. Send replies normally in this channel.\n"
-            "3. A ✅ confirms delivery to the customer."
+            "3. A <:BArrow:1540951845147639809> confirms delivery to the customer."
         ),
         inline=False,
     )
@@ -589,7 +595,7 @@ async def _archive_ticket(
 
     # Generate transcript text
     transcript_text = await generate_transcript(channel)
-    rating_line = f"{rating} / 5 ⭐" if rating is not None else "No rating given"
+    rating_line = f"{rating} / 5 {WING_PIN_EMOJI}" if rating is not None else "No rating given"
     transcript_text += (
         f"\n\n═══════════════════════════════════════════════════════"
         f"\n  CLOSE REASON : {reason}"
@@ -601,9 +607,9 @@ async def _archive_ticket(
     # Send to transcript log channel
     log_channel = guild.get_channel(TRANSCRIPT_CHANNEL_ID)
     if isinstance(log_channel, discord.TextChannel):
-        stars = "⭐" * rating if rating else "—"
+        stars = WING_PIN_EMOJI * rating if rating else "—"
         log_embed = _base_embed(
-            title="📋  Ticket Transcript",
+            title="<:Support:1540927430179553321>  Ticket Transcript",
             description=(
                 f"**Channel:** #{channel.name}\n"
                 f"**Opened by:** {owner.mention if owner else 'Unknown'}\n"
@@ -681,7 +687,7 @@ class CloseReasonModal(discord.ui.Modal, title="Close Ticket — Delta Air Lines
         dm_sent = False
         if owner is not None:
             rating_embed = _base_embed(
-                title="⭐  Rate Your Support Experience",
+                title=f"{WING_PIN_EMOJI}  Rate Your Support Experience",
                 description=(
                     f"Your support ticket **#{self._channel.name}** has been closed.\n\n"
                     f"**Reason:** {self.reason.value}\n\n"
@@ -731,11 +737,11 @@ class RatingView(discord.ui.View):
     """Star rating buttons kept in the ticket owner's single closure DM."""
 
     STARS = [
-        ("1 ⭐", 1, discord.ButtonStyle.secondary),
-        ("2 ⭐", 2, discord.ButtonStyle.secondary),
-        ("3 ⭐", 3, discord.ButtonStyle.secondary),
-        ("4 ⭐", 4, discord.ButtonStyle.success),
-        ("5 ⭐", 5, discord.ButtonStyle.success),
+        ("1", 1, discord.ButtonStyle.secondary),
+        ("2", 2, discord.ButtonStyle.secondary),
+        ("3", 3, discord.ButtonStyle.secondary),
+        ("4", 4, discord.ButtonStyle.success),
+        ("5", 5, discord.ButtonStyle.success),
     ]
 
     def __init__(self, owner_id: int | None) -> None:
@@ -748,7 +754,10 @@ class RatingView(discord.ui.View):
 
         for label, value, style in self.STARS:
             button: discord.ui.Button = discord.ui.Button(
-                label=label, style=style, custom_id=f"delta:rating:{value}"
+                label=label,
+                emoji=WING_PIN_EMOJI,
+                style=style,
+                custom_id=f"delta:rating:{value}",
             )
             button.callback = self._make_callback(value)
             self.add_item(button)
@@ -773,9 +782,9 @@ class RatingView(discord.ui.View):
             self.rating = stars
             self.stop()
             confirm = _base_embed(
-                title="✅  Rating Submitted",
+                title="<:BArrow:1540951845147639809>  Rating Submitted",
                 description=(
-                    f"Thank you! You rated your support experience **{stars} / 5 ⭐**.\n\n"
+                    f"Thank you! You rated your support experience **{stars} / 5 {WING_PIN_EMOJI}**.\n\n"
                     "*Delta Air Lines — Keep Climbing.*"
                 ),
             )
@@ -801,7 +810,7 @@ class RatingView(discord.ui.View):
         embed = self.archive_message.embeds[0]
         description = embed.description or ""
         lines = description.splitlines()
-        rating_line = f"**Rating:** {'⭐' * stars} ({stars} / 5 ⭐)"
+        rating_line = f"**Rating:** {WING_PIN_EMOJI * stars} ({stars} / 5 {WING_PIN_EMOJI})"
         for index, line in enumerate(lines):
             if line.startswith("**Rating:**"):
                 lines[index] = rating_line
@@ -837,12 +846,13 @@ class TicketActionView(discord.ui.View):
     def __init__(self, claimed: bool = False) -> None:
         super().__init__(timeout=None)
         if claimed:
-            self.claim_ticket.label = "🙋  Unclaim Ticket"
+            self.claim_ticket.label = "Unclaim Ticket"
             self.claim_ticket.style = discord.ButtonStyle.secondary
 
     # ── Claim / Unclaim ────────────────────────────────────────────────────────────
     @discord.ui.button(
-        label="🙋  Claim Ticket",
+        label="Claim Ticket",
+        emoji=SUPPORT_EMOJI,
         style=discord.ButtonStyle.primary,
         custom_id="delta:claim_ticket",
     )
@@ -893,10 +903,10 @@ class TicketActionView(discord.ui.View):
                 embed=success_embed("You have unclaimed this ticket."), ephemeral=True
             )
             status_embed = _base_embed(
-                title="🔓  Ticket Unclaimed",
+                title="<:BArrow:1540951845147639809>  Ticket Unclaimed",
                 description=f"This ticket has been unclaimed by {member.mention}.",
             )
-            owner_title = "🔓  Support Agent Disconnected"
+            owner_title = "<:BArrow:1540951845147639809>  Support Agent Disconnected"
             owner_message = (
                 "The support agent handling your ticket has unclaimed it. "
                 "Another agent can now assist you."
@@ -906,7 +916,7 @@ class TicketActionView(discord.ui.View):
                 embed=success_embed("You have claimed this ticket."), ephemeral=True
             )
             status_embed = _base_embed(
-                title="🙋  Ticket Claimed",
+                title="<:Support:1540927430179553321>  Ticket Claimed",
                 description=(
                     f"This ticket has been claimed by {member.mention}.\n\n"
                     "They will be assisting the customer through the DM relay."
@@ -928,7 +938,8 @@ class TicketActionView(discord.ui.View):
 
     # ── Close ──────────────────────────────────────────────────────────────────────
     @discord.ui.button(
-        label="🔒  Close Ticket",
+        label="Close Ticket",
+        emoji=RIGHT_ARROW_EMOJI,
         style=discord.ButtonStyle.danger,
         custom_id="delta:close_ticket",
     )
@@ -982,9 +993,7 @@ class AssistanceSelect(discord.ui.Select):
             for key, cfg in TICKET_CONFIG.items()
         ]
         super().__init__(
-
-            placeholder="Select an Assistance Category",
-
+placeholder="Select an Assistance Category",
             min_values=1,
             max_values=1,
             options=options,
@@ -1063,7 +1072,6 @@ class ServerAssistanceSelect(discord.ui.Select):
         ]
         super().__init__(
             placeholder="Select an Assistance Category",
-
             options=options,
             custom_id="delta:server_assistance_select",
         )
@@ -1072,7 +1080,7 @@ class ServerAssistanceSelect(discord.ui.Select):
         selected_key = self.values[0]
         cfg = TICKET_CONFIG[selected_key]
         prompt = _base_embed(
-            title="✈️  Confirm Your Private Support Request",
+            title="<:DeltaLogo:1540927958116601980>  Confirm Your Private Support Request",
             description=(
                 f"You selected **{cfg['label']}** from the Delta Assistance Panel.\n\n"
                 "Would you like us to create a private support ticket? Your conversation "
@@ -1170,7 +1178,7 @@ class DMTicketPromptView(discord.ui.View):
         await interaction.response.send_message(embed=error_embed("This prompt belongs to another user."))
         return False
 
-    @discord.ui.button(label="✅ Yes, make a ticket", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Yes, make a ticket", emoji=BLUE_ARROW_EMOJI, style=discord.ButtonStyle.success)
     async def yes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.category_key is not None:
             await interaction.response.defer()
@@ -1192,14 +1200,13 @@ class DMTicketPromptView(discord.ui.View):
                 inline=False,
             )
             _set_brand_image(confirmation, DIVIDER_URL)
-
             await interaction.edit_original_response(embed=confirmation, view=None)
             self.stop()
             return
 
         await interaction.response.edit_message(
             embed=_base_embed(
-                title="📋  Choose Your Support Department",
+                title="<:Support:1540927430179553321>  Choose Your Support Department",
                 description=(
                     "Select the category that best matches your request. This helps us route "
                     "your private conversation to the right support team without delay."
@@ -1214,7 +1221,7 @@ class DMTicketPromptView(discord.ui.View):
         )
         self.stop()
 
-    @discord.ui.button(label="❌ No, not now", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="No, not now", emoji=RIGHT_ARROW_EMOJI, style=discord.ButtonStyle.secondary)
     async def no(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.bot._dm_prompted_users.discard(self.user_id)
         await interaction.response.edit_message(
@@ -1484,7 +1491,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             )
             return
         embed = _base_embed(
-            title="🛫  Your Support Agent Is Connected",
+            title="<:Plane:1540926994332651580>  Your Support Agent Is Connected",
             description=(
                 "A **Delta Air Lines Support Agent** is now actively reviewing your "
                 "private ticket and is ready to assist you.\n\n"
@@ -1493,8 +1500,8 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             ),
         )
         embed.add_field(
-            name="📨 Message Delivery",
-            value="Look for a ✅ reaction to confirm that your message reached the support channel.",
+            name="<:Support:1540927430179553321> Message Delivery",
+            value="Look for a <:BArrow:1540951845147639809> reaction to confirm that your message reached the support channel.",
             inline=False,
         )
         _set_brand_image(embed, DIVIDER_URL)
@@ -1521,7 +1528,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             )
             return
         embed = _base_embed(
-            title="✅  Your Support Request Was Resolved",
+            title="<:BArrow:1540951845147639809>  Your Support Request Was Resolved",
             description=(
                 "A Delta Support team member has marked your request as **resolved**. "
                 "We hope the information and assistance provided addressed your needs."
@@ -1584,7 +1591,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             ephemeral=True,
         )
         embed = _base_embed(
-            title="🚫  Access Revoked",
+            title="<:RArrow:1540951788889575504>  Access Revoked",
             description=f"{user.mention} has had their access to this ticket removed by {interaction.user.mention}.",
         )
         _set_brand_image(embed, DIVIDER_URL)
@@ -1822,7 +1829,8 @@ class DeltaBot(commands.Bot):
         await self.change_presence(
             activity=discord.Activity(
                 type=discord.ActivityType.watching,
-                name="✈️  Delta Air Lines Support",
+                # Discord activity names do not render custom emoji markup.
+                name="Delta Air Lines Support",
             )
         )
 
@@ -1942,7 +1950,7 @@ class DeltaBot(commands.Bot):
             if message.author.id not in self._dm_prompted_users:
                 self._dm_prompted_users.add(message.author.id)
                 prompt = _base_embed(
-                    title="✈️  Welcome to Delta Air Lines Support",
+                    title="<:DeltaLogo:1540927958116601980>  Welcome to Delta Air Lines Support",
                     description=(
                         "Thank you for contacting us. Our support team can assist with general "
                         "questions, applications, partnerships, purchases, roles, and technical issues.\n\n"
@@ -1951,12 +1959,12 @@ class DeltaBot(commands.Bot):
                     ),
                 )
                 prompt.add_field(
-                    name="🔐 Your Privacy",
+                    name="<:Connection:1540927881683669013> Your Privacy",
                     value="The support conversation will remain in this DM; you will not be added to a server ticket channel.",
                     inline=False,
                 )
                 prompt.add_field(
-                    name="⏱️ What Happens Next",
+                    name="<:Connection:1540927881683669013> What Happens Next",
                     value="Choose Yes, select a department, and send the details of your request.",
                     inline=False,
                 )
@@ -1975,14 +1983,14 @@ class DeltaBot(commands.Bot):
 
             claimed_id = get_topic_value(topic, DM_TICKET_CLAIM_MARKER)
             if claimed_id is None:
-                await message.add_reaction("⏳")
+                await message.add_reaction("<:Connection:1540927881683669013>")
                 await message.channel.send(
                     embed=error_embed("Claim this ticket before sending a reply to the customer."),
                     delete_after=8,
                 )
                 return
             if claimed_id != str(message.author.id):
-                await message.add_reaction("❌")
+                await message.add_reaction("<:RArrow:1540951788889575504>")
                 await message.channel.send(
                     embed=error_embed("Only the support agent who claimed this ticket can reply."),
                     delete_after=8,

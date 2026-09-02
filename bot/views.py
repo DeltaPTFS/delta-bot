@@ -22,14 +22,15 @@ from utils import find_existing_ticket, create_ticket_channel, can_close_ticket
 # ── Close Ticket Button ───────────────────────────────────────────────────────
 
 class CloseTicketButton(discord.ui.View):
-    """Persistent view with a single '🔒 Close Ticket' button."""
+    """Persistent view with a single Delta-branded Close Ticket button."""
 
     def __init__(self) -> None:
         # timeout=None makes the view persist across bot restarts
         super().__init__(timeout=None)
 
     @discord.ui.button(
-        label="🔒  Close Ticket",
+        label="Close Ticket",
+        emoji="<:RArrow:1540951788889575504>",
         style=discord.ButtonStyle.danger,
         custom_id="delta:close_ticket",
     )
@@ -81,7 +82,9 @@ class AssistanceSelect(discord.ui.Select):
             for key, cfg in TICKET_CONFIG.items()
         ]
         super().__init__(
-            placeholder="✈️  Select an Assistance Category",
+            # Select placeholders do not render custom emoji markup; each option
+            # carries its Delta emoji through SelectOption.emoji instead.
+            placeholder="Select an Assistance Category",
             min_values=1,
             max_values=1,
             options=options,
@@ -145,7 +148,7 @@ class AssistanceSelect(discord.ui.Select):
 
         # Confirm to the user (ephemeral)
         await interaction.followup.send(
-            content=f"✅  Your ticket has been created: {channel.mention}",
+            content=f"<:BArrow:1540951845147639809>  Your ticket has been created: {channel.mention}",
             ephemeral=True,
         )
 
