@@ -3,77 +3,57 @@ config.py — Central configuration for the Delta Air Lines HelpDesk Bot.
 All IDs, colours, and branding constants live here.
 """
 
+import os
+
 # ── Branding ──────────────────────────────────────────────────────────────────
 DELTA_RED       = 0xC8102E
 FOOTER_TEXT     = "Delta Air Lines • Keep Climbing"
 MAILING_ADDRESS = "P.O. Box 20980, Department 980, Atlanta, GA 30320-2980"
 
-BANNER_URL = (
-    "https://cdn.discordapp.com/attachments/1525901449769254922"
-    "/1525992386948239582/delta_banner.jpg"
-)
-DIVIDER_URL = (
-    "https://cdn.discordapp.com/attachments/1525901449769254922"
-    "/1525992387254685869/skinny_delta_banner.jpg"
-)
+BANNER_URL = os.getenv("BANNER_URL", "")
+DIVIDER_URL = os.getenv("DIVIDER_URL", "")
 
 # ── Guild / Channel IDs ───────────────────────────────────────────────────────
-TICKET_CATEGORY_ID = 1524489811627475075   # All ticket channels live here
+GUILD_ID = 1538738611988467782
+TICKET_CATEGORY_ID = 1543674278711529562   # All ticket channels live here
+TRANSCRIPT_CHANNEL_ID = 1543674377953087649
+UPDATE_CHANNEL_ID = TRANSCRIPT_CHANNEL_ID
+BOT_VERSION = "2.0.3"
 
 # ── Role IDs ─────────────────────────────────────────────────────────────────
-STAFF_ROLE_ID           = 1436474227971592325  # May use staff-only commands
-GENERAL_SUPPORT_ROLE_ID = 1436480867240251493  # Pinged / given access on General Inquiries tickets
+STAFF_ROLE_ID           = 1539005030189891684  # May use staff-only commands
+ADMIN_ROLE_ID           = 1539005297417519205  # May use ticket administration commands
+GENERAL_SUPPORT_ROLE_ID = STAFF_ROLE_ID
 
 # ── Ticket-category → channel-prefix / role map ───────────────────────────────
 # Add extra rows here as new dropdown options are implemented.
 TICKET_CONFIG: dict[str, dict] = {
     "general_inquiries": {
-        "label":       "General Inquiries",
+        "label":       "General Inquires",
         "prefix":      "general-support",
         "role_id":     GENERAL_SUPPORT_ROLE_ID,
-        "emoji":       "📋",
+        "emoji":       "<:Plane:1540926994332651580>",
         "description": "General questions about Delta Air Lines services.",
     },
-    "lead_support": {
-        "label":       "Lead Support",
-        "prefix":      "lead-support",
+    "skymiles": {
+        "label":       "SkyMiles",
+        "prefix":      "skymiles",
         "role_id":     STAFF_ROLE_ID,
-        "emoji":       "🏅",
-        "description": "Escalated issues requiring a lead team member.",
+        "emoji":       "<:CreditCard:1540927195357253702>",
+        "description": "Questions about SkyMiles accounts and benefits.",
     },
     "partnership_requests": {
-        "label":       "Partnership Requests",
+        "label":       "Partner Request",
         "prefix":      "partnership",
         "role_id":     STAFF_ROLE_ID,
-        "emoji":       "🤝",
+        "emoji":       "<:Partners:1540927071822549114>",
         "description": "Inquiries regarding business partnerships.",
     },
-    "class_purchases": {
-        "label":       "Class Purchases",
-        "prefix":      "class-purchase",
+    "careers": {
+        "label":       "Careers",
+        "prefix":      "careers",
         "role_id":     STAFF_ROLE_ID,
-        "emoji":       "💺",
-        "description": "Purchase or upgrade a cabin class.",
-    },
-    "application_status": {
-        "label":       "Application Status",
-        "prefix":      "application",
-        "role_id":     STAFF_ROLE_ID,
-        "emoji":       "📄",
-        "description": "Check the status of a submitted application.",
-    },
-    "jobs_roles": {
-        "label":       "Jobs & Roles",
-        "prefix":      "jobs",
-        "role_id":     STAFF_ROLE_ID,
-        "emoji":       "💼",
-        "description": "Inquiries about open positions and roles.",
-    },
-    "bug_reports": {
-        "label":       "Bug Reports",
-        "prefix":      "bug-report",
-        "role_id":     STAFF_ROLE_ID,
-        "emoji":       "🐛",
-        "description": "Report a bug or technical issue.",
+        "emoji":       "<:Nametag:1541175704622993428>",
+        "description": "Questions about careers and applications.",
     },
 }
