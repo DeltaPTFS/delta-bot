@@ -12,6 +12,7 @@ Requires a .env file with:
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 import os
 import threading
@@ -34,6 +35,8 @@ DELTA_RED       = 0xC8102E
 FOOTER_TEXT     = "Delta Air Lines • Keep Climbing"
 MAILING_ADDRESS = "P.O. Box 20980, Department 980, Atlanta, GA 30320-2980"
 
+BANNER_URL = os.getenv("BANNER_URL", "")
+DIVIDER_URL = os.getenv("DIVIDER_URL", "")
 DIVIDER_URL = os.getenv("DIVIDER_URL", "")
 
 GUILD_ID                = 1538738611988467782
@@ -56,6 +59,8 @@ INVITE_URL               = "https://discord.gg/hccQX6nGJw"
 SUPPORT_EMOJI             = "<:Support:1540927430179553321>"
 RIGHT_ARROW_EMOJI         = "<:RArrow:1540951788889575504>"
 WING_PIN_EMOJI            = "<:WingPinLogo:1540927847709802607>"
+PANEL_BANNER_URL         = "https://cdn.discordapp.com/attachments/1539651325615153233/1543872830947590154/delta_banner.jpg?ex=6a96731e&is=6a95219e&hm=d04ff3b4ed550e64196f40c79bb29656454fc102729c758a4a7c64f53462d5c7&"
+PANEL_BOTTOM_URL         = "https://cdn.discordapp.com/attachments/1539651325615153233/1543878240916213861/Delta_Airlines_Banner_Bottom.png?ex=6a967828&is=6a9526a8&hm=923dcd5f959e565e8d8681504d9ba3b9439bb75c6eda5a0e32c8f2966f46db89&"
 
 PANEL_MESSAGE = """## <:DeltaLogo:1540927958116601980> Contact Us | <:SkyTeamLogo:1540927923618316359>
 -# <:Blank:1540951736062312529> <:Connection:1540927881683669013>  1021 N Outer Loop Rd, East Point, GA, 30344.
@@ -95,6 +100,9 @@ This is a **patch update** for the version 2 ticket-system release.
 - Fixed repeated ticket claiming and unclaiming by refreshing claim state from Discord.
 - Simplified ticket creation by removing the extra confirmation step.
 - `/connected` now sends the exact same notice to staff and the customer.
+- `/panel` now accepts the top and bottom banner images chosen by the command user.
+- The bottom banner now appears directly above the category dropdown.
+- Panel text remains a regular Discord message rather than a bot-created embed.
 
 -# Version format: major.minor.patch • Patch releases increase the final number."""
 
@@ -143,6 +151,38 @@ def _base_embed(title: str = "", description: str = "") -> discord.Embed:
 def _set_brand_image(embed: discord.Embed, url: str) -> None:
     if url:
         embed.set_image(url=url)
+def assistance_panel_banner_embed() -> discord.Embed:
+    embed = discord.Embed(color=DELTA_RED)
+    _set_brand_image(embed, BANNER_URL)
+    return embed
+
+
+def assistance_panel_embed() -> discord.Embed:
+    embed = _base_embed(
+        title="✈️  Delta Air Lines — HelpDesk",
+        description=(
+            "Welcome to the **Delta Air Lines Support Centre**.\n\n"
+            "Our dedicated team is here to assist you with any questions, "
+            "concerns, or requests you may have. Select the category that best "
+            "matches your request below.\n\n"
+            "For your privacy, the conversation will not take place in this channel. "
+            "The bot will send you a direct message asking you to confirm the ticket, "
+            "and all further communication will remain in your DMs."
+        ),
+    )
+    embed.add_field(
+        name="🔐 Private & Secure",
+        value="Only you and the assigned Delta Support team can take part in the conversation.",
+        inline=False,
+    )
+    embed.add_field(
+        name="📨 Before You Begin",
+        value="Please make sure your Discord privacy settings allow direct messages from this server.",
+        inline=False,
+    )
+    embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
+    _set_brand_image(embed, DIVIDER_URL)
+    return embed
 
 
 def general_inquiries_welcome(member: discord.Member) -> discord.Embed:
@@ -240,6 +280,16 @@ def connected_embed() -> discord.Embed:
     return _base_embed(description=CONNECTED_MESSAGE)
 
 
+async def download_panel_asset(url: str, filename: str) -> discord.File:
+    """Download a configured panel image so Discord displays it without a raw URL."""
+    timeout = aiohttp.ClientTimeout(total=20)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(url) as response:
+            response.raise_for_status()
+            data = await response.read()
+    if not data:
+        raise ValueError(f"Panel asset {filename} was empty.")
+    return discord.File(io.BytesIO(data), filename=filename)
 # ════════════════════════════════════════════════════════════════════════════════
 # UTILITIES
 # ════════════════════════════════════════════════════════════════════════════════
@@ -908,6 +958,12 @@ class TicketActionView(discord.ui.View):
             await interaction.message.edit(view=TicketActionView(claimed=not unclaiming))
         if unclaiming:
             await notify_ticket_owner(interaction.client, owner_id, owner_title, owner_message)
+        elif owner_id is not None and owner_id.isdigit():
+            try:
+                owner = interaction.client.get_user(int(owner_id)) or await interaction.client.fetch_user(int(owner_id))
+                await owner.send(CONNECTED_MESSAGE)
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                log.warning("Could not send connected message to %s: %s", owner_id, exc)
 
     # ── Close ──────────────────────────────────────────────────────────────────────
     @discord.ui.button(
@@ -1047,12 +1103,30 @@ class ServerAssistanceSelect(discord.ui.Select):
             placeholder="Select an Assistance Category",
             options=options,
             custom_id="delta:server_assistance_select",
+            options=options,
+            custom_id="delta:server_assistance_select",
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
         selected_key = self.values[0]
         cfg = TICKET_CONFIG[selected_key]
         await interaction.response.defer(ephemeral=True)
+
+        prompt = _base_embed(
+            title="✈️  Confirm Your Private Support Request",
+            description=(
+                f"You selected **{cfg['label']}** from the Delta Assistance Panel.\n\n"
+                "Would you like us to create a private support ticket? Your conversation "
+                "will take place entirely in this DM and will only be shared with the "
+                "appropriate Delta Support team."
+            ),
+        )
+        prompt.add_field(
+            name="Selected Department",
+            value=f"{cfg['emoji']} {cfg['label']}",
+            inline=False,
+        )
+        _set_brand_image(prompt, DIVIDER_URL)
         try:
             # Confirm that DMs are open before creating the private staff channel,
             # then replace this temporary line with the final connection notice.
@@ -1124,6 +1198,51 @@ class NonMemberView(discord.ui.View):
     async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("This button belongs to another user.")
+            return
+        await interaction.response.send_message(
+            "Please join Delta Air Lines first. Once you have joined, press this button again or DM me to create a ticket.",
+            view=NonMemberView(self.bot, self.user_id),
+        )
+        super().__init__(timeout=600)
+        self.bot = bot
+        self.user_id = user_id
+        def named_emoji(name: str) -> discord.Emoji | None:
+            return next((emoji for emoji in bot.emojis if emoji.name == name), None)
+
+        join = discord.ui.Button(
+            label="Join Delta Air Lines",
+            style=discord.ButtonStyle.link,
+            url=INVITE_URL,
+            emoji=named_emoji("ExternalLink~1") or named_emoji("ExternalLink"),
+        )
+        self.add_item(join)
+        self.create_ticket.emoji = named_emoji("Ticket~1") or named_emoji("Ticket")
+
+    @discord.ui.button(label="✅ Yes, make a ticket", style=discord.ButtonStyle.success)
+    async def yes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.category_key is not None:
+            await interaction.response.defer()
+            try:
+                _, created = await open_dm_ticket(self.bot, interaction.user, self.category_key)
+            except Exception as exc:
+                self.bot._dm_prompted_users.discard(self.user_id)
+                await interaction.followup.send(
+                    embed=error_embed(f"Your private ticket could not be created: {exc}")
+                )
+                return
+            self.bot._dm_prompted_users.discard(self.user_id)
+            confirmation = connected_embed() if created else success_embed(
+                "You are still connected to your existing support ticket. Send your next message here and I will forward it to the same ticket."
+            )
+            confirmation.add_field(
+                name="What Happens Next?",
+                value="An agent will claim your ticket, and their replies will appear here automatically.",
+                inline=False,
+            )
+            _set_brand_image(confirmation, DIVIDER_URL)
+
+            await interaction.edit_original_response(embed=confirmation, view=None)
+            self.stop()
             return
         await interaction.response.send_message(
             "Please join Delta Air Lines first. Once you have joined, press this button again or DM me to create a ticket.",
@@ -1224,6 +1343,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             embed=success_embed("The private DM Assistance Panel was posted successfully."),
             ephemeral=True,
         )
+        await interaction.channel.send(PANEL_MESSAGE, view=ServerAssistancePanelView(interaction.client))
 
     async def post_positions(
         interaction: discord.Interaction,
@@ -1833,6 +1953,26 @@ class DeltaBot(commands.Bot):
 
             if message.author.id not in self._dm_prompted_users:
                 self._dm_prompted_users.add(message.author.id)
+                prompt = _base_embed(
+                    title="✈️  Welcome to Delta Air Lines Support",
+                    description=(
+                        "Thank you for contacting us. Our support team can assist with general "
+                        "questions, applications, partnerships, purchases, roles, and technical issues.\n\n"
+                        "Would you like to create a **private support ticket**? If you continue, "
+                        "your messages will be securely relayed to the appropriate support team."
+                    ),
+                )
+                prompt.add_field(
+                    name="🔐 Your Privacy",
+                    value="The support conversation will remain in this DM; you will not be added to a server ticket channel.",
+                    inline=False,
+                )
+                prompt.add_field(
+                    name="⏱️ What Happens Next",
+                    value="Choose Yes, select a department, and send the details of your request.",
+                    inline=False,
+                )
+                _set_brand_image(prompt, DIVIDER_URL)
                 await message.channel.send(
                     "<:Support:1540927430179553321> **Choose one assistance category below.**\n"
                     "Your conversation stays in this DM while Delta Support responds from a private channel.",

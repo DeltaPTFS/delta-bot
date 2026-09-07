@@ -9,7 +9,7 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 
 | Feature | Details |
 |---|---|
-| Assistance Panel | Support or admins use `/panel` and upload their chosen banners; selecting a category opens the DM ticket immediately |
+| Assistance Panel | Support or admins can post the plain-text contact panel or use `/panel` to upload custom top and bottom banner images; selecting a category opens the DM ticket immediately |
 | Private Tickets | Members stay in DMs while staff work from a hidden relay channel |
 | Duplicate Guard | Prevents users from opening multiple simultaneous tickets |
 | Close Ticket | Button *and* `/close` slash command; DMs the user on close |
@@ -128,7 +128,7 @@ The bot publishes commands only to `GUILD_ID`, clears its former global commands
 3. A staff-only relay channel is created. The member never receives access to it.
 4. Each customer DM is copied to that channel and receives a delivery confirmation when delivered.
 5. One support agent claims the ticket. Only that agent can reply until they unclaim it.
-6. Staff replies are copied to the member's DMs and receive a delivery confirmation when delivered.
+6. Staff replies are copied to the member's DMs and receive a delivery confirmation and ✅ when delivered.
 
 ---
 
