@@ -17,6 +17,7 @@ import logging
 import os
 import threading
 import time
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import aiohttp
@@ -37,7 +38,6 @@ MAILING_ADDRESS = "P.O. Box 20980, Department 980, Atlanta, GA 30320-2980"
 
 BANNER_URL = os.getenv("BANNER_URL", "")
 DIVIDER_URL = os.getenv("DIVIDER_URL", "")
-DIVIDER_URL = os.getenv("DIVIDER_URL", "")
 
 GUILD_ID                = 1538738611988467782
 TICKET_CATEGORY_ID      = 1543674278711529562
@@ -47,7 +47,7 @@ ADMIN_ROLE_ID           = 1539005297417519205
 BOT_COMMAND_ROLE_ID     = STAFF_ROLE_ID
 TRANSCRIPT_CHANNEL_ID   = 1543674377953087649
 UPDATE_CHANNEL_ID       = TRANSCRIPT_CHANNEL_ID
-BOT_VERSION             = "2.0.4"
+BOT_VERSION             = "2.1.0"
 TICKET_CLOSE_DELAY      = 5
 RATING_TIMEOUT          = 15 * 24 * 60 * 60
 DISCORD_RECONNECT_DELAY = 15
@@ -58,7 +58,10 @@ LEGACY_GUILD_ID          = 1436471549703094477
 INVITE_URL               = "https://discord.gg/hccQX6nGJw"
 SUPPORT_EMOJI             = "<:Support:1540927430179553321>"
 RIGHT_ARROW_EMOJI         = "<:RArrow:1540951788889575504>"
+BLUE_ARROW_EMOJI          = "<:BArrow:1540951845147639809>"
 WING_PIN_EMOJI            = "<:WingPinLogo:1540927847709802607>"
+MESSAGE_EMOJI             = "<:Message:1544506028752769134>"
+IDENTIFICATION_EMOJI      = "<:Identification:1544505969575198821>"
 PANEL_BANNER_URL         = "https://cdn.discordapp.com/attachments/1539651325615153233/1543872830947590154/delta_banner.jpg?ex=6a96731e&is=6a95219e&hm=d04ff3b4ed550e64196f40c79bb29656454fc102729c758a4a7c64f53462d5c7&"
 PANEL_BOTTOM_URL         = "https://cdn.discordapp.com/attachments/1539651325615153233/1543878240916213861/Delta_Airlines_Banner_Bottom.png?ex=6a967828&is=6a9526a8&hm=923dcd5f959e565e8d8681504d9ba3b9439bb75c6eda5a0e32c8f2966f46db89&"
 
@@ -78,8 +81,150 @@ CONNECTED_MESSAGE = """<:Support:1540927430179553321> **You are now connected.**
 -# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
 
 > <:DeltaLogo:1540927958116601980> **You have officially been connected to our Delta Support Agency.** If you have not already done so, **please state your inquiry below.**
+-# Thank you for contacting Delta Support."""
+
+SUPPORT_UNAVAILABLE_MESSAGE = """<:Support:1540927430179553321> **Support Unavailable**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:DeltaLogo:1540927958116601980> **It seems our live representatives** are **curently offline.** We ask you give us a **moment,** they will get back to you as **soon** as **possible.**
 
 -# Thank you for contacting Delta Support."""
+
+SUPPORT_FORMATS: dict[str, tuple[str, str]] = {
+    "connected": ("Connected", CONNECTED_MESSAGE),
+    "unavailable": ("Support Unavailable", SUPPORT_UNAVAILABLE_MESSAGE),
+    "skymiles": ("Welcome to SkyMiles", """## <:WingPinLogo:1540927847709802607> **Welcome to SkyMiles!**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:DeltaLogo:1540927958116601980> **Welcome to SkyMiles!** Delta's Loyalty Program where you can **earn miles** from **flights, credit cards, partners,** and redeem them for **rewards** like **travel upgrades, perks,** and **so much more.**
+
+> <:RArrow:1540951788889575504> **For more information** on **[SkyMiles Medallions,](https://discord.com/channels/1538738611988467782/1541189809689726986) [Choice Benefits,](https://discord.com/channels/1538738611988467782/1541156846579089519) and [American Express.](https://discord.com/channels/1538738611988467782/1541188270325637150)** Please head over to our **server,** or click the **provided links.**
+
+-# Welcome to SkyMiles!"""),
+    "inactive": ("Inactive Inquiry", """<:Timer:1540927345324728400> **It seems your inquiry has been inactive.**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:DeltaLogo:1540927958116601980> **It seems your inquiry** has been **inactive** for an **extended period of time.**
+
+> <:RArrow:1540951788889575504> **Due to conserving resources,** if a **response** is not provided **within** the **next 24 hours,** this **inquiry** will be deemed **resolved,** and therefore **closed.**
+
+-# Thank you for contacting Delta Support."""),
+    "resolved": ("Inquiry Resolved", """<:Support:1540927430179553321> **It seems your inquiry has been resolved.**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:WingPinLogo:1540927847709802607> **If you need further assistance, please let us know.** If not, we **thank you** for using our Support system and have a great day!
+
+-# Thank you for contacting Delta Support."""),
+    "partnership_denied": ("Partnership Denied", """<:Support:1540927430179553321> **Your Partnership Status has been updated.**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:DeltaLogo:1540927958116601980> **Hello, our External Affairs Office has officially reviewed your application**
+
+> **After a thorough review of your request,** it has **unfortunately** been **__denied.__**
+-# *We truly thank you for filling out an application, and for showing interest in partnering with our airline. As you are the reason we are able to connect our passengers.*
+
+> <:WingPinLogo:1540927847709802607> **We thank you for filling out an application,** if you would like information on why your request was denied, please let us know **as soon as possible.**
+
+-# Thank you for choosing Delta Air Lines."""),
+    "partnership_accepted": ("Partnership Accepted", """<:Support:1540927430179553321> **Your Partnership Status has been updated.**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:DeltaLogo:1540927958116601980> **Hello, our External Affairs Office has officially reviewed your application**
+
+> **After a thorough review of your request,** it has **officially** been **__accepted!__**
+-# *We truly thank you for filling out an application, and for showing interest in partnering with our airline. As you are the reason we are able to connect our passengers.*
+
+> <:WingPinLogo:1540927847709802607> **Please inform us as soon as possible** when you are able to post our advertisement. It will be provided below, and we ask that **both messages are done with an @/everyone ping.**
+
+-# Thank you for partnering with Delta Air Lines."""),
+    "direct_entry": ("Direct Entry Application", """<:Support:1540927430179553321> **Direct Entry Application**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+<:WingPinLogo:1540927847709802607> **Thank you** for your interest in applying at **Delta Air Lines!** Your interest in applying means **a lot** to our team of **talented** individuals who **work hard** every day to **grow our airline.**
+> <:Nametag:1541175704622993428> **Individuals interested in applying** are asked to fill out a set of __important__ documentation for review from our **Human Resources.**
+
+> **CV - Resume**
+-# *A Comprehensive Summary outlining your endeavors inside of Ro-aviation. Including prior experience, key skills, and other relevant industry information.*
+
+> **Statement Of Intent**
+-# *A formal message to Delta Air lines on why you would make an excellent candidate toward our future expansion goals.*
+
+> **Which Department are you applying for, why?**
+-# *A detailed and thoughtful explanation on why you are applying for a specific department, including what interests you in here, how it relates to your own personal goals, and why you choose us specifically for employment.*
+
+<:Warning:1540926913445494814> **All Applications** are expected to reflect a **high standard** by all applicants. Including **a bare minimum** of **3 sentences** per **response-needed question** and **a legitimate CV - Resume.**
+-# Thank you for choosing Delta Air Lines."""),
+    "application_submitted": ("Application Submitted", """<:Support:1540927430179553321> **Your application has been officially submitted.**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:WingPinLogo:1540927847709802607> **Thank you,** for taking the time to fill out an application. It has currently been submitted to our **Recruitment - Talent Department,** where it will be reviewed and an update will be provided shortly!"""),
+    "application_accepted": ("Application Accepted", """<:Support:1540927430179553321> **Your Application Status has been updated.**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:DeltaLogo:1540927958116601980> **Hello, our Recruitment - Talent Department has officially reviewed your application**
+
+> **After a thorough review of your application,** it has **officially** been **__accepted!__**
+-# *We truly thank you for filling out an application, and for showing interest in working at our airline. As you are the reason we are able to operate.*
+
+> <:WingPinLogo:1540927847709802607> **Please take a moment and join our Crew Server.** Once this is complete, follow the instructions posted in order to be entered into our **Database** and gain access to the rest of the Server.
+
+-# Thank you for choosing Delta Air Lines."""),
+    "application_denied": ("Application Denied", """<:Support:1540927430179553321> **Your Application Status has been updated.**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:DeltaLogo:1540927958116601980> **Hello, our Recruitment - Talent Department has officially reviewed your application**
+
+> **After a thorough review of your application,** it has **unfortunately** been **__denied.__**
+-# *We truly thank you for filling out an application, and for showing interest in working at our airline. As you are the reason we are able to operate.*
+
+> <:WingPinLogo:1540927847709802607> **We are very sorry for rejecting your application,** this may be due to one reason or another. **If you would like feedback on why your application was denied,** please ask at your **earliest convenience.**
+
+-# Thank you for choosing Delta."""),
+    "leadership": ("Leadership Application", """<:Support:1540927430179553321> **Leadership Application**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980
+
+> <:DeltaLogo:1540927958116601980> **Thank you** for your interest in applying at **Delta Air Lines!** Below, we have provided a full list of all Leadership positions avaliable.
+
+> <:BArrow:1540951845147639809> **Chief of Operations -** [AVAL]
+> <:BArrow:1540951845147639809> **Chairman Delta Tech-Ops -** [AVAL]
+> <:BArrow:1540951845147639809> **Chief Technology Officer -** [N/A]
+> <:BArrow:1540951845147639809> **Chief Finnancial Officer -** [N/A]
+> <:BArrow:1540951845147639809> **Chief People Officer -** [AVAL]
+> <:BArrow:1540951845147639809> **Chief Marketing Officer -** [N/A]
+> <:BArrow:1540951845147639809> **Chief Communications Officer -** [AVAL]
+> <:BArrow:1540951845147639809> **Executive Vice President -** [AVAL]
+> <:BArrow:1540951845147639809> **External Affairs Officer -** [AVAL]
+> <:BArrow:1540951845147639809> **SVP, Flight Deck -** [N/A]
+> <:BArrow:1540951845147639809> **SVP, Inflight Services -** [N/A]
+> <:BArrow:1540951845147639809> **SVP, Ground Operations -** [AVAL]
+> <:BArrow:1540951845147639809> **Talent Acquisition Officer -** [AVAL]"""),
+    "hr": ("HR Application", """<:Support:1540927430179553321> **HR Application**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:DeltaLogo:1540927958116601980> **Below,** we have provided a **full** list of **all** avaliable **Human Resources Positions.** If you would like to proceed with applying, we encourage you to and will assist you **right away.**
+
+**Human Resources - Delta Air Lines**
+
+> <:BArrow:1540951845147639809> **Delta Techical Operations -** [AVAL]
+> <:BArrow:1540951845147639809> **SVP Flight Operations -** [AVAL]
+> <:BArrow:1540951845147639809> **SVP Inflight Services -** [AVAL]
+> <:BArrow:1540951845147639809> **SVP Ground Operations -** [AVAL]
+> <:BArrow:1540951845147639809> **Department Overseer -** [AVAL]
+> <:BArrow:1540951845147639809> **Flight Dispatcher -** [AVAL]"""},
+
+NON_MEMBER_MESSAGE = """# <:DeltaLogo:1540927958116601980> Delta Air Lines | Direct Messages <:SkyTeamLogo:1540927923618316359>
 
 NON_MEMBER_MESSAGE = """# <:DeltaLogo:1540927958116601980> Delta Air Lines | Direct Messages <:SkyTeamLogo:1540927923618316359>
 
@@ -90,13 +235,16 @@ If you'd like to join our community, click the **Join Delta Air Lines** button b
 <:Support:1540927430179553321> **Need Assistance?**
 If you'd like to contact our team or create a support ticket, click the **Create Ticket** button below.
 
-<:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines.**"""
+<:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines."""
 
 UPDATE_MESSAGE = f"""# <:DeltaLogo:1540927958116601980> Delta Support Bot — Update {BOT_VERSION}
 
 This is a **patch update** for the version 2 ticket-system release.
 
 ## What's Fixed
+- Consolidated every canned support notice into `/format` with a format picker.
+- The selected branded notice is identical in the customer DM and ticket record.
+- Customer-facing ticket messages never disclose the support member's identity.
 - Fixed repeated ticket claiming and unclaiming by refreshing claim state from Discord.
 - Simplified ticket creation by removing the extra confirmation step.
 - `/connected` now sends the exact same notice to staff and the customer.
@@ -104,6 +252,7 @@ This is a **patch update** for the version 2 ticket-system release.
 - The bottom banner now appears directly above the category dropdown.
 - Panel text remains a regular Discord message rather than a bot-created embed.
 
+"""
 -# Version format: major.minor.patch • Patch releases increase the final number."""
 
 # Each key maps to a ticket category. Add new rows here to add new categories.
@@ -290,6 +439,15 @@ async def download_panel_asset(url: str, filename: str) -> discord.File:
     if not data:
         raise ValueError(f"Panel asset {filename} was empty.")
     return discord.File(io.BytesIO(data), filename=filename)
+
+
+def support_format_embed(format_key: str) -> discord.Embed:
+    """Build one of the customer-safe canned support notices."""
+    try:
+        _, message = SUPPORT_FORMATS[format_key]
+    except KeyError as exc:
+        raise ValueError(f"Unknown support format: {format_key}") from exc
+    return _base_embed(description=message)
 # ════════════════════════════════════════════════════════════════════════════════
 # UTILITIES
 # ════════════════════════════════════════════════════════════════════════════════
@@ -302,6 +460,19 @@ def is_admin(member: discord.Member) -> bool:
     return any(role.id == ADMIN_ROLE_ID for role in member.roles)
 
 
+def delta_status_emoji(guild: discord.Guild | None, success: bool) -> str:
+    """Resolve the server's Delta check/X emoji, with branded arrow fallbacks."""
+    preferred_names = (
+        ("deltacheckmark", "checkmark", "deltacheck", "check")
+        if success else
+        ("deltax", "x", "deltacross", "cross")
+    )
+    if guild is not None:
+        emojis = {emoji.name.casefold(): emoji for emoji in guild.emojis}
+        for name in preferred_names:
+            if emoji := emojis.get(name):
+                return str(emoji)
+    return BLUE_ARROW_EMOJI if success else RIGHT_ARROW_EMOJI
 def get_ticket_owner_id(channel: discord.TextChannel) -> int | None:
     """Return the ticket creator stored in the channel topic."""
     topic = channel.topic or ""
@@ -477,11 +648,40 @@ async def relay_customer_message(message: discord.Message, channel: discord.Text
     await message.add_reaction("<:BArrow:1540951845147639809>")
 
 
-async def relay_support_message(
+def customer_response_embed(
+    content: str,
+    customer_id: int | str,
+    timestamp: datetime | None = None,
+) -> discord.Embed:
+    """Build the shared customer/support conversation format."""
+    safe_content = content if len(content) <= 3500 else f"{content[:3497]}..."
+    embed = _base_embed(
+        description=(
+            f"{MESSAGE_EMOJI} **Customer Response**\n\n"
+            f"{safe_content}\n\n"
+            f"{IDENTIFICATION_EMOJI} **Customer ID**\n"
+            f"{customer_id}"
+        ),
+    )
+    embed.timestamp = timestamp
+    return embed
+
+
+def support_reply_embed(
+    content: str,
+    customer_id: int | str,
+    timestamp: datetime | None = None,
+) -> discord.Embed:
+    """Use the exact same conversation format for support-to-customer replies."""
+    return customer_response_embed(content, customer_id, timestamp)
+
+
+async def deliver_support_reply(
     client: discord.Client,
-    message: discord.Message,
     owner_id: str,
-) -> None:
+    embed: discord.Embed,
+) -> bool:
+    """Deliver exactly one reply embed to the ticket owner's DMs."""
     try:
         user = client.get_user(int(owner_id)) or await client.fetch_user(int(owner_id))
         embed = _base_embed(
@@ -507,6 +707,9 @@ async def relay_support_message(
     except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
         await message.add_reaction("<:RArrow:1540951788889575504>")
         log.warning("Could not relay support message to %s: %s", owner_id, exc)
+        return False
+        log.warning("Could not relay support message to %s: %s", owner_id, exc)
+        return False
 
 
 async def open_dm_ticket(
@@ -1111,7 +1314,6 @@ class ServerAssistanceSelect(discord.ui.Select):
         selected_key = self.values[0]
         cfg = TICKET_CONFIG[selected_key]
         await interaction.response.defer(ephemeral=True)
-
         prompt = _base_embed(
             title="✈️  Confirm Your Private Support Request",
             description=(
@@ -1190,12 +1392,6 @@ class NonMemberView(discord.ui.View):
         )
         self.add_item(join)
         self.create_ticket.emoji = named_emoji("Ticket~1") or named_emoji("Ticket")
-
-    @discord.ui.button(
-        label="Create Ticket",
-        style=discord.ButtonStyle.success,
-    )
-    async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("This button belongs to another user.")
             return
@@ -1286,7 +1482,10 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         "hr",
         "leadership",
         "close",
+        "reply",
         "connected",
+        "unavailable",
+        "format",
         "resolved",
         "revoke",
         "ticket",
@@ -1495,14 +1694,18 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             return
         await interaction.response.send_modal(CloseReasonModal(channel, member))
 
-    # /connected
-    @tree.command(name="connected", description="Notify the user that an agent has connected (staff only).")
+    # /reply
+    @tree.command(name="reply", description="Send a reply to the ticket customer's DMs.")
     @staff_only()
-    async def connected(interaction: discord.Interaction) -> None:
+    @app_commands.describe(message="The message to send to the customer.")
+    async def reply(interaction: discord.Interaction, message: str) -> None:
         channel = interaction.channel
-        if not isinstance(channel, discord.TextChannel):
+        member = interaction.user
+        check_emoji = delta_status_emoji(interaction.guild, success=True)
+        x_emoji = delta_status_emoji(interaction.guild, success=False)
+        if not isinstance(channel, discord.TextChannel) or not isinstance(member, discord.Member):
             await interaction.response.send_message(
-                embed=error_embed("This command must be used inside a ticket channel."),
+                f"{x_emoji} Use `/reply` inside a ticket channel.",
                 ephemeral=True,
             )
             return
@@ -1520,14 +1723,38 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         )
         await channel.send(embed=embed)
 
-    # /resolved
-    @tree.command(name="resolved", description="Mark the ticket as resolved (staff only).")
-    @staff_only()
-    async def resolved(interaction: discord.Interaction) -> None:
-        channel = interaction.channel
-        if not isinstance(channel, discord.TextChannel):
+        try:
+            fresh_channel = await channel.guild.fetch_channel(channel.id)
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
             await interaction.response.send_message(
-                embed=error_embed("This command must be used inside a ticket channel."),
+                f"{x_emoji} I could not load this ticket: {exc}", ephemeral=True
+            )
+            return
+        if not isinstance(fresh_channel, discord.TextChannel):
+            await interaction.response.send_message(
+                f"{x_emoji} This is not a ticket channel.", ephemeral=True
+            )
+            return
+
+        topic = fresh_channel.topic or ""
+        owner_id = get_topic_value(topic, DM_TICKET_OWNER_MARKER)
+        claimed_id = get_topic_value(topic, DM_TICKET_CLAIM_MARKER)
+        if owner_id is None:
+            await interaction.response.send_message(
+                f"{x_emoji} This channel does not have a ticket customer.", ephemeral=True
+            )
+            return
+        if claimed_id != str(member.id):
+            await interaction.response.send_message(
+                f"{x_emoji} Claim this ticket before using `/reply`.", ephemeral=True
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        reply_embed = support_reply_embed(message, owner_id, interaction.created_at)
+        if not await deliver_support_reply(interaction.client, owner_id, reply_embed):
+            await interaction.followup.send(
+                f"{x_emoji} The reply could not be delivered to the customer's DMs.",
                 ephemeral=True,
             )
             return
@@ -1551,13 +1778,13 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         delivered = await send_embed_to_ticket_owner(interaction.client, channel, embed)
         await interaction.response.send_message(
             embed=success_embed(
-                "The resolution notice was delivered to the customer's DMs."
+                f"The **{format.name}** notice was delivered to the customer's DMs."
                 if delivered else
                 "The notice was posted here, but the customer's DMs could not be reached."
             ),
             ephemeral=True,
         )
-        await channel.send(embed=embed)
+        await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     # /revoke — leadership only: remove a user's access from a ticket channel
     @tree.command(name="revoke", description="Revoke a user's access to this ticket (leadership only).")

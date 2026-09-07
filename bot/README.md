@@ -13,16 +13,16 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Private Tickets | Members stay in DMs while staff work from a hidden relay channel |
 | Duplicate Guard | Prevents users from opening multiple simultaneous tickets |
 | Close Ticket | Button *and* `/close` slash command; DMs the user on close |
-| Message Relay | Customer and claimed-agent messages are delivered both ways with delivery confirmation |
+| Message Relay | Customer and claimed-agent messages are delivered both ways with delivery confirmation; customer-facing replies use a branded Customer Response embed containing the customer ID |
 | Agent Privacy | Customer DMs identify replies as Delta Air Lines Support and never expose the individual agent's name |
 | Ticket Reuse | Repeat creation attempts reconnect the customer to their existing ticket instead of opening a duplicate |
-| Staff Commands | `/ticket add-customer`, `/ticket add-support`, `/ticket close`, `/connected`, and `/resolved` are support role-gated |
+| Staff Commands | `/reply`, `/format`, `/ticket add-customer`, `/ticket add-support`, `/ticket close`, `/connected`, `/resolved`, `/hr`, and `/leadership` are support role-gated |
 | Admin Commands | `/ticket admin remove`, `punish`, `unpunish`, and `undo` are admin role-gated |
 | Delta Branding | Red (#C8102E), optional server-owned images, and a consistent footer |
 | Claim State | Support can claim and unclaim repeatedly; ownership is refreshed from Discord and survives bot restarts |
 | Transcripts | Closed-ticket transcripts are posted to the private transcript channel |
 | Server Migration | Cleans the bot's messages from retired server `1436471549703094477`, then leaves it |
-| Release Updates | Posts and pins each release once in channel `1543674377953087649`; the current release is `2.0.4` |
+| Release Updates | Posts and pins each release once in channel `1543674377953087649`; the current release is `2.1.0` |
 
 Versions use `major.minor.patch`. Breaking or especially large releases increase
 the first number, regular feature releases increase the second, and fixes increase
@@ -98,6 +98,11 @@ python main.py
 |---|---|---|
 | `/panel` | Post the private-ticket Assistance Panel in the current channel | DL Leadership only |
 | `/close` | Close the current ticket | Support/admin role or ticket creator |
+| `/panel` | Post the private-ticket Assistance Panel in the current channel | DL Leadership only |
+| `/close` | Close the current ticket | Support/admin role or ticket creator |
+| `/reply` | Send a message from the claimed agent to the customer without exposing the agent's identity | Claiming support/admin member |
+| `/format` | Choose and send any prewritten support, SkyMiles, partnership, or application notice | Staff only |
+| `/ticket` | Add customers/support, close tickets, and access role-appropriate administration tools | Staff/admin, depending on subcommand |
 | `/connected` | Notify the user that an agent has connected | Staff only |
 | `/resolved` | Mark the ticket as resolved | Staff only |
 | `/hr` | Post the available Human Resources positions | Staff only |
@@ -128,7 +133,7 @@ The bot publishes commands only to `GUILD_ID`, clears its former global commands
 3. A staff-only relay channel is created. The member never receives access to it.
 4. Each customer DM is copied to that channel and receives a delivery confirmation when delivered.
 5. One support agent claims the ticket. Only that agent can reply until they unclaim it.
-6. Staff replies are copied to the member's DMs and receive a delivery confirmation and ✅ when delivered.
+6. The claimed agent uses `/reply` to send one branded reply embed to the member's DMs; replies receive delivery confirmation (✅). Regular ticket-channel messages stay internal and receive no relay, reaction, or warning.
 
 ---
 
