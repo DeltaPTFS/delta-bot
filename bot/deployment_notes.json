@@ -1,0 +1,10 @@
+{
+  "title": "Ticket Close Command Fix",
+  "summary": "The ticket close command no longer fails while checking the support role.",
+  "added": [],
+  "changed": [
+    "Restored the command-role configuration name expected by previously deployed permission checks.",
+    "The command and staff role names both resolve to the sole authorized role, 1539005030189891684."
+  ],
+  "removed": []
+}
