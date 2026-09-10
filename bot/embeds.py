@@ -10,11 +10,6 @@ from config import (
 )
 
 
-def _set_brand_image(embed: discord.Embed, url: str) -> None:
-    if url:
-        embed.set_image(url=url)
-
-
 def _base_embed(title: str = "", description: str = "") -> discord.Embed:
     """Return an embed pre-loaded with Delta branding."""
     embed = discord.Embed(
@@ -31,7 +26,7 @@ def _base_embed(title: str = "", description: str = "") -> discord.Embed:
 def assistance_panel_embed() -> discord.Embed:
     """Main embed shown on the Assistance Panel message."""
     embed = _base_embed(
-        title="<:DeltaLogo:1540927958116601980>  Delta Air Lines — HelpDesk",
+        title="✈️  Delta Air Lines — HelpDesk",
         description=(
             "Welcome to the **Delta Air Lines Support Centre**.\n\n"
             "Our dedicated team is here to assist you with any questions, "
@@ -41,15 +36,15 @@ def assistance_panel_embed() -> discord.Embed:
             "Thank you for choosing Delta Air Lines — *Keep Climbing.*"
         ),
     )
-    embed.add_field(name="<:Connection:1540927881683669013> Mailing Address", value=MAILING_ADDRESS, inline=False)
-    _set_brand_image(embed, DIVIDER_URL)
+    embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
+    embed.set_image(url=DIVIDER_URL)
     return embed
 
 
 def assistance_panel_banner_embed() -> discord.Embed:
     """Top banner embed (full Delta banner image)."""
     embed = discord.Embed(color=DELTA_RED)
-    _set_brand_image(embed, BANNER_URL)
+    embed.set_image(url=BANNER_URL)
     return embed
 
 
@@ -57,7 +52,7 @@ def assistance_panel_banner_embed() -> discord.Embed:
 
 def general_inquiries_welcome(member: discord.Member) -> discord.Embed:
     embed = _base_embed(
-        title="<:Support:1540927430179553321>  General Inquiries — Support Ticket",
+        title="📋  General Inquiries — Support Ticket",
         description=(
             f"Welcome, {member.mention}! Thank you for reaching out to "
             "**Delta Air Lines Support**.\n\n"
@@ -70,8 +65,8 @@ def general_inquiries_welcome(member: discord.Member) -> discord.Embed:
             "The more information you share, the faster our team can assist you."
         ),
     )
-    embed.add_field(name="<:Connection:1540927881683669013> Mailing Address", value=MAILING_ADDRESS, inline=False)
-    _set_brand_image(embed, DIVIDER_URL)
+    embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
+    embed.set_image(url=DIVIDER_URL)
     return embed
 
 
@@ -89,8 +84,8 @@ def generic_ticket_welcome(member: discord.Member, label: str, emoji: str) -> di
             "*We appreciate your patience and thank you for flying Delta.*"
         ),
     )
-    embed.add_field(name="<:Connection:1540927881683669013> Mailing Address", value=MAILING_ADDRESS, inline=False)
-    _set_brand_image(embed, DIVIDER_URL)
+    embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
+    embed.set_image(url=DIVIDER_URL)
     return embed
 
 
@@ -98,7 +93,7 @@ def generic_ticket_welcome(member: discord.Member, label: str, emoji: str) -> di
 
 def ticket_closed_dm(ticket_name: str) -> discord.Embed:
     embed = _base_embed(
-        title="<:RArrow:1540951788889575504>  Ticket Closed",
+        title="🔒  Ticket Closed",
         description=(
             f"Your support ticket **#{ticket_name}** has been successfully closed.\n\n"
             "Thank you for contacting **Delta Air Lines Support**. "
@@ -107,20 +102,20 @@ def ticket_closed_dm(ticket_name: str) -> discord.Embed:
             "*Delta Air Lines — Keep Climbing.*"
         ),
     )
-    embed.add_field(name="<:Connection:1540927881683669013> Mailing Address", value=MAILING_ADDRESS, inline=False)
-    _set_brand_image(embed, DIVIDER_URL)
+    embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
+    embed.set_image(url=DIVIDER_URL)
     return embed
 
 
 def ticket_closed_channel() -> discord.Embed:
     embed = _base_embed(
-        title="<:RArrow:1540951788889575504>  Ticket Closing",
+        title="🔒  Ticket Closing",
         description=(
             "This ticket has been marked as **closed** and will be deleted shortly.\n\n"
             "Thank you for contacting Delta Air Lines Support."
         ),
     )
-    _set_brand_image(embed, DIVIDER_URL)
+    embed.set_image(url=DIVIDER_URL)
     return embed
 
 
@@ -128,7 +123,7 @@ def ticket_closed_channel() -> discord.Embed:
 
 def already_open_ticket(channel: discord.TextChannel) -> discord.Embed:
     embed = _base_embed(
-        title="<:RArrow:1540951788889575504>  Active Ticket Found",
+        title="⚠️  Active Ticket Found",
         description=(
             f"You already have an open support ticket: {channel.mention}\n\n"
             "Please continue your conversation there. "
@@ -140,7 +135,7 @@ def already_open_ticket(channel: discord.TextChannel) -> discord.Embed:
 
 def error_embed(message: str) -> discord.Embed:
     embed = discord.Embed(
-        title="<:RArrow:1540951788889575504>  Error",
+        title="❌  Error",
         description=message,
         color=DELTA_RED,
     )
@@ -150,7 +145,7 @@ def error_embed(message: str) -> discord.Embed:
 
 def success_embed(message: str) -> discord.Embed:
     embed = discord.Embed(
-        title="<:BArrow:1540951845147639809>  Success",
+        title="✅  Success",
         description=message,
         color=DELTA_RED,
     )
