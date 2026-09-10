@@ -12,7 +12,7 @@ Requires a .env file with:
 from __future__ import annotations
 
 import asyncio
-import io
+import json
 import logging
 import os
 import threading
@@ -453,13 +453,6 @@ async def relay_customer_message(message: discord.Message, channel: discord.Text
     await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
     await message.add_reaction("<:BArrow:1540951845147639809>")
 
-def support_reply_embed(
-    content: str,
-    customer_id: int | str,
-    timestamp: datetime | None = None,
-) -> discord.Embed:
-    """Use the exact same conversation format for support-to-customer replies."""
-    return customer_response_embed(content, customer_id, timestamp)
 
 def customer_response_embed(
     content: str,
@@ -2064,9 +2057,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    # Keep this stable launcher tiny so future pull-request conflicts can be
-    # resolved in GitHub's web editor. The active implementation lives in the
-    # additive delta_bot module, which does not conflict with the legacy file.
-    from delta_bot import main as run_current_bot
-
-    run_current_bot()
+    main()
