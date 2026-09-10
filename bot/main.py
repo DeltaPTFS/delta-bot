@@ -515,6 +515,38 @@ def support_reply_embed(
     embed.set_author(name="Delta Air Lines Support", icon_url=SUPPORT_EMOJI_ICON_URL)
     return embed
 
+def support_reply_embed(
+    content: str,
+    customer_id: int | str,
+    timestamp: datetime | None = None,
+) -> discord.Embed:
+    """Build the anonymous, Delta-blue reply delivered to the customer."""
+    embed = customer_response_embed(content, customer_id, timestamp)
+    embed.description = embed.description.replace(
+        f"{MESSAGE_EMOJI} **Customer Response**",
+        f"{MESSAGE_EMOJI} **Delta Support Reply**",
+        1,
+    )
+    embed.color = DELTA_BLUE
+    embed.set_author(name="Delta Air Lines Support", icon_url=SUPPORT_EMOJI_ICON_URL)
+    return embed
+
+
+def staff_support_reply_embed(
+    content: str,
+    customer_id: int | str,
+    author: discord.Member,
+    timestamp: datetime | None = None,
+) -> discord.Embed:
+    """Build the matching staff record with the responsible agent as author."""
+    embed = support_reply_embed(content, customer_id, timestamp)
+    embed.description = embed.description.replace(
+        f"{MESSAGE_EMOJI} **Delta Support Reply**",
+        f"{MESSAGE_EMOJI} **{author.display_name}**",
+        1,
+    )
+    embed.set_author(name=str(author), icon_url=author.display_avatar.url)
+    return embed
 
 def staff_support_reply_embed(
     content: str,
