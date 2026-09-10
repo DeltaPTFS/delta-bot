@@ -41,7 +41,7 @@ def assistance_panel_embed() -> discord.Embed:
             "Thank you for choosing Delta Air Lines — *Keep Climbing.*"
         ),
     )
-    embed.add_field(name="<:Connection:1540927881683669013> Mailing Address", value=MAILING_ADDRESS, inline=False)
+embed.add_field(name="<:Connection:1540927881683669013> Mailing Address", value=MAILING_ADDRESS, inline=False)
     _set_brand_image(embed, DIVIDER_URL)
     return embed
 
@@ -70,7 +70,7 @@ def general_inquiries_welcome(member: discord.Member) -> discord.Embed:
             "The more information you share, the faster our team can assist you."
         ),
     )
-    embed.add_field(name="<:Connection:1540927881683669013> Mailing Address", value=MAILING_ADDRESS, inline=False)
+embed.add_field(name="<:Connection:1540927881683669013> Mailing Address", value=MAILING_ADDRESS, inline=False)
     _set_brand_image(embed, DIVIDER_URL)
     return embed
 
@@ -89,7 +89,7 @@ def generic_ticket_welcome(member: discord.Member, label: str, emoji: str) -> di
             "*We appreciate your patience and thank you for flying Delta.*"
         ),
     )
-    embed.add_field(name="<:Connection:1540927881683669013> Mailing Address", value=MAILING_ADDRESS, inline=False)
+embed.add_field(name="<:Connection:1540927881683669013> Mailing Address", value=MAILING_ADDRESS, inline=False)
     _set_brand_image(embed, DIVIDER_URL)
     return embed
 
@@ -107,7 +107,7 @@ def ticket_closed_dm(ticket_name: str) -> discord.Embed:
             "*Delta Air Lines — Keep Climbing.*"
         ),
     )
-    embed.add_field(name="<:Connection:1540927881683669013> Mailing Address", value=MAILING_ADDRESS, inline=False)
+embed.add_field(name="<:Connection:1540927881683669013> Mailing Address", value=MAILING_ADDRESS, inline=False)
     _set_brand_image(embed, DIVIDER_URL)
     return embed
 
