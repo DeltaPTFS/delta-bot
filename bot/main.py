@@ -12,7 +12,6 @@ Requires a .env file with:
 from __future__ import annotations
 
 import asyncio
-import io
 import logging
 import os
 import threading
@@ -47,7 +46,7 @@ ADMIN_ROLE_ID           = 1539005297417519205
 BOT_COMMAND_ROLE_ID     = STAFF_ROLE_ID
 TRANSCRIPT_CHANNEL_ID   = 1543674377953087649
 UPDATE_CHANNEL_ID       = TRANSCRIPT_CHANNEL_ID
-BOT_VERSION             = "2.1.3"
+BOT_VERSION             = "2.1.4"
 TICKET_CLOSE_DELAY      = 5
 RATING_TIMEOUT          = 15 * 24 * 60 * 60
 DISCORD_RECONNECT_DELAY = 15
@@ -76,7 +75,10 @@ PANEL_MESSAGE = """## <:DeltaLogo:1540927958116601980> Contact Us | <:SkyTeamLog
 
 SUPPORT_FORMATS_PATH = Path(__file__).with_name("support_formats.json")
 with SUPPORT_FORMATS_PATH.open(encoding="utf-8") as format_file:
-    _SUPPORT_FORMAT_DATA: dict[str, dict[str, str]] = json.load(format_file)
+    # Resolve the standard-library loader at this exact use site. This keeps a
+    # web conflict resolution from accidentally dropping a distant import and
+    # producing a startup-time ``NameError: json is not defined`` on Render.
+    _SUPPORT_FORMAT_DATA: dict[str, dict[str, str]] = __import__("json").load(format_file)
 
 SUPPORT_FORMAT_LABELS: dict[str, str] = {
     key: value["label"] for key, value in _SUPPORT_FORMAT_DATA.items()
@@ -102,9 +104,9 @@ UPDATE_MESSAGE = f"""# <:DeltaLogo:1540927958116601980> Delta Support Bot — Up
 This is a **patch update** for the version 2 ticket-system release.
 
 ## What's Fixed
-- Removed the inaccurate offline notice and its `/format` option.
-- Reworded temporary connection failures without claiming support is offline.
-- Kept the remaining 12 anonymous, branded notices in `/format`.
+- Fixed the Render startup failure caused by a missing JSON loader import.
+- Made support-format loading resilient to web conflict edits around imports.
+- Kept all 12 anonymous, branded notices available through `/format`.
 
 -# Version format: major.minor.patch • Patch releases increase the final number."""
 
