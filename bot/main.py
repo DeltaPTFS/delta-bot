@@ -47,7 +47,7 @@ ADMIN_ROLE_ID           = 1539005297417519205
 BOT_COMMAND_ROLE_ID     = STAFF_ROLE_ID
 TRANSCRIPT_CHANNEL_ID   = 1543674377953087649
 UPDATE_CHANNEL_ID       = TRANSCRIPT_CHANNEL_ID
-BOT_VERSION             = "2.1.6"
+BOT_VERSION             = "2.1.5"
 TICKET_CLOSE_DELAY      = 5
 RATING_TIMEOUT          = 15 * 24 * 60 * 60
 DISCORD_RECONNECT_DELAY = 15
@@ -63,7 +63,14 @@ WING_PIN_EMOJI            = "<:WingPinLogo:1540927847709802607>"
 MESSAGE_EMOJI             = "<:Message:1544506028752769134>"
 IDENTIFICATION_EMOJI      = "<:Identification:1544505969575198821>"
 CHECKMARK_EMOJI            = "<:CheckMark:1544505870904459264>"
-SUPPORT_EMOJI_ICON_URL     = "https://cdn.discordapp.com/emojis/1540927430179553321.png"
+
+TICKET_CLAIMED_MESSAGE = """<:CheckMark:1544505870904459264> **Ticket Claimed**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:Support:1540927430179553321> **Your ticket has been claimed** by a **Delta Support Member.** Please allow them a moment to review your inquiry. If you were **not finished explaining your situation,** feel free to continue providing any additional **details, screenshots, or information** regarding your request.
+
+-# Thank you for contacting Delta Support."""
 
 PANEL_MESSAGE = """## <:DeltaLogo:1540927958116601980> Contact Us | <:SkyTeamLogo:1540927923618316359>
 -# <:Blank:1540951736062312529> <:Connection:1540927881683669013>  1021 N Outer Loop Rd, East Point, GA, 30344.
@@ -91,14 +98,6 @@ SUPPORT_FORMATS: dict[str, str] = {
 }
 CONNECTED_MESSAGE = SUPPORT_FORMATS["connected"]
 
-TICKET_CLAIMED_MESSAGE = """<:CheckMark:1544505870904459264> **Ticket Claimed**
-
-> <:BArrow:1540951845147639809> **Hey there! It looks like you're currently not in the Delta Air Lines server.**
-
-> <:Support:1540927430179553321> **Your ticket has been claimed** by a **Delta Support Member.** Please allow them a moment to review your inquiry. If you were **not finished explaining your situation,** feel free to continue providing any additional **details, screenshots, or information** regarding your request.
-
--# Thank you for contacting Delta Support."""
-
 NON_MEMBER_MESSAGE = """# <:DeltaLogo:1540927958116601980> Delta Air Lines | Direct Messages <:SkyTeamLogo:1540927923618316359>
 
 > <:BArrow:1540951845147639809> **Hey there! It looks like you're currently not in the Delta Air Lines server.**
@@ -115,9 +114,11 @@ UPDATE_MESSAGE = f"""# <:DeltaLogo:1540927958116601980> Delta Support Bot — Up
 This is a **patch update** for the version 2 ticket-system release.
 
 ## What's Fixed
-- Replaced the staff-side Customer Response heading with the replying agent.
-- Kept the customer copy anonymous under the Delta Air Lines Support identity.
-- Removed the duplicate heading from human-response embeds.
+- Suppressed duplicate customer messages and repeated `/reply` deliveries.
+- Customer DMs identify human replies only as **Delta Air Lines Support**.
+- Private ticket records identify the support member who used `/reply`.
+- Human support replies use matching Delta-blue embeds and CheckMark confirmations.
+- Customers receive a private, anonymous notice when their ticket is claimed.
 
 -# Version format: major.minor.patch • Patch releases increase the final number."""
 
@@ -282,9 +283,9 @@ def is_admin(member: discord.Member) -> bool:
 
 def delta_status_emoji(guild: discord.Guild | None, success: bool) -> str:
     """Resolve the server's Delta check/X emoji, with branded arrow fallbacks."""
-    if success:
-        return CHECKMARK_EMOJI
     preferred_names = (
+        ("deltacheckmark", "checkmark", "deltacheck", "check")
+        if success else
         ("deltax", "x", "deltacross", "cross")
     )
     if guild is not None:
@@ -292,7 +293,7 @@ def delta_status_emoji(guild: discord.Guild | None, success: bool) -> str:
         for name in preferred_names:
             if emoji := emojis.get(name):
                 return str(emoji)
-    return RIGHT_ARROW_EMOJI
+    return BLUE_ARROW_EMOJI if success else RIGHT_ARROW_EMOJI
 
 
 def get_ticket_owner_id(channel: discord.TextChannel) -> int | None:
@@ -458,7 +459,7 @@ def relay_description(message: discord.Message) -> str:
 
 
 async def relay_customer_message(message: discord.Message, channel: discord.TextChannel) -> bool:
-    """Record one customer DM in support, suppressing repeated gateway events."""
+    """Relay a customer DM once, even if Discord dispatches it repeatedly."""
     embed = customer_response_embed(
         content=relay_description(message),
         customer_id=message.author.id,
@@ -475,7 +476,6 @@ async def relay_customer_message(message: discord.Message, channel: discord.Text
     await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
     await message.add_reaction(CHECKMARK_EMOJI)
     return True
-
 
 def customer_response_embed(
     content: str,
@@ -504,7 +504,7 @@ def anonymous_support_reply_embed(
     customer_id: int | str,
     timestamp: datetime | None = None,
 ) -> discord.Embed:
-    """Build the anonymous, Delta-blue reply delivered to the customer."""
+    """Build the Delta-blue reply delivered to a customer without agent identity."""
     embed = customer_response_embed(content, customer_id, timestamp)
     embed.description = embed.description.replace(
         f"{MESSAGE_EMOJI} **Customer Response**",
@@ -512,25 +512,8 @@ def anonymous_support_reply_embed(
         1,
     )
     embed.color = DELTA_BLUE
-    embed.set_author(name="Delta Air Lines Support", icon_url=SUPPORT_EMOJI_ICON_URL)
+    embed.set_author(name="Delta Air Lines Support")
     return embed
-
-def support_reply_embed(
-    content: str,
-    customer_id: int | str,
-    timestamp: datetime | None = None,
-) -> discord.Embed:
-    """Build the anonymous, Delta-blue reply delivered to the customer."""
-    embed = customer_response_embed(content, customer_id, timestamp)
-    embed.description = embed.description.replace(
-        f"{MESSAGE_EMOJI} **Customer Response**",
-        f"{MESSAGE_EMOJI} **Delta Support Reply**",
-        1,
-    )
-    embed.color = DELTA_BLUE
-    embed.set_author(name="Delta Air Lines Support", icon_url=SUPPORT_EMOJI_ICON_URL)
-    return embed
-
 
 def staff_support_reply_embed(
     content: str,
@@ -554,14 +537,14 @@ def attributed_staff_reply_embed(
     author: discord.Member,
     timestamp: datetime | None = None,
 ) -> discord.Embed:
-    """Build the matching staff record with the responsible agent as author."""
-    embed = anonymous_support_reply_embed(content, customer_id, timestamp)
+    """Build the private ticket record identifying the responding agent."""
+    embed = customer_response_embed(content, customer_id, timestamp, author=author)
     embed.description = embed.description.replace(
-        f"{MESSAGE_EMOJI} **Delta Support Reply**",
+        f"{MESSAGE_EMOJI} **Customer Response**",
         f"{MESSAGE_EMOJI} **{author.display_name}**",
         1,
     )
-    embed.set_author(name=str(author), icon_url=author.display_avatar.url)
+    embed.color = DELTA_BLUE
     return embed
 
 
@@ -1022,12 +1005,12 @@ class TicketActionView(discord.ui.View):
                     "They will be assisting the customer through the DM relay."
                 ),
             )
-            if owner_id is not None:
-                await send_embed_to_ticket_owner(
-                    interaction.client,
-                    fresh_channel,
-                    _base_embed(description=TICKET_CLAIMED_MESSAGE),
-                )
+            if owner_id is not None and owner_id.isdigit():
+                try:
+                    owner = interaction.client.get_user(int(owner_id)) or await interaction.client.fetch_user(int(owner_id))
+                    await owner.send(embed=_base_embed(description=TICKET_CLAIMED_MESSAGE))
+                except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                    log.warning("Could not send claimed notice to ticket owner %s: %s", owner_id, exc)
 
         _set_brand_image(status_embed, DIVIDER_URL)
         await fresh_channel.send(embed=status_embed)
@@ -1489,18 +1472,11 @@ def register_commands(tree: app_commands.CommandTree) -> None:
     async def reply(interaction: discord.Interaction, message: str) -> None:
         channel = interaction.channel
         member = interaction.user
-        check_emoji = delta_status_emoji(interaction.guild, success=True)
         x_emoji = delta_status_emoji(interaction.guild, success=False)
         if not isinstance(channel, discord.TextChannel) or not isinstance(member, discord.Member):
             await interaction.response.send_message(
                 f"{x_emoji} Use `/reply` inside a ticket channel.",
                 ephemeral=True,
-            )
-            return
-
-        if interaction.id in interaction.client.processed_reply_interactions:
-            await interaction.response.send_message(
-                f"{check_emoji} This reply was already delivered.", ephemeral=True
             )
             return
 
@@ -1531,10 +1507,14 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             )
             return
 
-        interaction.client.processed_reply_interactions.add(interaction.id)
-        if len(interaction.client.processed_reply_interactions) > 10_000:
-            interaction.client.processed_reply_interactions.pop()
+        if interaction.id in interaction.client.processed_reply_interactions:
+            await interaction.response.send_message(
+                f"{CHECKMARK_EMOJI} This reply was already delivered.", ephemeral=True
+            )
+            return
+
         await interaction.response.defer(ephemeral=True)
+        interaction.client.processed_reply_interactions.add(interaction.id)
         customer_embed = anonymous_support_reply_embed(message, owner_id, interaction.created_at)
         if not await deliver_support_reply(interaction.client, owner_id, customer_embed):
             interaction.client.processed_reply_interactions.discard(interaction.id)
@@ -1544,8 +1524,6 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             )
             return
 
-        # The copy uses the same content and human-reply colour, but identifies
-        # the agent only inside the private support channel.
         staff_embed = attributed_staff_reply_embed(
             message, owner_id, member, interaction.created_at
         )
@@ -1853,11 +1831,11 @@ class DeltaBot(commands.Bot):
             tree_cls=DeltaCommandTree,
         )
         self._dm_prompted_users: set[int] = set()
-        self.processed_dm_messages: set[int] = set()
-        self.processed_reply_interactions: set[int] = set()
         # Runtime ticket sanctions. Values are (kind, UNIX expiry); None expiry is permanent.
         self.ticket_restrictions: dict[int, tuple[str, float | None]] = {}
         self.admin_undo_actions: list[tuple] = []
+        self.processed_dm_messages: set[int] = set()
+        self.processed_reply_interactions: set[int] = set()
 
     async def setup_hook(self) -> None:
         self.add_view(TicketActionView())
@@ -1955,8 +1933,6 @@ class DeltaBot(commands.Bot):
             if message.id in self.processed_dm_messages:
                 return
             self.processed_dm_messages.add(message.id)
-            # Bound memory while retaining enough IDs to suppress reconnect
-            # re-deliveries and duplicate gateway events.
             if len(self.processed_dm_messages) > 10_000:
                 self.processed_dm_messages.pop()
 
