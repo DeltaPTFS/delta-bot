@@ -499,6 +499,22 @@ def customer_response_embed(
     return embed
 
 
+def anonymous_support_reply_embed(
+    content: str,
+    customer_id: int | str,
+    timestamp: datetime | None = None,
+) -> discord.Embed:
+    """Build the anonymous, Delta-blue reply delivered to the customer."""
+    embed = customer_response_embed(content, customer_id, timestamp)
+    embed.description = embed.description.replace(
+        f"{MESSAGE_EMOJI} **Customer Response**",
+        f"{MESSAGE_EMOJI} **Delta Support Reply**",
+        1,
+    )
+    embed.color = DELTA_BLUE
+    embed.set_author(name="Delta Air Lines Support", icon_url=SUPPORT_EMOJI_ICON_URL)
+    return embed
+
 def support_reply_embed(
     content: str,
     customer_id: int | str,
@@ -524,6 +540,22 @@ def staff_support_reply_embed(
 ) -> discord.Embed:
     """Build the matching staff record with the responsible agent as author."""
     embed = support_reply_embed(content, customer_id, timestamp)
+    embed.description = embed.description.replace(
+        f"{MESSAGE_EMOJI} **Delta Support Reply**",
+        f"{MESSAGE_EMOJI} **{author.display_name}**",
+        1,
+    )
+    embed.set_author(name=str(author), icon_url=author.display_avatar.url)
+    return embed
+
+def attributed_staff_reply_embed(
+    content: str,
+    customer_id: int | str,
+    author: discord.Member,
+    timestamp: datetime | None = None,
+) -> discord.Embed:
+    """Build the matching staff record with the responsible agent as author."""
+    embed = anonymous_support_reply_embed(content, customer_id, timestamp)
     embed.description = embed.description.replace(
         f"{MESSAGE_EMOJI} **Delta Support Reply**",
         f"{MESSAGE_EMOJI} **{author.display_name}**",
@@ -1503,7 +1535,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         if len(interaction.client.processed_reply_interactions) > 10_000:
             interaction.client.processed_reply_interactions.pop()
         await interaction.response.defer(ephemeral=True)
-        customer_embed = support_reply_embed(message, owner_id, interaction.created_at)
+        customer_embed = anonymous_support_reply_embed(message, owner_id, interaction.created_at)
         if not await deliver_support_reply(interaction.client, owner_id, customer_embed):
             interaction.client.processed_reply_interactions.discard(interaction.id)
             await interaction.followup.send(
@@ -1514,7 +1546,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
 
         # The copy uses the same content and human-reply colour, but identifies
         # the agent only inside the private support channel.
-        staff_embed = staff_support_reply_embed(
+        staff_embed = attributed_staff_reply_embed(
             message, owner_id, member, interaction.created_at
         )
         await fresh_channel.send(embed=staff_embed)
