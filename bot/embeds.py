@@ -21,6 +21,11 @@ def _base_embed(title: str = "", description: str = "") -> discord.Embed:
     return embed
 
 
+def _add_mailing_address(embed: discord.Embed) -> None:
+    """Add the standard address without duplicating indentation-sensitive calls."""
+    embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
+
+
 # ── Assistance Panel ──────────────────────────────────────────────────────────
 
 def assistance_panel_embed() -> discord.Embed:
@@ -36,7 +41,7 @@ def assistance_panel_embed() -> discord.Embed:
             "Thank you for choosing Delta Air Lines — *Keep Climbing.*"
         ),
     )
-    embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
+    _add_mailing_address(embed)
     embed.set_image(url=DIVIDER_URL)
     return embed
 
@@ -65,7 +70,7 @@ def general_inquiries_welcome(member: discord.Member) -> discord.Embed:
             "The more information you share, the faster our team can assist you."
         ),
     )
-    embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
+    _add_mailing_address(embed)
     embed.set_image(url=DIVIDER_URL)
     return embed
 
@@ -84,7 +89,7 @@ def generic_ticket_welcome(member: discord.Member, label: str, emoji: str) -> di
             "*We appreciate your patience and thank you for flying Delta.*"
         ),
     )
-    embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
+    _add_mailing_address(embed)
     embed.set_image(url=DIVIDER_URL)
     return embed
 
@@ -102,7 +107,7 @@ def ticket_closed_dm(ticket_name: str) -> discord.Embed:
             "*Delta Air Lines — Keep Climbing.*"
         ),
     )
-    embed.add_field(name="📬 Mailing Address", value=MAILING_ADDRESS, inline=False)
+    _add_mailing_address(embed)
     embed.set_image(url=DIVIDER_URL)
     return embed
 
