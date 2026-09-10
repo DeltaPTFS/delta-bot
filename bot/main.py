@@ -304,6 +304,11 @@ def delta_status_emoji(guild: discord.Guild | None, success: bool) -> str:
     return BLUE_ARROW_EMOJI if success else RIGHT_ARROW_EMOJI
 
 
+def deployed_source() -> str:
+    """Return the source revision supplied by Render, or a local fallback."""
+    return os.getenv("RENDER_GIT_COMMIT", "local/unknown")[:12]
+
+
 def get_ticket_owner_id(channel: discord.TextChannel) -> int | None:
     """Return the ticket creator stored in the channel topic."""
     topic = channel.topic or ""
@@ -549,21 +554,6 @@ def attributed_staff_reply_embed(
     embed.color = DELTA_BLUE
     return embed
 
-def staff_support_reply_embed(
-    content: str,
-    customer_id: int | str,
-    author: discord.Member,
-    timestamp: datetime | None = None,
-) -> discord.Embed:
-    """Build the matching staff record with the responsible agent as author."""
-    embed = support_reply_embed(content, customer_id, timestamp)
-    embed.description = embed.description.replace(
-        f"{MESSAGE_EMOJI} **Delta Support Reply**",
-        f"{MESSAGE_EMOJI} **{author.display_name}**",
-        1,
-    )
-    embed.set_author(name=str(author), icon_url=author.display_avatar.url)
-    return embed
 
 async def deliver_support_reply(
     client: discord.Client,
@@ -1301,6 +1291,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         "resolved",
         "revoke",
         "ticket",
+        "version",
     ):
         tree.remove_command(command_name, type=discord.AppCommandType.chat_input)
 
@@ -1352,6 +1343,14 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             return
         await interaction.followup.send(
             embed=success_embed("The private DM Assistance Panel was posted successfully."),
+            ephemeral=True,
+        )
+
+    @tree.command(name="version", description="Show the running bot release and source revision.")
+    @staff_only()
+    async def version(interaction: discord.Interaction) -> None:
+        await interaction.response.send_message(
+            f"Delta Air Lines HelpDesk `{BOT_VERSION}` • source `{deployed_source()}`",
             ephemeral=True,
         )
 
@@ -1870,7 +1869,7 @@ class DeltaBot(commands.Bot):
         log.info(
             "Delta Air Lines HelpDesk %s is online (source %s).",
             BOT_VERSION,
-            os.getenv("RENDER_GIT_COMMIT", "local/unknown")[:12],
+            deployed_source(),
         )
         await self.change_presence(
             activity=discord.Activity(
@@ -2161,6 +2160,11 @@ def main() -> None:
     # Start the health-check server in a background thread
     thread = threading.Thread(target=run_health_server, daemon=True)
     thread.start()
+    log.info(
+        "Starting Delta Air Lines HelpDesk %s (source %s).",
+        BOT_VERSION,
+        deployed_source(),
+    )
     log.info("Health-check server started.")
 
     run_bot_forever(token)

@@ -141,6 +141,38 @@ The bot publishes commands only to `GUILD_ID`, clears its former global commands
 3. Set the **Start Command** to: `python bot/main.py`
 4. Add the `DISCORD_TOKEN` environment variable in the platform dashboard.
 
+#### Render recovery checklist
+
+Use these exact service settings:
+
+```text
+Build Command: pip install -r requirements.txt
+Start Command: python bot/main.py
+Environment: DISCORD_TOKEN=<the current bot token>
+```
+
+After merging an update, choose **Manual Deploy → Clear build cache & deploy**.
+In the deploy logs, verify both of these lines appear:
+
+```text
+Starting Delta Air Lines HelpDesk 2.1.6 (source <merged commit>).
+Synced 8 application command(s) to guild 1538738611988467782.
+Delta Air Lines HelpDesk 2.1.6 is online (source <merged commit>).
+```
+
+If the source hash is not the commit you merged, Render is deploying the wrong
+branch or an older revision. Set the service branch to `main` before redeploying.
+Run `/version` as a support member to verify the release and source from Discord.
+If the bot logs in but does not receive DMs or member information, enable
+**Server Members Intent** and **Message Content Intent** in Discord Developer
+Portal → Applications → the bot → Bot → Privileged Gateway Intents.
+
+The former `PyNaCl is not installed` message only meant Discord voice support
+was unavailable; it did not stop ticket commands. PyNaCl is now installed anyway
+so that warning no longer distracts from actionable deployment errors. Keep only
+one service running with the production `DISCORD_TOKEN`, since two deployments
+using the same bot account can process the same customer event independently.
+
 ### Replit
 
 The repository-level `.replit`, `requirements.txt`, and `runtime.txt` files are
