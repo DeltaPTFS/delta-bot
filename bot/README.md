@@ -21,8 +21,8 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Delta Branding | Red (#C8102E), optional server-owned images, and a consistent footer |
 | Claim State | Support can claim and unclaim repeatedly; claim ownership survives bot restarts |
 | Transcripts | Closed-ticket transcripts are posted to the private transcript channel |
-| Server Migration | Cleans the bot's messages from retired server `1436471549703094477`, then leaves it |
-| Release Updates | Posts and pins each release once in channel `1543674377953087649`; the current release is `2.1.6` |
+| Server Safety | Commands and tickets are locked to server `1538738611988467782`, but the bot never removes itself from a server |
+| Release Updates | Posts and pins each release once in channel `1543674377953087649`; the current release is `2.1.7` |
 
 Versions use `major.minor.patch`. Breaking or especially large releases increase
 the first number, regular feature releases increase the second, and fixes increase
@@ -119,7 +119,9 @@ The active single-file bot keeps its IDs and constants in **`main.py`**:
 
 To add a new ticket category, add an entry to the `TICKET_CONFIG` dictionary in `main.py`. The rest of the bot picks it up automatically.
 
-The bot publishes commands only to `GUILD_ID`, clears its former global commands, leaves other servers, and accepts DM tickets only from members of the authorized server.
+The bot publishes commands only to `GUILD_ID`, clears its former global commands,
+and accepts DM tickets only from members of the authorized server. Other guilds
+remain inert; the bot never automatically leaves a server.
 
 ## DM Ticket Flow
 
@@ -155,14 +157,16 @@ After merging an update, choose **Manual Deploy → Clear build cache & deploy**
 In the deploy logs, verify both of these lines appear:
 
 ```text
-Starting Delta Air Lines HelpDesk 2.1.6 (source <merged commit>).
+Starting Delta Air Lines HelpDesk 2.1.7 (source <merged commit>).
 Synced 8 application command(s) to guild 1538738611988467782.
-Delta Air Lines HelpDesk 2.1.6 is online (source <merged commit>).
+Delta Air Lines HelpDesk 2.1.7 is online (source <merged commit>).
 ```
 
 If the source hash is not the commit you merged, Render is deploying the wrong
 branch or an older revision. Set the service branch to `main` before redeploying.
 Run `/version` as a support member to verify the release and source from Discord.
+You can also open the service's public Render URL; the status page displays the
+same version and source revision without requiring Discord access.
 If the bot logs in but does not receive DMs or member information, enable
 **Server Members Intent** and **Message Content Intent** in Discord Developer
 Portal → Applications → the bot → Bot → Privileged Gateway Intents.
@@ -172,6 +176,16 @@ was unavailable; it did not stop ticket commands. PyNaCl is now installed anyway
 so that warning no longer distracts from actionable deployment errors. Keep only
 one service running with the production `DISCORD_TOKEN`, since two deployments
 using the same bot account can process the same customer event independently.
+
+`bot/main.py` is the only production implementation. The obsolete
+`bot/delta_bot.py` copy was removed so the Render start command cannot silently
+launch stale behavior again.
+
+If the bot was removed from the authorized server, reinvite the application from
+Discord Developer Portal → OAuth2 → URL Generator with the `bot` and
+`applications.commands` scopes. After it rejoins, redeploy once so guild commands
+sync immediately. The bot deliberately never calls Discord's `guild.leave()` API;
+its single-server restriction is enforced by command checks and guild-only sync.
 
 ### Replit
 
