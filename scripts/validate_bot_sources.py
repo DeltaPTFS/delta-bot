@@ -42,7 +42,18 @@ def validate_support_formats() -> None:
             raise ValueError(f"{path}: {key!r} requires non-empty label and message strings")
 
 
+def validate_messages() -> None:
+    path = BOT_DIR / "messages.json"
+    messages = json.loads(path.read_text(encoding="utf-8"))
+    required = {"ticket_claimed"}
+    if not isinstance(messages, dict) or set(messages) != required:
+        raise ValueError(f"{path}: expected exactly these keys: {sorted(required)}")
+    if not all(isinstance(value, str) and value for value in messages.values()):
+        raise ValueError(f"{path}: every message must be a non-empty string")
+
+
 if __name__ == "__main__":
     validate_python_sources()
     validate_support_formats()
-    print("Bot Python syntax, definitions, and support formats are valid.")
+    validate_messages()
+    print("Bot Python syntax, definitions, support formats, and messages are valid.")

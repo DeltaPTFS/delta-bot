@@ -47,14 +47,13 @@ ADMIN_ROLE_ID           = 1539005297417519205
 BOT_COMMAND_ROLE_ID     = STAFF_ROLE_ID
 TRANSCRIPT_CHANNEL_ID   = 1543674377953087649
 UPDATE_CHANNEL_ID       = TRANSCRIPT_CHANNEL_ID
-BOT_VERSION             = "2.1.6"
+BOT_VERSION             = "2.1.8"
 TICKET_CLOSE_DELAY      = 5
 RATING_TIMEOUT          = 15 * 24 * 60 * 60
 DISCORD_RECONNECT_DELAY = 15
 DM_TICKET_OWNER_MARKER  = "Delta DM Ticket Owner:"
 DM_TICKET_CATEGORY_MARKER = "Delta Ticket Category:"
 DM_TICKET_CLAIM_MARKER  = "Delta Ticket Claimed By:"
-LEGACY_GUILD_ID          = 1436471549703094477
 INVITE_URL               = "https://discord.gg/hccQX6nGJw"
 SUPPORT_EMOJI             = "<:Support:1540927430179553321>"
 RIGHT_ARROW_EMOJI         = "<:RArrow:1540951788889575504>"
@@ -63,14 +62,6 @@ WING_PIN_EMOJI            = "<:WingPinLogo:1540927847709802607>"
 MESSAGE_EMOJI             = "<:Message:1544506028752769134>"
 IDENTIFICATION_EMOJI      = "<:Identification:1544505969575198821>"
 CHECKMARK_EMOJI            = "<:CheckMark:1544505870904459264>"
-
-TICKET_CLAIMED_MESSAGE = """<:CheckMark:1544505870904459264> **Ticket Claimed**
-
--# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
-
-> <:Support:1540927430179553321> **Your ticket has been claimed** by a **Delta Support Member.** Please allow them a moment to review your inquiry. If you were **not finished explaining your situation,** feel free to continue providing any additional **details, screenshots, or information** regarding your request.
-
--# Thank you for contacting Delta Support."""
 
 # Serializes history-check-and-send operations within each ticket. Without this,
 # two concurrent gateway deliveries can both check history before either copy is
@@ -103,6 +94,11 @@ SUPPORT_FORMATS: dict[str, str] = {
 }
 CONNECTED_MESSAGE = SUPPORT_FORMATS["connected"]
 
+MESSAGES_PATH = Path(__file__).with_name("messages.json")
+with MESSAGES_PATH.open(encoding="utf-8") as messages_file:
+    _MESSAGES: dict[str, str] = __import__("json").load(messages_file)
+TICKET_CLAIMED_MESSAGE = _MESSAGES["ticket_claimed"]
+
 NON_MEMBER_MESSAGE = """# <:DeltaLogo:1540927958116601980> Delta Air Lines | Direct Messages <:SkyTeamLogo:1540927923618316359>
 
 > <:BArrow:1540951845147639809> **Hey there! It looks like you're currently not in the Delta Air Lines server.**
@@ -127,6 +123,10 @@ This is a **patch update** for the version 2 ticket-system release.
 - Serialized each ticket's relay operation so simultaneous gateway events cannot
   pass duplicate detection together.
 - Render startup logs now identify the running bot version and source commit.
+- Removed automatic server departure and message deletion. Unauthorized servers
+  remain locked out, but the bot can no longer accidentally remove itself.
+- Moved the Ticket Claimed notice into validated JSON so web conflict resolution
+  cannot turn its Markdown into invalid Python syntax.
 
 -# Version format: major.minor.patch • Patch releases increase the final number."""
 
@@ -1881,12 +1881,20 @@ class DeltaBot(commands.Bot):
 
         await self._post_release_update()
 
-        for guild in tuple(self.guilds):
+        authorized_guild = self.get_guild(GUILD_ID)
+        if authorized_guild is None:
+            log.error(
+                "AUTHORIZED SERVER NOT FOUND: invite the bot to guild %s; "
+                "commands remain locked to that guild.",
+                GUILD_ID,
+            )
+        for guild in self.guilds:
             if guild.id != GUILD_ID:
-                log.warning("Leaving unauthorized guild %s (%s).", guild.name, guild.id)
-                if guild.id == LEGACY_GUILD_ID:
-                    await self._delete_legacy_messages(guild)
-                await guild.leave()
+                log.warning(
+                    "Ignoring unauthorized guild %s (%s); no commands are synced there.",
+                    guild.name,
+                    guild.id,
+                )
 
     async def _post_release_update(self) -> None:
         """Post this release once to the update/transcript channel."""
@@ -1924,25 +1932,14 @@ class DeltaBot(commands.Bot):
         except (discord.Forbidden, discord.HTTPException) as exc:
             log.warning("Could not post release update %s: %s", BOT_VERSION, exc)
 
-    async def _delete_legacy_messages(self, guild: discord.Guild) -> None:
-        """Best-effort removal of this bot's history from the explicitly retired server."""
-        if self.user is None:
-            return
-        for channel in guild.text_channels:
-            try:
-                async for message in channel.history(limit=None):
-                    if message.author.id == self.user.id:
-                        await message.delete()
-            except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
-                log.warning("Could not fully clean legacy channel %s: %s", channel.id, exc)
-
     async def on_guild_join(self, guild: discord.Guild) -> None:
-        """Immediately leave every server except the configured target guild."""
+        """Keep unauthorized guilds inert without ever removing the bot itself."""
         if guild.id != GUILD_ID:
-            log.warning("Declining unauthorized guild %s (%s).", guild.name, guild.id)
-            if guild.id == LEGACY_GUILD_ID:
-                await self._delete_legacy_messages(guild)
-            await guild.leave()
+            log.warning(
+                "Joined unauthorized guild %s (%s); commands and tickets are disabled there.",
+                guild.name,
+                guild.id,
+            )
 
     async def on_message(self, message: discord.Message) -> None:
         """Relay customer DMs and claimed support-channel replies."""
@@ -2102,25 +2099,33 @@ def run_health_server() -> None:
   <div class="card">
     <div class="badge"><span class="dot"></span>All Systems Operational</div>
     <h1><span class="airline">Delta Air Lines</span><br>HelpDesk Bot</h1>
-    <p>The Discord support bot is running and actively serving tickets.<br>Keep Climbing.</p>
+    <p>The Discord support bot is running and actively serving tickets.<br>Version __BOT_VERSION__ &bull; Source __SOURCE__<br>Keep Climbing.</p>
     <div class="divider"></div>
   </div>
   <footer>Delta Air Lines &mdash; Automated Service Monitor</footer>
 </body>
 </html>"""
 
-        def do_GET(self) -> None:
+        def _body(self) -> bytes:
+            return self._HTML.replace(
+                b"__BOT_VERSION__", BOT_VERSION.encode("ascii")
+            ).replace(b"__SOURCE__", deployed_source().encode("ascii"))
+
+        def _send_headers(self, body: bytes) -> None:
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(self._HTML)))
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("X-Delta-Bot-Version", BOT_VERSION)
+            self.send_header("X-Render-Git-Commit", deployed_source())
             self.end_headers()
-            self.wfile.write(self._HTML)
+
+        def do_GET(self) -> None:
+            body = self._body()
+            self._send_headers(body)
+            self.wfile.write(body)
 
         def do_HEAD(self) -> None:
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(self._HTML)))
-            self.end_headers()
+            self._send_headers(self._body())
 
         def log_message(self, *args) -> None:
             pass  # Silence HTTP access logs
