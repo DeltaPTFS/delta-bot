@@ -13,7 +13,7 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Private Tickets | Members stay in DMs while staff work from a hidden relay channel |
 | Duplicate Guard | Prevents users from opening multiple simultaneous tickets |
 | Close Ticket | Button *and* `/close` slash command; DMs the user on close |
-| Message Relay | Duplicate events are suppressed; customer messages use customer authors and `/reply` uses a Delta-blue human-response style |
+| Message Relay | Customer DMs and `/reply` output use the same branded Customer Response embed |
 | Agent Privacy | Customer DMs identify replies as Delta Air Lines Support and never expose the individual agent's name |
 | Ticket Reuse | Repeat creation attempts reconnect the customer to their existing ticket instead of opening a duplicate |
 | Staff Commands | `/reply`, `/format`, `/ticket add-customer`, `/ticket add-support`, and `/ticket close` are support role-gated |
@@ -22,7 +22,7 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Claim State | Support can claim and unclaim repeatedly; claim ownership survives bot restarts |
 | Transcripts | Closed-ticket transcripts are posted to the private transcript channel |
 | Server Migration | Cleans the bot's messages from retired server `1436471549703094477`, then leaves it |
-| Release Updates | Posts and pins each release once in channel `1543674377953087649`; the current release is `2.1.5` |
+| Release Updates | Posts and pins each release once in channel `1543674377953087649`; the current release is `2.1.4` |
 
 Versions use `major.minor.patch`. Breaking or especially large releases increase
 the first number, regular feature releases increase the second, and fixes increase
@@ -126,9 +126,9 @@ The bot publishes commands only to `GUILD_ID`, clears its former global commands
 1. DL Leadership posts `/panel`, or a member messages the bot directly.
 2. A panel selection immediately opens the ticket and connects the member in DMs; direct DM users choose one category.
 3. A staff-only relay channel is created. The member never receives access to it.
-4. Each customer DM is copied once to that channel and receives the Delta CheckMark when delivered.
+4. Each customer DM is copied to that channel and receives a branded delivery confirmation.
 5. One support agent claims the ticket. Only that agent can reply until they unclaim it.
-6. The claimed agent uses `/reply message:`; the customer sees Delta Support while the private staff copy identifies the agent. Ordinary ticket-channel chat remains internal.
+6. The claimed agent uses `/reply message:`; ordinary ticket-channel chat remains internal.
 
 ---
 
