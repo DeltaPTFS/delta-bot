@@ -12,6 +12,7 @@ Requires a .env file with:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import threading
@@ -46,7 +47,7 @@ ADMIN_ROLE_ID           = 1539005297417519205
 BOT_COMMAND_ROLE_ID     = STAFF_ROLE_ID
 TRANSCRIPT_CHANNEL_ID   = 1543674377953087649
 UPDATE_CHANNEL_ID       = TRANSCRIPT_CHANNEL_ID
-BOT_VERSION             = "2.1.4"
+BOT_VERSION             = "2.1.3"
 TICKET_CLOSE_DELAY      = 5
 RATING_TIMEOUT          = 15 * 24 * 60 * 60
 DISCORD_RECONNECT_DELAY = 15
@@ -75,10 +76,7 @@ PANEL_MESSAGE = """## <:DeltaLogo:1540927958116601980> Contact Us | <:SkyTeamLog
 
 SUPPORT_FORMATS_PATH = Path(__file__).with_name("support_formats.json")
 with SUPPORT_FORMATS_PATH.open(encoding="utf-8") as format_file:
-    # Resolve the standard-library loader at this exact use site. This keeps a
-    # web conflict resolution from accidentally dropping a distant import and
-    # producing a startup-time ``NameError: json is not defined`` on Render.
-    _SUPPORT_FORMAT_DATA: dict[str, dict[str, str]] = __import__("json").load(format_file)
+    _SUPPORT_FORMAT_DATA: dict[str, dict[str, str]] = json.load(format_file)
 
 SUPPORT_FORMAT_LABELS: dict[str, str] = {
     key: value["label"] for key, value in _SUPPORT_FORMAT_DATA.items()
@@ -104,9 +102,9 @@ UPDATE_MESSAGE = f"""# <:DeltaLogo:1540927958116601980> Delta Support Bot — Up
 This is a **patch update** for the version 2 ticket-system release.
 
 ## What's Fixed
-- Fixed the Render startup failure caused by a missing JSON loader import.
-- Made support-format loading resilient to web conflict edits around imports.
-- Kept all 12 anonymous, branded notices available through `/format`.
+- Removed the inaccurate offline notice and its `/format` option.
+- Reworded temporary connection failures without claiming support is offline.
+- Kept the remaining 12 anonymous, branded notices in `/format`.
 
 -# Version format: major.minor.patch • Patch releases increase the final number."""
 
@@ -455,13 +453,6 @@ async def relay_customer_message(message: discord.Message, channel: discord.Text
     await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
     await message.add_reaction("<:BArrow:1540951845147639809>")
 
-def support_reply_embed(
-    content: str,
-    customer_id: int | str,
-    timestamp: datetime | None = None,
-) -> discord.Embed:
-    """Use the exact same conversation format for support-to-customer replies."""
-    return customer_response_embed(content, customer_id, timestamp)
 
 def customer_response_embed(
     content: str,
@@ -2066,9 +2057,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    # Keep this stable launcher tiny so future pull-request conflicts can be
-    # resolved in GitHub's web editor. The active implementation lives in the
-    # additive delta_bot module, which does not conflict with the legacy file.
-    from delta_bot import main as run_current_bot
-
-    run_current_bot()
+    main()

@@ -1,4 +1,4 @@
-# ✈️ Delta Air Lines — HelpDesk Discord Bot
+# Delta Air Lines — HelpDesk Discord Bot
 
 A professional, branded Discord support bot for Delta Air Lines.  
 Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, private ticket channels, and Delta Air Lines branding throughout.
@@ -124,7 +124,7 @@ The bot publishes commands only to `GUILD_ID`, clears its former global commands
 ## DM Ticket Flow
 
 1. DL Leadership posts `/panel`, or a member messages the bot directly.
-2. A panel selection sends a private confirmation to the member's DMs; direct DM users choose a category there.
+2. A panel selection immediately opens the ticket and connects the member in DMs; direct DM users choose one category.
 3. A staff-only relay channel is created. The member never receives access to it.
 4. Each customer DM is copied to that channel and receives a branded delivery confirmation.
 5. One support agent claims the ticket. Only that agent can reply until they unclaim it.
@@ -181,4 +181,4 @@ new Discord CDN URLs. Both variables are optional.
 
 ---
 
-*Delta Air Lines — Keep Climbing ✈️*
+*Delta Air Lines — Keep Climbing*
