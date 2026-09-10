@@ -1,0 +1,23 @@
+name: Python syntax
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate Python syntax
+        run: python -m compileall -q bot
+      - name: Validate support formats
+        run: python -m json.tool bot/support_formats.json >/dev/null
+      - name: Validate bot messages
+        run: python -m json.tool bot/messages.json >/dev/null
+      - name: Validate source structure
+        run: python scripts/validate_bot_sources.py
