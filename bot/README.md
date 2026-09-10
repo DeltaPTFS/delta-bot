@@ -13,7 +13,7 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Private Tickets | Members stay in DMs while staff work from a hidden relay channel |
 | Duplicate Guard | Prevents users from opening multiple simultaneous tickets |
 | Close Ticket | Button *and* `/close` slash command; DMs the user on close |
-| Message Relay | Duplicate events are suppressed; customer messages and Delta-blue human replies are recorded once |
+| Message Relay | Per-ticket locking suppresses concurrent duplicate events; customer messages and Delta-blue human replies are recorded once |
 | Agent Privacy | Customer DMs identify replies as Delta Air Lines Support; only the private ticket record identifies the agent |
 | Ticket Reuse | Repeat creation attempts reconnect the customer to their existing ticket instead of opening a duplicate |
 | Staff Commands | `/reply`, `/format`, `/ticket add-customer`, `/ticket add-support`, and `/ticket close` are support role-gated |
@@ -22,7 +22,7 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Claim State | Support can claim and unclaim repeatedly; claim ownership survives bot restarts |
 | Transcripts | Closed-ticket transcripts are posted to the private transcript channel |
 | Server Migration | Cleans the bot's messages from retired server `1436471549703094477`, then leaves it |
-| Release Updates | Posts and pins each release once in channel `1543674377953087649`; the current release is `2.1.5` |
+| Release Updates | Posts and pins each release once in channel `1543674377953087649`; the current release is `2.1.6` |
 
 Versions use `major.minor.patch`. Breaking or especially large releases increase
 the first number, regular feature releases increase the second, and fixes increase

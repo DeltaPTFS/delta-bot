@@ -47,7 +47,7 @@ ADMIN_ROLE_ID           = 1539005297417519205
 BOT_COMMAND_ROLE_ID     = STAFF_ROLE_ID
 TRANSCRIPT_CHANNEL_ID   = 1543674377953087649
 UPDATE_CHANNEL_ID       = TRANSCRIPT_CHANNEL_ID
-BOT_VERSION             = "2.1.5"
+BOT_VERSION             = "2.1.6"
 TICKET_CLOSE_DELAY      = 5
 RATING_TIMEOUT          = 15 * 24 * 60 * 60
 DISCORD_RECONNECT_DELAY = 15
@@ -71,6 +71,11 @@ TICKET_CLAIMED_MESSAGE = """<:CheckMark:1544505870904459264> **Ticket Claimed**
 > <:Support:1540927430179553321> **Your ticket has been claimed** by a **Delta Support Member.** Please allow them a moment to review your inquiry. If you were **not finished explaining your situation,** feel free to continue providing any additional **details, screenshots, or information** regarding your request.
 
 -# Thank you for contacting Delta Support."""
+
+# Serializes history-check-and-send operations within each ticket. Without this,
+# two concurrent gateway deliveries can both check history before either copy is
+# posted and then create duplicate embeds.
+CUSTOMER_RELAY_LOCKS: dict[int, asyncio.Lock] = {}
 
 PANEL_MESSAGE = """## <:DeltaLogo:1540927958116601980> Contact Us | <:SkyTeamLogo:1540927923618316359>
 -# <:Blank:1540951736062312529> <:Connection:1540927881683669013>  1021 N Outer Loop Rd, East Point, GA, 30344.
@@ -119,6 +124,9 @@ This is a **patch update** for the version 2 ticket-system release.
 - Private ticket records identify the support member who used `/reply`.
 - Human support replies use matching Delta-blue embeds and CheckMark confirmations.
 - Customers receive a private, anonymous notice when their ticket is claimed.
+- Serialized each ticket's relay operation so simultaneous gateway events cannot
+  pass duplicate detection together.
+- Render startup logs now identify the running bot version and source commit.
 
 -# Version format: major.minor.patch • Patch releases increase the final number."""
 
@@ -466,15 +474,24 @@ async def relay_customer_message(message: discord.Message, channel: discord.Text
         timestamp=message.created_at,
         author=message.author,
     )
-    bot_member = channel.guild.me
-    async for previous in channel.history(limit=20):
-        if bot_member is None or previous.author.id != bot_member.id or not previous.embeds:
-            continue
-        prior = previous.embeds[0]
-        if prior.description == embed.description and prior.timestamp == embed.timestamp:
-            return False
-    await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-    await message.add_reaction(CHECKMARK_EMOJI)
+    lock = CUSTOMER_RELAY_LOCKS.setdefault(channel.id, asyncio.Lock())
+    async with lock:
+        bot_member = channel.guild.me
+        async for previous in channel.history(limit=20):
+            if bot_member is None or previous.author.id != bot_member.id or not previous.embeds:
+                continue
+            prior = previous.embeds[0]
+            if prior.description == embed.description and prior.timestamp == embed.timestamp:
+                return False
+        await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+
+    # A reaction is only an acknowledgement. If Discord rate-limits or rejects
+    # it, the already-delivered support message must not be treated as failed and
+    # retried (which previously contributed to duplicate-looking behavior).
+    try:
+        await message.add_reaction(CHECKMARK_EMOJI)
+    except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+        log.warning("Relayed DM %s but could not add CheckMark reaction: %s", message.id, exc)
     return True
 
 def customer_response_embed(
@@ -515,21 +532,6 @@ def anonymous_support_reply_embed(
     embed.set_author(name="Delta Air Lines Support")
     return embed
 
-def staff_support_reply_embed(
-    content: str,
-    customer_id: int | str,
-    author: discord.Member,
-    timestamp: datetime | None = None,
-) -> discord.Embed:
-    """Build the matching staff record with the responsible agent as author."""
-    embed = support_reply_embed(content, customer_id, timestamp)
-    embed.description = embed.description.replace(
-        f"{MESSAGE_EMOJI} **Delta Support Reply**",
-        f"{MESSAGE_EMOJI} **{author.display_name}**",
-        1,
-    )
-    embed.set_author(name=str(author), icon_url=author.display_avatar.url)
-    return embed
 
 def attributed_staff_reply_embed(
     content: str,
@@ -547,6 +549,21 @@ def attributed_staff_reply_embed(
     embed.color = DELTA_BLUE
     return embed
 
+def staff_support_reply_embed(
+    content: str,
+    customer_id: int | str,
+    author: discord.Member,
+    timestamp: datetime | None = None,
+) -> discord.Embed:
+    """Build the matching staff record with the responsible agent as author."""
+    embed = support_reply_embed(content, customer_id, timestamp)
+    embed.description = embed.description.replace(
+        f"{MESSAGE_EMOJI} **Delta Support Reply**",
+        f"{MESSAGE_EMOJI} **{author.display_name}**",
+        1,
+    )
+    embed.set_author(name=str(author), icon_url=author.display_avatar.url)
+    return embed
 
 async def deliver_support_reply(
     client: discord.Client,
@@ -1850,7 +1867,11 @@ class DeltaBot(commands.Bot):
 
     async def on_ready(self) -> None:
         log.info("Logged in as %s (ID: %s)", self.user, self.user.id if self.user else "unknown")
-        log.info("Delta Air Lines HelpDesk is online and ready.")
+        log.info(
+            "Delta Air Lines HelpDesk %s is online (source %s).",
+            BOT_VERSION,
+            os.getenv("RENDER_GIT_COMMIT", "local/unknown")[:12],
+        )
         await self.change_presence(
             activity=discord.Activity(
                 type=discord.ActivityType.watching,
