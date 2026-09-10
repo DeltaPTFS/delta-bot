@@ -17,6 +17,7 @@ import logging
 import os
 import threading
 import time
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import aiohttp
@@ -35,7 +36,7 @@ DELTA_RED       = 0xC8102E
 FOOTER_TEXT     = "Delta Air Lines • Keep Climbing"
 MAILING_ADDRESS = "P.O. Box 20980, Department 980, Atlanta, GA 30320-2980"
 
-BANNER_URL = os.getenv("BANNER_URL", "")
+BANNER_URL = os.getenv('BANNER_URL', '')
 DIVIDER_URL = os.getenv("DIVIDER_URL", "")
 
 GUILD_ID                = 1538738611988467782
@@ -55,8 +56,14 @@ DM_TICKET_CATEGORY_MARKER = "Delta Ticket Category:"
 DM_TICKET_CLAIM_MARKER  = "Delta Ticket Claimed By:"
 LEGACY_GUILD_ID          = 1436471549703094477
 INVITE_URL               = "https://discord.gg/hccQX6nGJw"
-PANEL_BANNER_URL         = "https://cdn.discordapp.com/attachments/1539651325615153233/1543872830947590154/delta_banner.jpg?ex=6a96731e&is=6a95219e&hm=d04ff3b4ed550e64196f40c79bb29656454fc102729c758a4a7c64f53462d5c7&"
-PANEL_BOTTOM_URL         = "https://cdn.discordapp.com/attachments/1539651325615153233/1543878240916213861/Delta_Airlines_Banner_Bottom.png?ex=6a967828&is=6a9526a8&hm=923dcd5f959e565e8d8681504d9ba3b9439bb75c6eda5a0e32c8f2966f46db89&"
+SUPPORT_EMOJI             = "<:Support:1540927430179553321>"
+RIGHT_ARROW_EMOJI         = "<:RArrow:1540951788889575504>"
+BLUE_ARROW_EMOJI          = "<:BArrow:1540951845147639809>"
+WING_PIN_EMOJI            = "<:WingPinLogo:1540927847709802607>"
+MESSAGE_EMOJI             = "<:Message:1544506028752769134>"
+IDENTIFICATION_EMOJI      = "<:Identification:1544505969575198821>"
+PANEL_BANNER_URL         = 'https://cdn.discordapp.com/attachments/1539651325615153233/1543872830947590154/delta_banner.jpg?ex=6a96731e&is=6a95219e&hm=d04ff3b4ed550e64196f40c79bb29656454fc102729c758a4a7c64f53462d5c7&'
+PANEL_BOTTOM_URL         = 'https://cdn.discordapp.com/attachments/1539651325615153233/1543878240916213861/Delta_Airlines_Banner_Bottom.png?ex=6a967828&is=6a9526a8&hm=923dcd5f959e565e8d8681504d9ba3b9439bb75c6eda5a0e32c8f2966f46db89&'
 
 SUPPORT_EMOJI             = "<:Support:1540927430179553321>"
 RIGHT_ARROW_EMOJI         = "<:RArrow:1540951788889575504>"
@@ -79,10 +86,135 @@ CONNECTED_MESSAGE = """<:Support:1540927430179553321> **You are now connected.**
 -# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
 
 > <:DeltaLogo:1540927958116601980> **You have officially been connected to our Delta Support Agency.** If you have not already done so, **please state your inquiry below.**
+-# Thank you for contacting Delta Support."""
+
+SUPPORT_UNAVAILABLE_MESSAGE = """<:Support:1540927430179553321> **Support Unavailable**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:DeltaLogo:1540927958116601980> **It seems our live representatives** are **curently offline.** We ask you give us a **moment,** they will get back to you as **soon** as **possible.**
 
 -# Thank you for contacting Delta Support."""
 
-NON_MEMBER_MESSAGE = """# <:DeltaLogo:1540927958116601980> Delta Air Lines | Direct Messages <:SkyTeamLogo:1540927923618316359>
+SUPPORT_FORMATS: dict[str, tuple[str, str]] = {
+    'connected': ('Connected', CONNECTED_MESSAGE),
+    'unavailable': ('Support Unavailable', SUPPORT_UNAVAILABLE_MESSAGE),
+    'skymiles': ('Welcome to SkyMiles', '''## <:WingPinLogo:1540927847709802607> **Welcome to SkyMiles!**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:DeltaLogo:1540927958116601980> **Welcome to SkyMiles!** Delta's Loyalty Program where you can **earn miles** from **flights, credit cards, partners,** and redeem them for **rewards** like **travel upgrades, perks,** and **so much more.**
+
+> <:RArrow:1540951788889575504> **For more information** on **[SkyMiles Medallions,](https://discord.com/channels/1538738611988467782/1541189809689726986) [Choice Benefits,](https://discord.com/channels/1538738611988467782/1541156846579089519) and [American Express.](https://discord.com/channels/1538738611988467782/1541188270325637150)** Please head over to our **server,** or click the **provided links.**
+
+'inactive': ('Inactive Inquiry', '''<:Timer:1540927345324728400> **It seems your inquiry has been inactive.**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:DeltaLogo:1540927958116601980> **It seems your inquiry** has been **inactive** for an **extended period of time.**
+
+> <:RArrow:1540951788889575504> **Due to conserving resources,** if a **response** is not provided **within** the **next 24 hours,** this **inquiry** will be deemed **resolved,** and therefore **closed.**
+
+'resolved': ('Inquiry Resolved', '''<:Support:1540927430179553321> **It seems your inquiry has been resolved.**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:WingPinLogo:1540927847709802607> **If you need further assistance, please let us know.** If not, we **thank you** for using our Support system and have a great day!
+
+'partnership_denied': ('Partnership Denied', '''<:Support:1540927430179553321> **Your Partnership Status has been updated.**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:DeltaLogo:1540927958116601980> **Hello, our External Affairs Office has officially reviewed your application**
+
+> **After a thorough review of your request,** it has **unfortunately** been **__denied.__**
+-# *We truly thank you for filling out an application, and for showing interest in partnering with our airline. As you are the reason we are able to connect our passengers.*
+
+> <:WingPinLogo:1540927847709802607> **We thank you for filling out an application,** if you would like information on why your request was denied, please let us know **as soon as possible.**
+
+'partnership_accepted': ('Partnership Accepted', '''<:Support:1540927430179553321> **Your Partnership Status has been updated.**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:DeltaLogo:1540927958116601980> **Hello, our External Affairs Office has officially reviewed your application**
+
+> **After a thorough review of your request,** it has **officially** been **__accepted!__**
+-# *We truly thank you for filling out an application, and for showing interest in partnering with our airline. As you are the reason we are able to connect our passengers.*
+
+> <:WingPinLogo:1540927847709802607> **Please inform us as soon as possible** when you are able to post our advertisement. It will be provided below, and we ask that **both messages are done with an @/everyone ping.**
+'direct_entry': ('Direct Entry Application', '''<:Support:1540927430179553321> **Direct Entry Application**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+<:WingPinLogo:1540927847709802607> **Thank you** for your interest in applying at **Delta Air Lines!** Your interest in applying means **a lot** to our team of **talented** individuals who **work hard** every day to **grow our airline.**
+> <:Nametag:1541175704622993428> **Individuals interested in applying** are asked to fill out a set of __important__ documentation for review from our **Human Resources.**
+
+> **CV - Resume**
+-# *A Comprehensive Summary outlining your endeavors inside of Ro-aviation. Including prior experience, key skills, and other relevant industry information.*
+
+> **Statement Of Intent**
+-# *A formal message to Delta Air lines on why you would make an excellent candidate toward our future expansion goals.*
+
+> **Which Department are you applying for, why?**
+-# *A detailed and thoughtful explanation on why you are applying for a specific department, including what interests you in here, how it relates to your own personal goals, and why you choose us specifically for employment.*
+
+<:Warning:1540926913445494814> **All Applications** are expected to reflect a **high standard** by all applicants. Including **a bare minimum** of **3 sentences** per **response-needed question** and **a legitimate CV - Resume.**
+'application_submitted': ('Application Submitted', '''<:Support:1540927430179553321> **Your application has been officially submitted.**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:DeltaLogo:1540927958116601980> **Hello, our Recruitment - Talent Department has officially reviewed your application**
+
+> **After a thorough review of your application,** it has **officially** been **__accepted!__**
+-# *We truly thank you for filling out an application, and for showing interest in working at our airline. As you are the reason we are able to operate.*
+
+> <:WingPinLogo:1540927847709802607> **Please take a moment and join our Crew Server.** Once this is complete, follow the instructions posted in order to be entered into our **Database** and gain access to the rest of the Server.
+
+'application_denied': ('Application Denied', '''<:Support:1540927430179553321> **Your Application Status has been updated.**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:DeltaLogo:1540927958116601980> **Hello, our Recruitment - Talent Department has officially reviewed your application**
+
+> **After a thorough review of your application,** it has **unfortunately** been **__denied.__**
+-# *We truly thank you for filling out an application, and for showing interest in working at our airline. As you are the reason we are able to operate.*
+
+> <:WingPinLogo:1540927847709802607> **We are very sorry for rejecting your application,** this may be due to one reason or another. **If you would like feedback on why your application was denied,** please ask at your **earliest convenience.**
+
+'leadership': ('Leadership Application', '''<:Support:1540927430179553321> **Leadership Application**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980
+
+> <:DeltaLogo:1540927958116601980> **Thank you** for your interest in applying at **Delta Air Lines!** Below, we have provided a full list of all Leadership positions avaliable.
+
+> <:BArrow:1540951845147639809> **Chief of Operations -** [AVAL]
+> <:BArrow:1540951845147639809> **Chairman Delta Tech-Ops -** [AVAL]
+> <:BArrow:1540951845147639809> **Chief Technology Officer -** [N/A]
+> <:BArrow:1540951845147639809> **Chief Finnancial Officer -** [N/A]
+> <:BArrow:1540951845147639809> **Chief People Officer -** [AVAL]
+> <:BArrow:1540951845147639809> **Chief Marketing Officer -** [N/A]
+> <:BArrow:1540951845147639809> **Chief Communications Officer -** [AVAL]
+> <:BArrow:1540951845147639809> **Executive Vice President -** [AVAL]
+> <:BArrow:1540951845147639809> **External Affairs Officer -** [AVAL]
+> <:BArrow:1540951845147639809> **SVP, Flight Deck -** [N/A]
+> <:BArrow:1540951845147639809> **SVP, Inflight Services -** [N/A]
+> <:BArrow:1540951845147639809> **SVP, Ground Operations -** [AVAL]
+'hr': ('HR Application', '''<:Support:1540927430179553321> **HR Application**
+
+-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.
+
+> <:DeltaLogo:1540927958116601980> **Below,** we have provided a **full** list of **all** avaliable **Human Resources Positions.** If you would like to proceed with applying, we encourage you to and will assist you **right away.**
+
+**Human Resources - Delta Air Lines**
+
+> <:BArrow:1540951845147639809> **Delta Techical Operations -** [AVAL]
+> <:BArrow:1540951845147639809> **SVP Flight Operations -** [AVAL]
+> <:BArrow:1540951845147639809> **SVP Inflight Services -** [AVAL]
+> <:BArrow:1540951845147639809> **SVP Ground Operations -** [AVAL]
+> <:BArrow:1540951845147639809> **Department Overseer -** [AVAL]
+> <:BArrow:1540951845147639809> **Flight Dispatcher -** [AVAL]'''},
+
+NON_MEMBER_MESSAGE = '''# <:DeltaLogo:1540927958116601980> Delta Air Lines | Direct Messages <:SkyTeamLogo:1540927923618316359>
 
 > <:BArrow:1540951845147639809> **Hey there! It looks like you're currently not in the Delta Air Lines server.**
 
@@ -91,9 +223,9 @@ If you'd like to join our community, click the **Join Delta Air Lines** button b
 <:Support:1540927430179553321> **Need Assistance?**
 If you'd like to contact our team or create a support ticket, click the **Create Ticket** button below.
 
-<:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines.**"""
+<:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines.**'''
 
-UPDATE_MESSAGE = f"""# <:DeltaLogo:1540927958116601980> Delta Support Bot — Update {BOT_VERSION}
+UPDATE_MESSAGE = f'''# <:DeltaLogo:1540927958116601980> Delta Support Bot — Update {BOT_VERSION}
 
 This is a **patch update** for the version 2 ticket-system release.
 
@@ -105,6 +237,7 @@ This is a **patch update** for the version 2 ticket-system release.
 - Buttons and rating controls now use real component emoji so raw IDs stay hidden.
 - Removed custom emoji markup from UI locations that Discord cannot render.
 
+-# Version format: major.minor.patch • Patch releases increase the final number.'''
 -# Version format: major.minor.patch • Patch releases increase the final number."""
 
 # Each key maps to a ticket category. Add new rows here to add new categories.
@@ -152,8 +285,6 @@ def _base_embed(title: str = "", description: str = "") -> discord.Embed:
 def _set_brand_image(embed: discord.Embed, url: str) -> None:
     if url:
         embed.set_image(url=url)
-
-
 def assistance_panel_banner_embed() -> discord.Embed:
     embed = discord.Embed(color=DELTA_RED)
     _set_brand_image(embed, BANNER_URL)
@@ -164,13 +295,13 @@ def assistance_panel_embed() -> discord.Embed:
     embed = _base_embed(
         title="<:DeltaLogo:1540927958116601980>  Delta Air Lines — HelpDesk",
         description=(
-            "Welcome to the **Delta Air Lines Support Centre**.\n\n"
-            "Our dedicated team is here to assist you with any questions, "
-            "concerns, or requests you may have. Select the category that best "
-            "matches your request below.\n\n"
-            "For your privacy, the conversation will not take place in this channel. "
-            "The bot will send you a direct message asking you to confirm the ticket, "
-            "and all further communication will remain in your DMs."
+            'Welcome to the **Delta Air Lines Support Centre**.\n\n'
+            'Our dedicated team is here to assist you with any questions, '
+            'concerns, or requests you may have. Select the category that best '
+            'matches your request below.\n\n'
+            'For your privacy, the conversation will not take place in this channel. '
+            'The bot will send you a direct message asking you to confirm the ticket, '
+            'and all further communication will remain in your DMs.'
         ),
     )
     embed.add_field(
@@ -284,14 +415,14 @@ def connected_embed() -> discord.Embed:
 
 
 async def download_panel_asset(url: str, filename: str) -> discord.File:
-    """Download a configured panel image so Discord displays it without a raw URL."""
+    '''Download a configured panel image so Discord displays it without a raw URL.'''
     timeout = aiohttp.ClientTimeout(total=20)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         async with session.get(url) as response:
             response.raise_for_status()
             data = await response.read()
     if not data:
-        raise ValueError(f"Panel asset {filename} was empty.")
+        raise ValueError(f'Panel asset {filename} was empty.')
     return discord.File(io.BytesIO(data), filename=filename)
 # ════════════════════════════════════════════════════════════════════════════════
 # UTILITIES
@@ -305,6 +436,19 @@ def is_admin(member: discord.Member) -> bool:
     return any(role.id == ADMIN_ROLE_ID for role in member.roles)
 
 
+def delta_status_emoji(guild: discord.Guild | None, success: bool) -> str:
+    """Resolve the server's Delta check/X emoji, with branded arrow fallbacks."""
+    preferred_names = (
+        ("deltacheckmark", "checkmark", "deltacheck", "check")
+        if success else
+        ("deltax", "x", "deltacross", "cross")
+    )
+    if guild is not None:
+        emojis = {emoji.name.casefold(): emoji for emoji in guild.emojis}
+        for name in preferred_names:
+            if emoji := emojis.get(name):
+                return str(emoji)
+    return BLUE_ARROW_EMOJI if success else RIGHT_ARROW_EMOJI
 def get_ticket_owner_id(channel: discord.TextChannel) -> int | None:
     """Return the ticket creator stored in the channel topic."""
     topic = channel.topic or ""
@@ -348,6 +492,20 @@ def set_topic_value(topic: str, marker: str, value: str | None) -> str:
     if value is not None:
         lines.append(f"{marker} {value}")
     return "\n".join(lines)
+
+
+def toggle_ticket_claim(topic: str, member_id: int) -> tuple[str, bool]:
+    """Return the next claim topic and whether this action is an unclaim.
+
+    The topic is the only source of truth, so this remains restart-safe and can
+    be applied repeatedly without relying on a particular button/view instance.
+    """
+    claimed_id = get_topic_value(topic, DM_TICKET_CLAIM_MARKER)
+    if claimed_id is not None and claimed_id != str(member_id):
+        raise ValueError("This ticket has already been claimed by another support agent.")
+    unclaiming = claimed_id == str(member_id)
+    next_claim = None if unclaiming else str(member_id)
+    return set_topic_value(topic, DM_TICKET_CLAIM_MARKER, next_claim), unclaiming
 
 
 async def create_dm_ticket_channel(
@@ -454,6 +612,22 @@ def relay_description(message: discord.Message) -> str:
 
 
 async def relay_customer_message(message: discord.Message, channel: discord.TextChannel) -> None:
+embed = customer_response_embed(
+    content=relay_description(message),
+    customer_id=message.author.id,
+    timestamp=message.created_at,
+)
+    await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+    await message.add_reaction("<:BArrow:1540951845147639809>")
+
+
+def customer_response_embed(
+    content: str,
+    customer_id: int | str,
+    timestamp: datetime | None = None,
+) -> discord.Embed:
+    """Build the shared customer/support conversation format."""
+    safe_content = content if len(content) <= 3500 else f"{content[:3497]}..."
     embed = _base_embed(
         title="<:Support:1540927430179553321>  New Customer Message",
         description=relay_description(message),
@@ -466,27 +640,34 @@ async def relay_customer_message(message: discord.Message, channel: discord.Text
     await message.add_reaction("<:BArrow:1540951845147639809>")
 
 
-async def relay_support_message(
+def support_reply_embed(
+    content: str,
+    customer_id: int | str,
+    timestamp: datetime | None = None,
+) -> discord.Embed:
+    """Use the exact same conversation format for support-to-customer replies."""
+    return customer_response_embed(content, customer_id, timestamp)
+
+
+async def deliver_support_reply(
     client: discord.Client,
-    message: discord.Message,
     owner_id: str,
-) -> None:
+    embed: discord.Embed,
+) -> bool:
+    """Deliver exactly one reply embed to the ticket owner's DMs."""
     try:
         user = client.get_user(int(owner_id)) or await client.fetch_user(int(owner_id))
         embed = _base_embed(
             title="<:Support:1540927430179553321>  Delta Support Reply",
             description=relay_description(message),
         )
-        # Never expose the individual agent's identity to the customer. Using the
-        # custom emoji's CDN image as the author icon renders the Support badge
-        # without leaking the raw emoji snowflake into the displayed text.
         embed.set_author(
-            name="Delta Air Lines Support",
-            icon_url="https://cdn.discordapp.com/emojis/1540927430179553321.png",
+            name='Delta Air Lines Support',
+            icon_url='https://cdn.discordapp.com/emojis/1540927430179553321.png',
         )
         embed.add_field(
-            name="Private Support Conversation",
-            value="Reply directly in this DM to send another message to your assigned support agent.",
+            name='Private Support Conversation',
+            value='Reply directly in this DM to send another message to your assigned support agent.',
             inline=False,
         )
         _set_brand_image(embed, DIVIDER_URL)
@@ -877,29 +1058,47 @@ class TicketActionView(discord.ui.View):
             )
             return
 
+        await interaction.response.defer(ephemeral=True)
+
         # Serialise claim changes per channel so two agents cannot claim the same
-        # ticket at the same time.
+        # ticket at the same time. Fetch the channel before every change instead
+        # of trusting Discord's local topic cache; a stale cached claim marker was
+        # what prevented agents from reclaiming a ticket immediately after an
+        # unclaim.
         lock = self._claim_locks.setdefault(channel.id, asyncio.Lock())
         async with lock:
-            topic = channel.topic or ""
-            claimed_id = get_topic_value(topic, DM_TICKET_CLAIM_MARKER)
-            owner_id = get_topic_value(topic, DM_TICKET_OWNER_MARKER)
-            if claimed_id is not None and claimed_id != str(member.id):
-                await interaction.response.send_message(
-                    embed=error_embed("This ticket has already been claimed by another support agent."),
+            try:
+                fresh_channel = await channel.guild.fetch_channel(channel.id)
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                await interaction.followup.send(
+                    embed=error_embed(f"I could not refresh this ticket: {exc}"),
+                    ephemeral=True,
+                )
+                return
+            if not isinstance(fresh_channel, discord.TextChannel):
+                await interaction.followup.send(
+                    embed=error_embed("This is no longer a valid ticket channel."),
                     ephemeral=True,
                 )
                 return
 
-            unclaiming = claimed_id == str(member.id)
-            new_claim = None if unclaiming else str(member.id)
-            await channel.edit(
-                topic=set_topic_value(topic, DM_TICKET_CLAIM_MARKER, new_claim),
+            topic = fresh_channel.topic or ""
+            owner_id = get_topic_value(topic, DM_TICKET_OWNER_MARKER)
+            try:
+                new_topic, unclaiming = toggle_ticket_claim(topic, member.id)
+            except ValueError as exc:
+                await interaction.followup.send(
+                    embed=error_embed(str(exc)),
+                    ephemeral=True,
+                )
+                return
+            fresh_channel = await fresh_channel.edit(
+                topic=new_topic,
                 reason=f"Ticket {'unclaimed' if unclaiming else 'claimed'} by {member}",
             )
 
         if unclaiming:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=success_embed("You have unclaimed this ticket."), ephemeral=True
             )
             status_embed = _base_embed(
@@ -912,7 +1111,7 @@ class TicketActionView(discord.ui.View):
                 "Another agent can now assist you."
             )
         else:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=success_embed("You have claimed this ticket."), ephemeral=True
             )
             status_embed = _base_embed(
@@ -924,7 +1123,7 @@ class TicketActionView(discord.ui.View):
             )
 
         _set_brand_image(status_embed, DIVIDER_URL)
-        await channel.send(embed=status_embed)
+        await fresh_channel.send(embed=status_embed)
         if interaction.message is not None:
             await interaction.message.edit(view=TicketActionView(claimed=not unclaiming))
         if unclaiming:
@@ -934,7 +1133,7 @@ class TicketActionView(discord.ui.View):
                 owner = interaction.client.get_user(int(owner_id)) or await interaction.client.fetch_user(int(owner_id))
                 await owner.send(CONNECTED_MESSAGE)
             except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
-                log.warning("Could not send connected message to %s: %s", owner_id, exc)
+                log.warning('Could not send connected message to %s: %s', owner_id, exc)
 
     # ── Close ──────────────────────────────────────────────────────────────────────
     @discord.ui.button(
@@ -1057,7 +1256,7 @@ class DMAssistancePanelView(discord.ui.View):
 
 
 class ServerAssistanceSelect(discord.ui.Select):
-    """Public panel selector that moves the confirmation into the user's DMs."""
+    """Public panel selector that immediately opens or reuses a DM ticket."""
 
     def __init__(self, bot: "DeltaBot") -> None:
         self.bot = bot
@@ -1079,38 +1278,51 @@ class ServerAssistanceSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction) -> None:
         selected_key = self.values[0]
         cfg = TICKET_CONFIG[selected_key]
+        await interaction.response.defer(ephemeral=True)
         prompt = _base_embed(
             title="<:DeltaLogo:1540927958116601980>  Confirm Your Private Support Request",
             description=(
-                f"You selected **{cfg['label']}** from the Delta Assistance Panel.\n\n"
-                "Would you like us to create a private support ticket? Your conversation "
-                "will take place entirely in this DM and will only be shared with the "
-                "appropriate Delta Support team."
+                f'You selected **{cfg['"'"'label'"'"']}** from the Delta Assistance Panel.\n\n'
+                'Would you like us to create a private support ticket? Your conversation '
+                'will take place entirely in this DM and will only be shared with the '
+                'appropriate Delta Support team.'
             ),
         )
         prompt.add_field(
-            name="Selected Department",
-            value=f"{cfg['emoji']} {cfg['label']}",
+            name='Selected Department',
+            value=f'{cfg['"'"'emoji'"'"']} {cfg['"'"'label'"'"']}',
             inline=False,
         )
         _set_brand_image(prompt, DIVIDER_URL)
         try:
-            await interaction.user.send(
-                embed=prompt,
-                view=DMTicketPromptView(self.bot, interaction.user.id, selected_key),
-            )
+            # Confirm that DMs are open before creating the private staff channel,
+            # then replace this temporary line with the final connection notice.
+            dm_message = await interaction.user.send("Connecting you to Delta Support...")
         except discord.Forbidden:
-            await interaction.response.send_message(
-                embed=error_embed(
-                    "I could not send you a DM. Enable direct messages from server members and try again."
-                ),
+            await interaction.followup.send(
+                embed=error_embed("I could not send you a DM. Enable direct messages from this server and try again."),
                 ephemeral=True,
             )
             return
+        try:
+            _, created = await open_dm_ticket(self.bot, interaction.user, selected_key)
+            notice = connected_embed() if created else success_embed(
+                "You are still connected to your existing support ticket. Send your message here and it will go to the same support team."
+            )
+            await dm_message.edit(content=None, embed=notice)
+        except (discord.HTTPException, ValueError) as exc:
+            try:
+                await dm_message.edit(content="Delta Support could not open your ticket. Please try again.")
+            except discord.HTTPException:
+                pass
+            await interaction.followup.send(
+                embed=error_embed(f"The ticket could not be opened: {exc}"), ephemeral=True
+            )
+            return
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=success_embed(
-                "I sent a private confirmation to your DMs. Open it and choose **Yes, make a ticket** to continue."
+                f"Support is ready in your DMs for your **{cfg['label']}** request."
             ),
             ephemeral=True,
         )
@@ -1145,38 +1357,27 @@ class NonMemberView(discord.ui.View):
         )
         self.add_item(join)
         self.create_ticket.emoji = named_emoji("Ticket~1") or named_emoji("Ticket")
-
-    @discord.ui.button(
-        label="Create Ticket",
-        style=discord.ButtonStyle.success,
-    )
-    async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message("This button belongs to another user.")
+            await interaction.response.send_message('This button belongs to another user.')
             return
         await interaction.response.send_message(
-            "Please join Delta Air Lines first. Once you have joined, press this button again or DM me to create a ticket.",
+            'Please join Delta Air Lines first. Once you have joined, press this button again or DM me to create a ticket.',
             view=NonMemberView(self.bot, self.user_id),
         )
-
-
-class DMTicketPromptView(discord.ui.View):
-    def __init__(
-        self,
-        bot: "DeltaBot",
-        user_id: int,
-        category_key: str | None = None,
-    ) -> None:
         super().__init__(timeout=600)
         self.bot = bot
         self.user_id = user_id
-        self.category_key = category_key
+        def named_emoji(name: str) -> discord.Emoji | None:
+            return next((emoji for emoji in bot.emojis if emoji.name == name), None)
 
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id == self.user_id:
-            return True
-        await interaction.response.send_message(embed=error_embed("This prompt belongs to another user."))
-        return False
+        join = discord.ui.Button(
+            label='Join Delta Air Lines',
+            style=discord.ButtonStyle.link,
+            url=INVITE_URL,
+            emoji=named_emoji('ExternalLink~1') or named_emoji('ExternalLink'),
+        )
+        self.add_item(join)
+        self.create_ticket.emoji = named_emoji('Ticket~1') or named_emoji('Ticket')
 
     @discord.ui.button(label="Yes, make a ticket", emoji=BLUE_ARROW_EMOJI, style=discord.ButtonStyle.success)
     async def yes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -1187,16 +1388,16 @@ class DMTicketPromptView(discord.ui.View):
             except Exception as exc:
                 self.bot._dm_prompted_users.discard(self.user_id)
                 await interaction.followup.send(
-                    embed=error_embed(f"Your private ticket could not be created: {exc}")
+                    embed=error_embed(f'Your private ticket could not be created: {exc}')
                 )
                 return
             self.bot._dm_prompted_users.discard(self.user_id)
             confirmation = connected_embed() if created else success_embed(
-                "You are still connected to your existing support ticket. Send your next message here and I will forward it to the same ticket."
+                'You are still connected to your existing support ticket. Send your next message here and I will forward it to the same ticket.'
             )
             confirmation.add_field(
-                name="What Happens Next?",
-                value="An agent will claim your ticket, and their replies will appear here automatically.",
+                name='What Happens Next?',
+                value='An agent will claim your ticket, and their replies will appear here automatically.',
                 inline=False,
             )
             _set_brand_image(confirmation, DIVIDER_URL)
@@ -1270,7 +1471,10 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         "hr",
         "leadership",
         "close",
+        "reply",
         "connected",
+        "unavailable",
+        "format",
         "resolved",
         "revoke",
         "ticket",
@@ -1333,21 +1537,21 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         interaction: discord.Interaction,
         message: str,
     ) -> None:
-        """Post a position list publicly from a staff-only slash command."""
+        '''Post a position list publicly from a staff-only slash command.'''
         if not isinstance(interaction.channel, discord.TextChannel):
             await interaction.response.send_message(
-                embed=error_embed("This command can only be used in a text channel."),
+                embed=error_embed('This command can only be used in a text channel.'),
                 ephemeral=True,
             )
             return
         await interaction.response.send_message(message)
 
-    @tree.command(name="hr", description="Post the available Human Resources positions.")
+    @tree.command(name='hr', description='Post the available Human Resources positions.')
     @staff_only()
     async def hr(interaction: discord.Interaction) -> None:
         await post_positions(interaction, HR_POSITIONS_MESSAGE)
 
-    @tree.command(name="leadership", description="Post the available leadership positions.")
+    @tree.command(name='leadership', description='Post the available leadership positions.')
     @staff_only()
     async def leadership(interaction: discord.Interaction) -> None:
         await post_positions(interaction, LEADERSHIP_POSITIONS_MESSAGE)
@@ -1479,14 +1683,18 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             return
         await interaction.response.send_modal(CloseReasonModal(channel, member))
 
-    # /connected
-    @tree.command(name="connected", description="Notify the user that an agent has connected (staff only).")
+    # /reply
+    @tree.command(name="reply", description="Send a reply to the ticket customer's DMs.")
     @staff_only()
-    async def connected(interaction: discord.Interaction) -> None:
+    @app_commands.describe(message="The message to send to the customer.")
+    async def reply(interaction: discord.Interaction, message: str) -> None:
         channel = interaction.channel
-        if not isinstance(channel, discord.TextChannel):
+        member = interaction.user
+        check_emoji = delta_status_emoji(interaction.guild, success=True)
+        x_emoji = delta_status_emoji(interaction.guild, success=False)
+        if not isinstance(channel, discord.TextChannel) or not isinstance(member, discord.Member):
             await interaction.response.send_message(
-                embed=error_embed("This command must be used inside a ticket channel."),
+                f"{x_emoji} Use `/reply` inside a ticket channel.",
                 ephemeral=True,
             )
             return
@@ -1508,22 +1716,46 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         delivered = await send_embed_to_ticket_owner(interaction.client, channel, embed)
         await interaction.response.send_message(
             embed=success_embed(
-                "The connected notice was delivered to the customer's DMs."
+                'The connected notice was delivered to the customer\'s DMs.'
                 if delivered else
-                "The notice was posted here, but the customer's DMs could not be reached."
+                'The notice was posted here, but the customer\'s DMs could not be reached.'
             ),
             ephemeral=True,
         )
         await channel.send(embed=embed)
 
-    # /resolved
-    @tree.command(name="resolved", description="Mark the ticket as resolved (staff only).")
-    @staff_only()
-    async def resolved(interaction: discord.Interaction) -> None:
-        channel = interaction.channel
-        if not isinstance(channel, discord.TextChannel):
+        try:
+            fresh_channel = await channel.guild.fetch_channel(channel.id)
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
             await interaction.response.send_message(
-                embed=error_embed("This command must be used inside a ticket channel."),
+                f"{x_emoji} I could not load this ticket: {exc}", ephemeral=True
+            )
+            return
+        if not isinstance(fresh_channel, discord.TextChannel):
+            await interaction.response.send_message(
+                f"{x_emoji} This is not a ticket channel.", ephemeral=True
+            )
+            return
+
+        topic = fresh_channel.topic or ""
+        owner_id = get_topic_value(topic, DM_TICKET_OWNER_MARKER)
+        claimed_id = get_topic_value(topic, DM_TICKET_CLAIM_MARKER)
+        if owner_id is None:
+            await interaction.response.send_message(
+                f"{x_emoji} This channel does not have a ticket customer.", ephemeral=True
+            )
+            return
+        if claimed_id != str(member.id):
+            await interaction.response.send_message(
+                f"{x_emoji} Claim this ticket before using `/reply`.", ephemeral=True
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        reply_embed = support_reply_embed(message, owner_id, interaction.created_at)
+        if not await deliver_support_reply(interaction.client, owner_id, reply_embed):
+            await interaction.followup.send(
+                f"{x_emoji} The reply could not be delivered to the customer's DMs.",
                 ephemeral=True,
             )
             return
@@ -1540,20 +1772,19 @@ def register_commands(tree: app_commands.CommandTree) -> None:
                 "If something remains unresolved, reply in this DM before the ticket is closed. "
                 "You can also begin a new request later from the Assistance Panel."
             ),
-            inline=False,
+            ephemeral=True,
         )
-        embed.add_field(name="Thank You", value="Thank you for contacting Delta Air Lines Support — *Keep Climbing.*", inline=False)
-        _set_brand_image(embed, DIVIDER_URL)
+        await channel.send(embed=embed)
         delivered = await send_embed_to_ticket_owner(interaction.client, channel, embed)
         await interaction.response.send_message(
             embed=success_embed(
-                "The resolution notice was delivered to the customer's DMs."
+                f"The **{format.name}** notice was delivered to the customer's DMs."
                 if delivered else
                 "The notice was posted here, but the customer's DMs could not be reached."
             ),
             ephemeral=True,
         )
-        await channel.send(embed=embed)
+        await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     # /revoke — leadership only: remove a user's access from a ticket channel
     @tree.command(name="revoke", description="Revoke a user's access to this ticket (leadership only).")
@@ -1952,10 +2183,10 @@ class DeltaBot(commands.Bot):
                 prompt = _base_embed(
                     title="<:DeltaLogo:1540927958116601980>  Welcome to Delta Air Lines Support",
                     description=(
-                        "Thank you for contacting us. Our support team can assist with general "
-                        "questions, applications, partnerships, purchases, roles, and technical issues.\n\n"
-                        "Would you like to create a **private support ticket**? If you continue, "
-                        "your messages will be securely relayed to the appropriate support team."
+                        'Thank you for contacting us. Our support team can assist with general '
+                        'questions, applications, partnerships, purchases, roles, and technical issues.\n\n'
+                        'Would you like to create a **private support ticket**? If you continue, '
+                        'your messages will be securely relayed to the appropriate support team.'
                     ),
                 )
                 prompt.add_field(
@@ -1970,13 +2201,14 @@ class DeltaBot(commands.Bot):
                 )
                 _set_brand_image(prompt, DIVIDER_URL)
                 await message.channel.send(
-                    embed=prompt,
-                    view=DMTicketPromptView(self, message.author.id),
+                    "<:Support:1540927430179553321> **Choose one assistance category below.**\n"
+                    "Your conversation stays in this DM while Delta Support responds from a private channel.",
+                    view=DMAssistancePanelView(self, message.author.id),
                 )
             return
 
         if isinstance(message.channel, discord.TextChannel):
-            topic = message.channel.topic or ""
+            topic = message.channel.topic or ''
             owner_id = get_topic_value(topic, DM_TICKET_OWNER_MARKER)
             if owner_id is None:
                 return
@@ -1985,14 +2217,14 @@ class DeltaBot(commands.Bot):
             if claimed_id is None:
                 await message.add_reaction("<:Connection:1540927881683669013>")
                 await message.channel.send(
-                    embed=error_embed("Claim this ticket before sending a reply to the customer."),
+                    embed=error_embed('Claim this ticket before sending a reply to the customer.'),
                     delete_after=8,
                 )
                 return
             if claimed_id != str(message.author.id):
                 await message.add_reaction("<:RArrow:1540951788889575504>")
                 await message.channel.send(
-                    embed=error_embed("Only the support agent who claimed this ticket can reply."),
+                    embed=error_embed('Only the support agent who claimed this ticket can reply.'),
                     delete_after=8,
                 )
                 return

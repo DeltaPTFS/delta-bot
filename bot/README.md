@@ -12,10 +12,10 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Assistance Panel | Support or admins can post the plain-text contact panel or upload custom top and bottom banner images with `/panel`; confirmation continues in DMs |
 | Agent Privacy | Customer DMs identify replies as Delta Air Lines Support and never expose the individual agent's name |
 | Ticket Reuse | Repeat creation attempts reconnect the customer to their existing ticket instead of opening a duplicate |
-| Staff Commands | `/ticket add-customer`, `/ticket add-support`, `/ticket close`, `/connected`, and `/resolved` are support role-gated |
+| Staff Commands | `/reply`, `/format`, `/ticket add-customer`, `/ticket add-support`, `/ticket close`, `/connected`, `/resolved`, `/hr`, and `/leadership` are support role-gated |
 | Admin Commands | `/ticket admin remove`, `punish`, `unpunish`, and `undo` are admin role-gated |
 | Delta Branding | Red (#C8102E), optional server-owned images, and a consistent footer |
-| Claim State | Claim ownership is stored with the ticket and survives bot restarts |
+| Claim State | Support can claim and unclaim repeatedly; ownership is refreshed from Discord and survives bot restarts |
 | Transcripts | Closed-ticket transcripts are posted to the private transcript channel |
 | Server Migration | Cleans the bot's messages from retired server `1436471549703094477`, then leaves it |
 | Release Updates | Posts and pins each release once in channel `1543674377953087649`; the current release is `2.0.3` |
@@ -94,6 +94,11 @@ python main.py
 |---|---|---|
 | `/panel` | Post the private-ticket Assistance Panel in the current channel | DL Leadership only |
 | `/close` | Close the current ticket | Support/admin role or ticket creator |
+| `/panel` | Post the private-ticket Assistance Panel in the current channel | DL Leadership only |
+| `/close` | Close the current ticket | Support/admin role or ticket creator |
+| `/reply` | Send a message from the claimed agent to the customer without exposing the agent's identity | Claiming support/admin member |
+| `/format` | Choose and send any prewritten support, SkyMiles, partnership, or application notice | Staff only |
+| `/ticket` | Add customers/support, close tickets, and access role-appropriate administration tools | Staff/admin, depending on subcommand |
 | `/connected` | Notify the user that an agent has connected | Staff only |
 | `/resolved` | Mark the ticket as resolved | Staff only |
 | `/hr` | Post the available Human Resources positions | Staff only |
@@ -120,7 +125,7 @@ The bot publishes commands only to `GUILD_ID`, clears its former global commands
 ## DM Ticket Flow
 
 1. DL Leadership posts `/panel`, or a member messages the bot directly.
-2. A panel selection sends a private confirmation to the member's DMs; direct DM users choose a category there.
+2. A panel selection immediately opens the ticket and connects the member in DMs; direct DM users choose one category.
 3. A staff-only relay channel is created. The member never receives access to it.
 4. Each customer DM is copied to that channel and receives a delivery confirmation when delivered.
 5. One support agent claims the ticket. Only that agent can reply until they unclaim it.
