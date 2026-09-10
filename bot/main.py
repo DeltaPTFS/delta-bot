@@ -47,7 +47,7 @@ ADMIN_ROLE_ID           = 1539005297417519205
 BOT_COMMAND_ROLE_ID     = STAFF_ROLE_ID
 TRANSCRIPT_CHANNEL_ID   = 1543674377953087649
 UPDATE_CHANNEL_ID       = TRANSCRIPT_CHANNEL_ID
-BOT_VERSION             = "2.1.5"
+BOT_VERSION             = "2.1.6"
 TICKET_CLOSE_DELAY      = 5
 RATING_TIMEOUT          = 15 * 24 * 60 * 60
 DISCORD_RECONNECT_DELAY = 15
@@ -115,9 +115,9 @@ UPDATE_MESSAGE = f"""# <:DeltaLogo:1540927958116601980> Delta Support Bot — Up
 This is a **patch update** for the version 2 ticket-system release.
 
 ## What's Fixed
-- Prevented duplicate customer and support message records.
-- Added distinct customer-safe and staff-visible authors to `/reply` embeds.
-- Added the Delta CheckMark confirmation and the new ticket-claimed DM notice.
+- Replaced the staff-side Customer Response heading with the replying agent.
+- Kept the customer copy anonymous under the Delta Air Lines Support identity.
+- Removed the duplicate heading from human-response embeds.
 
 -# Version format: major.minor.patch • Patch releases increase the final number."""
 
@@ -506,18 +506,15 @@ def support_reply_embed(
 ) -> discord.Embed:
     """Build the anonymous, Delta-blue reply delivered to the customer."""
     embed = customer_response_embed(content, customer_id, timestamp)
-    embed.title = f"{MESSAGE_EMOJI} Delta Support Reply"
+    embed.description = embed.description.replace(
+        f"{MESSAGE_EMOJI} **Customer Response**",
+        f"{MESSAGE_EMOJI} **Delta Support Reply**",
+        1,
+    )
     embed.color = DELTA_BLUE
     embed.set_author(name="Delta Air Lines Support", icon_url=SUPPORT_EMOJI_ICON_URL)
     return embed
 
-def support_reply_embed(
-    content: str,
-    customer_id: int | str,
-    timestamp: datetime | None = None,
-) -> discord.Embed:
-    """Use the exact same conversation format for support-to-customer replies."""
-    return customer_response_embed(content, customer_id, timestamp)
 
 def staff_support_reply_embed(
     content: str,
@@ -527,6 +524,11 @@ def staff_support_reply_embed(
 ) -> discord.Embed:
     """Build the matching staff record with the responsible agent as author."""
     embed = support_reply_embed(content, customer_id, timestamp)
+    embed.description = embed.description.replace(
+        f"{MESSAGE_EMOJI} **Delta Support Reply**",
+        f"{MESSAGE_EMOJI} **{author.display_name}**",
+        1,
+    )
     embed.set_author(name=str(author), icon_url=author.display_avatar.url)
     return embed
 
