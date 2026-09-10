@@ -2171,4 +2171,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # Keep this stable launcher tiny so future pull-request conflicts can be
+    # resolved in GitHub's web editor. The active implementation lives in the
+    # additive delta_bot module, which does not conflict with the legacy file.
+    from delta_bot import main as run_current_bot
+
+    run_current_bot()
