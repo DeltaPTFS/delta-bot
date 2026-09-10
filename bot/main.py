@@ -374,12 +374,8 @@ embed.add_field(name="<:Connection:1540927881683669013> Mailing Address", value=
 
 def ticket_closed_channel() -> discord.Embed:
     embed = _base_embed(
-        title="<:RArrow:1540951788889575504>  Ticket Closing",
-        description=(
-            f"This ticket has been marked as **closed** and will be deleted in "
-            f"**{TICKET_CLOSE_DELAY} seconds**.\n\n"
-            "Thank you for contacting Delta Air Lines Support."
-        ),
+        title="🔒  Ticket Closing",
+        description=f"This ticket has been marked as **closed** and will be deleted in **{TICKET_CLOSE_DELAY} seconds**.\n\nThank you for contacting Delta Air Lines Support.",
     )
     _set_brand_image(embed, DIVIDER_URL)
     return embed
