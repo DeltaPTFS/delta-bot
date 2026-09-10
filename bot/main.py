@@ -549,6 +549,21 @@ def attributed_staff_reply_embed(
     embed.color = DELTA_BLUE
     return embed
 
+def staff_support_reply_embed(
+    content: str,
+    customer_id: int | str,
+    author: discord.Member,
+    timestamp: datetime | None = None,
+) -> discord.Embed:
+    """Build the matching staff record with the responsible agent as author."""
+    embed = support_reply_embed(content, customer_id, timestamp)
+    embed.description = embed.description.replace(
+        f"{MESSAGE_EMOJI} **Delta Support Reply**",
+        f"{MESSAGE_EMOJI} **{author.display_name}**",
+        1,
+    )
+    embed.set_author(name=str(author), icon_url=author.display_avatar.url)
+    return embed
 
 async def deliver_support_reply(
     client: discord.Client,
