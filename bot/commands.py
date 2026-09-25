@@ -92,7 +92,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         )
         # Public Delta-branded embed in the ticket
         embed = discord.Embed(
-            title="🛫  Agent Connected",
+            title="<:Plane:1540926994332651580>  Agent Connected",
             description=(
                 "A **Delta Air Lines Support Agent** has connected to your ticket "
                 "and will be assisting you shortly.\n\n"
@@ -120,7 +120,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             ephemeral=True,
         )
         embed = discord.Embed(
-            title="✅  Ticket Resolved",
+            title="<:BArrow:1540951845147639809>  Ticket Resolved",
             description=(
                 "Your support request has been marked as **resolved** by our team.\n\n"
                 "If you have any further questions, please open a new ticket. "

@@ -1,5 +1,8 @@
 discord.py==2.4.0
 python-dotenv==1.0.1
+# discord.py uses PyNaCl for voice support. The ticket bot does not join voice,
+# but installing it removes the misleading startup warning from production logs.
+PyNaCl>=1.5.0,<2.0
 # Python 3.12 still includes audioop. Install its replacement only on Python
 # versions where the standard-library module was removed.
 audioop-lts==0.2.1; python_version >= "3.13"

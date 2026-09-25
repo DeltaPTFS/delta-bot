@@ -1,0 +1,50 @@
+{
+  "connected": {
+    "label": "Connected",
+    "message": "<:Support:1540927430179553321> **You are now connected.**\n\n-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.\n\n> <:DeltaLogo:1540927958116601980> **You have officially been connected to our Delta Support Agency.** If you have not already done so, **please state your inquiry below.**\n\n-# Thank you for contacting Delta Support."
+  },
+  "skymiles": {
+    "label": "Welcome to SkyMiles",
+    "message": "## <:WingPinLogo:1540927847709802607> **Welcome to SkyMiles!**\n\n-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.\n\n> <:DeltaLogo:1540927958116601980> **Welcome to SkyMiles!** Delta's Loyalty Program where you can **earn miles** from **flights, credit cards, partners,** and redeem them for **rewards** like **travel upgrades, perks,** and **so much more.**\n\n> <:RArrow:1540951788889575504> **For more information** on **[SkyMiles Medallions,](https://discord.com/channels/1538738611988467782/1541189809689726986) [Choice Benefits,](https://discord.com/channels/1538738611988467782/1541156846579089519) and [American Express.](https://discord.com/channels/1538738611988467782/1541188270325637150)** Please head over to our **server,** or click the **provided links.**\n\n-# Welcome to SkyMiles!"
+  },
+  "inactive": {
+    "label": "Inactive Inquiry",
+    "message": "<:Timer:1540927345324728400> **It seems your inquiry has been inactive.**\n\n-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.\n\n> <:DeltaLogo:1540927958116601980> **It seems your inquiry** has been **inactive** for an **extended period of time.**\n\n> <:RArrow:1540951788889575504> **Due to conserving resources,** if a **response** is not provided **within** the **next 24 hours,** this **inquiry** will be deemed **resolved,** and therefore **closed.**\n\n-# Thank you for contacting Delta Support."
+  },
+  "resolved": {
+    "label": "Inquiry Resolved",
+    "message": "<:Support:1540927430179553321> **It seems your inquiry has been resolved.**\n\n-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.\n\n> <:WingPinLogo:1540927847709802607> **If you need further assistance, please let us know.** If not, we **thank you** for using our Support system and have a great day!\n\n-# Thank you for contacting Delta Support."
+  },
+  "partnership_denied": {
+    "label": "Partnership Denied",
+    "message": "<:Support:1540927430179553321> **Your Partnership Status has been updated.**\n\n-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.\n\n> <:DeltaLogo:1540927958116601980> **Hello, our External Affairs Office has officially reviewed your application**\n\n> **After a thorough review of your request,** it has **unfortunately** been **__denied.__**\n-# *We truly thank you for filling out an application, and for showing interest in partnering with our airline. As you are the reason we are able to connect our passengers.*\n\n> <:WingPinLogo:1540927847709802607> **We thank you for filling out an application,** if you would like information on why your request was denied, please let us know **as soon as possible.**\n\n-# Thank you for choosing Delta Air Lines."
+  },
+  "partnership_accepted": {
+    "label": "Partnership Accepted",
+    "message": "<:Support:1540927430179553321> **Your Partnership Status has been updated.**\n\n-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.\n\n> <:DeltaLogo:1540927958116601980> **Hello, our External Affairs Office has officially reviewed your application**\n\n> **After a thorough review of your request,** it has **officially** been **__accepted!__**\n-# *We truly thank you for filling out an application, and for showing interest in partnering with our airline. As you are the reason we are able to connect our passengers.*\n\n> <:WingPinLogo:1540927847709802607> **Please inform us as soon as possible** when you are able to post our advertisement. It will be provided below, and we ask that **both messages are done with an @/everyone ping.**\n```Ad not done yet```\n\n-# 1020 Delta Blvd., Suite 996, Atlanta, GA 30354.\n-# Thank you for partnering with Delta Air Lines."
+  },
+  "direct_entry": {
+    "label": "Direct Entry Application",
+    "message": "<:Support:1540927430179553321> **Direct Entry Application**\n\n-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.\n\n<:WingPinLogo:1540927847709802607> **Thank you** for your interest in applying at **Delta Air Lines!** Your interest in applying means **a lot** to our team of **talented** individuals who **work hard** every day to **grow our airline.**\n> <:Nametag:1541175704622993428> **Individuals interested in applying** are asked to fill out a set of __important__ documentation for review from our **Human Resources.**\n\n> **CV - Resume**\n-# *A Comprehensive Summary outlining your endeavors inside of Ro-aviation. Including prior experience, key skills, and other relevant industry information.*\n\n> **Statement Of Intent**\n-# *A formal message to Delta Air lines on why you would make an excellent candidate toward our future expansion goals.*\n\n> **Which Department are you applying for, why?**\n-# *A detailed and thoughtful explanation on why you are applying for a specific department, including what interests you in here, how it relates to your own personal goals, and why you choose us specifically for employment.*\n\n<:Warning:1540926913445494814> **All Applications** are expected to reflect a **high standard** by all applicants. Including **a bare minimum** of **3 sentences** per **response-needed question** and **a legitimate CV - Resume.**\n-# Thank you for choosing Delta Air Lines."
+  },
+  "application_submitted": {
+    "label": "Application Submitted",
+    "message": "<:Support:1540927430179553321> **Your application has been officially submitted.**\n\n-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.\n\n> <:WingPinLogo:1540927847709802607> **Thank you,** for taking the time to fill out an application. It has currently been submitted to our **Recruitment - Talent Department,** where it will be reviewed and an update will be provided shortly!"
+  },
+  "application_accepted": {
+    "label": "Application Accepted",
+    "message": "<:Support:1540927430179553321> **Your Application Status has been updated.**\n\n-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.\n\n> <:DeltaLogo:1540927958116601980> **Hello, our Recruitment - Talent Department has officially reviewed your application**\n\n> **After a thorough review of your application,** it has **officially** been **__accepted!__**\n-# *We truly thank you for filling out an application, and for showing interest in working at our airline. As you are the reason we are able to operate.*\n\n> <:WingPinLogo:1540927847709802607> **Please take a moment and join our Crew Server.** Once this is complete, follow the instructions posted in order to be entered into our **Database** and gain access to the rest of the Server.\n\n-# Thank you for choosing Delta Air Lines."
+  },
+  "application_denied": {
+    "label": "Application Denied",
+    "message": "<:Support:1540927430179553321> **Your Application Status has been updated.**\n\n-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.\n\n> <:DeltaLogo:1540927958116601980> **Hello, our Recruitment - Talent Department has officially reviewed your application**\n\n> **After a thorough review of your application,** it has **unfortunately** been **__denied.__**\n-# *We truly thank you for filling out an application, and for showing interest in working at our airline. As you are the reason we are able to operate.*\n\n> <:WingPinLogo:1540927847709802607> **We are very sorry for rejecting your application,** this may be due to one reason or another. **If you would like feedback on why your application was denied,** please ask at your **earliest convenience.**\n\n-# Thank you for choosing Delta."
+  },
+  "leadership": {
+    "label": "Leadership Application",
+    "message": "<:Support:1540927430179553321> **Leadership Application**\n\n-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980\n\n> <:DeltaLogo:1540927958116601980> **Thank you** for your interest in applying at **Delta Air Lines!** Below, we have provided a full list of all Leadership positions avaliable.\n\n> <:BArrow:1540951845147639809> **Chief of Operations -** [AVAL]\n> <:BArrow:1540951845147639809> **Chairman Delta Tech-Ops -** [AVAL]\n> <:BArrow:1540951845147639809> **Chief Technology Officer -** [N/A]\n> <:BArrow:1540951845147639809> **Chief Finnancial Officer -** [N/A]\n> <:BArrow:1540951845147639809> **Chief People Officer -** [AVAL]\n> <:BArrow:1540951845147639809> **Chief Marketing Officer -** [N/A]\n> <:BArrow:1540951845147639809> **Chief Communications Officer -** [AVAL]\n> <:BArrow:1540951845147639809> **Executive Vice President -** [AVAL]\n> <:BArrow:1540951845147639809> **External Affairs Officer -** [AVAL]\n> <:BArrow:1540951845147639809> **SVP, Flight Deck -** [N/A]\n> <:BArrow:1540951845147639809> **SVP, Inflight Services -** [N/A]\n> <:BArrow:1540951845147639809> **SVP, Ground Operations -** [AVAL]\n> <:BArrow:1540951845147639809> **Talent Acquisition Officer -** [AVAL]"
+  },
+  "hr": {
+    "label": "HR Application",
+    "message": "<:Support:1540927430179553321> **HR Application**\n\n-# P.O. Box 20980 Department 980 Atlanta, GA 30320-2980.\n\n> <:DeltaLogo:1540927958116601980> **Below,** we have provided a **full** list of **all** avaliable **Human Resources Positions.** If you would like to proceed with applying, we encourage you to and will assist you **right away.**\n\n**Human Resources - Delta Air Lines**\n\n> <:BArrow:1540951845147639809> **Delta Techical Operations -** [AVAL]\n> <:BArrow:1540951845147639809> **SVP Flight Operations -** [AVAL]\n> <:BArrow:1540951845147639809> **SVP Inflight Services -** [AVAL]\n> <:BArrow:1540951845147639809> **SVP Ground Operations -** [AVAL]\n> <:BArrow:1540951845147639809> **Department Overseer -** [AVAL]\n> <:BArrow:1540951845147639809> **Flight Dispatcher -** [AVAL]"
+  }
+}

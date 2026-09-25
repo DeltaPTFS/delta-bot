@@ -1,10 +1,10 @@
 {
-  "title": "General Support Role Access",
-  "summary": "General Support tickets no longer include the Partnership Representative role.",
+  "title": "Ticket Close Command Fix",
+  "summary": "The ticket close command no longer fails while checking the support role.",
   "added": [],
   "changed": [
-    "The Partnership Representative role is no longer pinged when a General Support ticket opens.",
-    "Partnership Representatives no longer receive access to General Support ticket channels and remain assigned only to Partnership Requests."
+    "Restored the command-role configuration name expected by previously deployed permission checks.",
+    "The command and staff role names both resolve to the sole authorized role, 1539005030189891684."
   ],
   "removed": []
 }
