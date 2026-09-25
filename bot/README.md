@@ -22,7 +22,7 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Claim State | Support can claim and unclaim repeatedly; claim ownership survives bot restarts |
 | Transcripts | Closed-ticket transcripts are posted to the private transcript channel |
 | Server Safety | Commands and tickets are locked to server `1538738611988467782`, but the bot never removes itself from a server |
-| Release Updates | Posts and pins each release once in channel `1543674377953087649`; the current release is `2.1.8` |
+| Release Updates | Posts and pins each release once in channel `1543674377953087649`; the current release is `2.1.9` |
 
 Versions use `major.minor.patch`. Breaking or especially large releases increase
 the first number, regular feature releases increase the second, and fixes increase
@@ -158,9 +158,9 @@ After merging an update, choose **Manual Deploy → Clear build cache & deploy**
 In the deploy logs, verify both of these lines appear:
 
 ```text
-Starting Delta Air Lines HelpDesk 2.1.8 (source <merged commit>).
+Starting Delta Air Lines HelpDesk 2.1.9 (source <merged commit>).
 Synced 8 application command(s) to guild 1538738611988467782.
-Delta Air Lines HelpDesk 2.1.8 is online (source <merged commit>).
+Delta Air Lines HelpDesk 2.1.9 is online (source <merged commit>).
 ```
 
 If the source hash is not the commit you merged, Render is deploying the wrong

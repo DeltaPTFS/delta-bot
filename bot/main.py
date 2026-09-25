@@ -47,7 +47,7 @@ ADMIN_ROLE_ID           = 1539005297417519205
 BOT_COMMAND_ROLE_ID     = STAFF_ROLE_ID
 TRANSCRIPT_CHANNEL_ID   = 1543674377953087649
 UPDATE_CHANNEL_ID       = TRANSCRIPT_CHANNEL_ID
-BOT_VERSION             = "2.1.8"
+BOT_VERSION             = "2.1.9"
 TICKET_CLOSE_DELAY      = 5
 RATING_TIMEOUT          = 15 * 24 * 60 * 60
 DISCORD_RECONNECT_DELAY = 15
@@ -127,6 +127,9 @@ This is a **patch update** for the version 2 ticket-system release.
   remain locked out, but the bot can no longer accidentally remove itself.
 - Moved the Ticket Claimed notice into validated JSON so web conflict resolution
   cannot turn its Markdown into invalid Python syntax.
+- Built DM and staff `/reply` embeds independently: customers see Delta Support,
+  while only the private ticket channel sees the responding member's identity.
+- Locked success confirmations to the CheckMark emoji and expanded X-emoji lookup.
 
 -# Version format: major.minor.patch • Patch releases increase the final number."""
 
@@ -291,17 +294,23 @@ def is_admin(member: discord.Member) -> bool:
 
 def delta_status_emoji(guild: discord.Guild | None, success: bool) -> str:
     """Resolve the server's Delta check/X emoji, with branded arrow fallbacks."""
+    if success:
+        return CHECKMARK_EMOJI
     preferred_names = (
-        ("deltacheckmark", "checkmark", "deltacheck", "check")
-        if success else
-        ("deltax", "x", "deltacross", "cross")
+        "deltax",
+        "deltaxmark",
+        "xmark",
+        "crossmark",
+        "x",
+        "deltacross",
+        "cross",
     )
     if guild is not None:
         emojis = {emoji.name.casefold(): emoji for emoji in guild.emojis}
         for name in preferred_names:
             if emoji := emojis.get(name):
                 return str(emoji)
-    return BLUE_ARROW_EMOJI if success else RIGHT_ARROW_EMOJI
+    return RIGHT_ARROW_EMOJI
 
 
 def deployed_source() -> str:
@@ -499,27 +508,30 @@ async def relay_customer_message(message: discord.Message, channel: discord.Text
         log.warning("Relayed DM %s but could not add CheckMark reaction: %s", message.id, exc)
     return True
 
-def customer_response_embed(
+def conversation_embed(
     content: str,
     customer_id: int | str,
+    heading: str,
     timestamp: datetime | None = None,
     author: discord.abc.User | None = None,
+    color: int = DELTA_RED,
 ) -> discord.Embed:
-    """Build the shared customer/support conversation format."""
+    """Build a ticket conversation embed with an explicit, non-replaced heading."""
     safe_content = content if len(content) <= 3500 else f"{content[:3497]}..."
-    embed = _base_embed(
+    embed = discord.Embed(
         description=(
-            f"{MESSAGE_EMOJI} **Customer Response**\n\n"
+            f"{MESSAGE_EMOJI} **{heading}**\n\n"
             f"{safe_content}\n\n"
             f"{IDENTIFICATION_EMOJI} **Customer ID**\n"
             f"{customer_id}"
         ),
+        color=color,
     )
+    embed.set_footer(text=FOOTER_TEXT)
     if author is not None:
         embed.set_author(name=str(author), icon_url=author.display_avatar.url)
     embed.timestamp = timestamp
     return embed
-
 
 def anonymous_support_reply_embed(
     content: str,
@@ -537,6 +549,34 @@ def anonymous_support_reply_embed(
     embed.set_author(name="Delta Air Lines Support")
     return embed
 
+def customer_response_embed(
+    content: str,
+    customer_id: int | str,
+    timestamp: datetime | None = None,
+    author: discord.abc.User | None = None,
+) -> discord.Embed:
+    """Build the customer-to-support ticket record."""
+    return conversation_embed(
+        content, customer_id, "Customer Response", timestamp, author
+    )
+
+
+def anonymous_support_reply_embed(
+    content: str,
+    customer_id: int | str,
+    timestamp: datetime | None = None,
+) -> discord.Embed:
+    """Build the Delta-blue reply delivered to a customer without agent identity."""
+    embed = conversation_embed(
+        content,
+        customer_id,
+        "Delta Support Reply",
+        timestamp,
+        color=DELTA_BLUE,
+    )
+    embed.set_author(name="Delta Air Lines Support")
+    return embed
+
 
 def attributed_staff_reply_embed(
     content: str,
@@ -545,14 +585,14 @@ def attributed_staff_reply_embed(
     timestamp: datetime | None = None,
 ) -> discord.Embed:
     """Build the private ticket record identifying the responding agent."""
-    embed = customer_response_embed(content, customer_id, timestamp, author=author)
-    embed.description = embed.description.replace(
-        f"{MESSAGE_EMOJI} **Customer Response**",
-        f"{MESSAGE_EMOJI} **{author.display_name}**",
-        1,
+    return conversation_embed(
+        content,
+        customer_id,
+        author.display_name,
+        timestamp,
+        author,
+        DELTA_BLUE,
     )
-    embed.color = DELTA_BLUE
-    return embed
 
 
 async def deliver_support_reply(
