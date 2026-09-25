@@ -22,7 +22,7 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Claim State | Support can claim and unclaim repeatedly; claim ownership survives bot restarts |
 | Transcripts | Closed-ticket transcripts are posted to the private transcript channel |
 | Server Safety | Commands and tickets are locked to server `1538738611988467782`, but the bot never removes itself from a server |
-| Release Updates | Posts and pins each release once in channel `1543674377953087649`; the current release is `2.1.9` |
+| Release Updates | Posts and pins each release once in server logs channel `1539005101941850274`; the current release is `2.1.10` |
 
 Versions use `major.minor.patch`. Breaking or especially large releases increase
 the first number, regular feature releases increase the second, and fixes increase
@@ -115,7 +115,7 @@ The active single-file bot keeps its IDs and constants in **`main.py`**:
 | `GUILD_ID` | `1538738611988467782` | The only authorized Discord server |
 | `TICKET_CATEGORY_ID` | `1543674278711529562` | Category for private ticket relay channels |
 | `STAFF_ROLE_ID` | `1539005030189891684` | Support/admin role for commands, access, and ticket pings |
-| `TRANSCRIPT_CHANNEL_ID` | `1543674377953087649` | Channel that receives closed-ticket transcripts |
+| `TRANSCRIPT_CHANNEL_ID` | `1539005101941850274` | Server logs channel that receives closed-ticket transcripts and release notices |
 | `DELTA_RED` | `0xC8102E` | Embed accent colour |
 
 To add a new ticket category, add an entry to the `TICKET_CONFIG` dictionary in `main.py`. The rest of the bot picks it up automatically.
@@ -158,9 +158,9 @@ After merging an update, choose **Manual Deploy → Clear build cache & deploy**
 In the deploy logs, verify both of these lines appear:
 
 ```text
-Starting Delta Air Lines HelpDesk 2.1.9 (source <merged commit>).
+Starting Delta Air Lines HelpDesk 2.1.10 (source <merged commit>).
 Synced 8 application command(s) to guild 1538738611988467782.
-Delta Air Lines HelpDesk 2.1.9 is online (source <merged commit>).
+Delta Air Lines HelpDesk 2.1.10 is online (source <merged commit>).
 ```
 
 If the source hash is not the commit you merged, Render is deploying the wrong

@@ -1,10 +1,12 @@
 {
-  "title": "Ticket Close Command Fix",
-  "summary": "The ticket close command no longer fails while checking the support role.",
+  "title": "Support Message Formatting Fix",
+  "summary": "Support replies and delivery statuses now use the requested private and staff-facing formats.",
   "added": [],
   "changed": [
-    "Restored the command-role configuration name expected by previously deployed permission checks.",
-    "The command and staff role names both resolve to the sole authorized role, 1539005030189891684."
+    "Successful actions now use the server CheckMark emoji instead of the blue arrow.",
+    "Customer DMs identify replies as Delta Support and no longer expose the customer ID.",
+    "Private ticket records continue to identify the staff member who sent each reply.",
+    "Ticket transcripts and release notices now use server logs channel 1539005101941850274."
   ],
   "removed": []
 }

@@ -41,11 +41,13 @@ staff = main.attributed_staff_reply_embed("Hello.", 123, _Agent())
 customer_payload = str(customer.to_dict())
 staff_payload = str(staff.to_dict())
 
-assert "Delta Air Lines Support" in customer_payload
+assert "Delta Support" in customer_payload
 assert "Delta Support Reply" in customer_payload
 assert "Example Agent" not in customer_payload
 assert "private_support_username" not in customer_payload
 assert "Customer Response" not in customer_payload
+assert "123" not in customer_payload
+assert "Customer ID" not in customer_payload
 
 assert "Example Agent" in staff_payload
 assert "private_support_username" in staff_payload
@@ -54,5 +56,8 @@ assert staff.color == customer.color
 
 assert main.delta_status_emoji(_Guild(), success=True) == main.CHECKMARK_EMOJI
 assert main.delta_status_emoji(_Guild(), success=False) == str(_Emoji())
+assert main.success_embed("Delivered").title.startswith(main.CHECKMARK_EMOJI)
+main.XMARK_EMOJI = main.delta_status_emoji(_Guild(), success=False)
+assert main.error_embed("Failed").title.startswith(str(_Emoji()))
 
 print("Reply privacy, staff attribution, colors, and custom status emojis are valid.")
