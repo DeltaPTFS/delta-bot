@@ -120,7 +120,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             ephemeral=True,
         )
         embed = discord.Embed(
-            title="<:BArrow:1540951845147639809>  Ticket Resolved",
+            title="<:CheckMark:1544505870904459264>  Ticket Resolved",
             description=(
                 "Your support request has been marked as **resolved** by our team.\n\n"
                 "If you have any further questions, please open a new ticket. "

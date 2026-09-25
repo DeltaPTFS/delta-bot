@@ -45,9 +45,9 @@ STAFF_ROLE_ID           = 1539005030189891684
 ADMIN_ROLE_ID           = 1539005297417519205
 # Backward-compatible name used by earlier command permission checks.
 BOT_COMMAND_ROLE_ID     = STAFF_ROLE_ID
-TRANSCRIPT_CHANNEL_ID   = 1543674377953087649
+TRANSCRIPT_CHANNEL_ID   = 1539005101941850274
 UPDATE_CHANNEL_ID       = TRANSCRIPT_CHANNEL_ID
-BOT_VERSION             = "2.1.9"
+BOT_VERSION             = "2.1.10"
 TICKET_CLOSE_DELAY      = 5
 RATING_TIMEOUT          = 15 * 24 * 60 * 60
 DISCORD_RECONNECT_DELAY = 15
@@ -62,6 +62,8 @@ WING_PIN_EMOJI            = "<:WingPinLogo:1540927847709802607>"
 MESSAGE_EMOJI             = "<:Message:1544506028752769134>"
 IDENTIFICATION_EMOJI      = "<:Identification:1544505969575198821>"
 CHECKMARK_EMOJI            = "<:CheckMark:1544505870904459264>"
+# Updated from the authorized server's custom emoji collection in on_ready.
+XMARK_EMOJI                = "❌"
 
 # Serializes history-check-and-send operations within each ticket. Without this,
 # two concurrent gateway deliveries can both check history before either copy is
@@ -116,7 +118,7 @@ This is a **patch update** for the version 2 ticket-system release.
 
 ## What's Fixed
 - Suppressed duplicate customer messages and repeated `/reply` deliveries.
-- Customer DMs identify human replies only as **Delta Air Lines Support**.
+- Customer DMs identify human replies only as **Delta Support** and omit internal IDs.
 - Private ticket records identify the support member who used `/reply`.
 - Human support replies use matching Delta-blue embeds and CheckMark confirmations.
 - Customers receive a private, anonymous notice when their ticket is claimed.
@@ -219,7 +221,7 @@ def generic_ticket_welcome(member: discord.Member, label: str, emoji: str) -> di
 
 def ticket_closed_dm(ticket_name: str) -> discord.Embed:
     embed = _base_embed(
-        title="<:RArrow:1540951788889575504>  Ticket Closed",
+        title=f"{CHECKMARK_EMOJI}  Ticket Closed",
         description=(
             f"Your support ticket **#{ticket_name}** has been successfully closed.\n\n"
             "Thank you for contacting **Delta Air Lines Support**. "
@@ -235,7 +237,7 @@ def ticket_closed_dm(ticket_name: str) -> discord.Embed:
 
 def ticket_closed_channel() -> discord.Embed:
     embed = _base_embed(
-        title="<:RArrow:1540951788889575504>  Ticket Closing",
+        title=f"{CHECKMARK_EMOJI}  Ticket Closing",
         description=f"This ticket has been marked as **closed** and will be deleted in **{TICKET_CLOSE_DELAY} seconds**.\n\nThank you for contacting Delta Air Lines Support.",
     )
     _set_brand_image(embed, DIVIDER_URL)
@@ -255,13 +257,13 @@ def already_open_ticket(channel: discord.TextChannel) -> discord.Embed:
 
 
 def error_embed(message: str) -> discord.Embed:
-    embed = discord.Embed(title="<:RArrow:1540951788889575504>  Error", description=message, color=DELTA_RED)
+    embed = discord.Embed(title=f"{XMARK_EMOJI}  Error", description=message, color=DELTA_RED)
     embed.set_footer(text=FOOTER_TEXT)
     return embed
 
 
 def success_embed(message: str) -> discord.Embed:
-    embed = discord.Embed(title="<:BArrow:1540951845147639809>  Success", description=message, color=DELTA_RED)
+    embed = discord.Embed(title=f"{CHECKMARK_EMOJI}  Success", description=message, color=DELTA_RED)
     embed.set_footer(text=FOOTER_TEXT)
     return embed
 
@@ -310,7 +312,7 @@ def delta_status_emoji(guild: discord.Guild | None, success: bool) -> str:
         for name in preferred_names:
             if emoji := emojis.get(name):
                 return str(emoji)
-    return RIGHT_ARROW_EMOJI
+    return XMARK_EMOJI
 
 
 def deployed_source() -> str:
@@ -533,22 +535,6 @@ def conversation_embed(
     embed.timestamp = timestamp
     return embed
 
-def anonymous_support_reply_embed(
-    content: str,
-    customer_id: int | str,
-    timestamp: datetime | None = None,
-) -> discord.Embed:
-    """Build the Delta-blue reply delivered to a customer without agent identity."""
-    embed = customer_response_embed(content, customer_id, timestamp)
-    embed.description = embed.description.replace(
-        f"{MESSAGE_EMOJI} **Customer Response**",
-        f"{MESSAGE_EMOJI} **Delta Support Reply**",
-        1,
-    )
-    embed.color = DELTA_BLUE
-    embed.set_author(name="Delta Air Lines Support")
-    return embed
-
 def customer_response_embed(
     content: str,
     customer_id: int | str,
@@ -567,14 +553,17 @@ def anonymous_support_reply_embed(
     timestamp: datetime | None = None,
 ) -> discord.Embed:
     """Build the Delta-blue reply delivered to a customer without agent identity."""
-    embed = conversation_embed(
-        content,
-        customer_id,
-        "Delta Support Reply",
-        timestamp,
+    # Customer-facing replies intentionally omit all internal identifiers. The
+    # attributed copy posted in the private ticket retains both the customer ID
+    # and the responding support member for auditing.
+    safe_content = content if len(content) <= 4000 else f"{content[:3997]}..."
+    embed = discord.Embed(
+        description=f"{MESSAGE_EMOJI} **Delta Support Reply**\n\n{safe_content}",
         color=DELTA_BLUE,
     )
-    embed.set_author(name="Delta Air Lines Support")
+    embed.set_author(name="Delta Support")
+    embed.set_footer(text=FOOTER_TEXT)
+    embed.timestamp = timestamp
     return embed
 
 
@@ -654,7 +643,7 @@ async def open_dm_ticket(
         value=(
             "1. Select **Claim Ticket** before replying.\n"
             "2. Send replies normally in this channel.\n"
-            "3. A <:BArrow:1540951845147639809> confirms delivery to the customer."
+            f"3. A {CHECKMARK_EMOJI} confirms delivery to the customer."
         ),
         inline=False,
     )
@@ -894,7 +883,7 @@ class RatingView(discord.ui.View):
             self.rating = stars
             self.stop()
             confirm = _base_embed(
-                title="<:BArrow:1540951845147639809>  Rating Submitted",
+                title=f"{CHECKMARK_EMOJI}  Rating Submitted",
                 description=(
                     f"Thank you! You rated your support experience **{stars} / 5 {WING_PIN_EMOJI}**.\n\n"
                     "*Delta Air Lines — Keep Climbing.*"
@@ -1033,10 +1022,10 @@ class TicketActionView(discord.ui.View):
                 embed=success_embed("You have unclaimed this ticket."), ephemeral=True
             )
             status_embed = _base_embed(
-                title="<:BArrow:1540951845147639809>  Ticket Unclaimed",
+                title=f"{CHECKMARK_EMOJI}  Ticket Unclaimed",
                 description=f"This ticket has been unclaimed by {member.mention}.",
             )
-            owner_title = "<:BArrow:1540951845147639809>  Support Agent Disconnected"
+            owner_title = f"{CHECKMARK_EMOJI}  Support Agent Disconnected"
             owner_message = (
                 "The support agent handling your ticket has unclaimed it. "
                 "Another agent can now assist you."
@@ -1905,6 +1894,10 @@ class DeltaBot(commands.Bot):
         log.info("Synced %d application command(s) to guild %s.", len(synced), GUILD_ID)
 
     async def on_ready(self) -> None:
+        global XMARK_EMOJI
+        # Resolve the server-owned X mark once so every later error embed uses
+        # the same custom status language as successful CheckMark responses.
+        XMARK_EMOJI = delta_status_emoji(self.get_guild(GUILD_ID), success=False)
         log.info("Logged in as %s (ID: %s)", self.user, self.user.id if self.user else "unknown")
         log.info(
             "Delta Air Lines HelpDesk %s is online (source %s).",

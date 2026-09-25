@@ -148,7 +148,7 @@ class AssistanceSelect(discord.ui.Select):
 
         # Confirm to the user (ephemeral)
         await interaction.followup.send(
-            content=f"<:BArrow:1540951845147639809>  Your ticket has been created: {channel.mention}",
+            content=f"<:CheckMark:1544505870904459264>  Your ticket has been created: {channel.mention}",
             ephemeral=True,
         )
 

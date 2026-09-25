@@ -9,6 +9,9 @@ from config import (
     DELTA_RED, DIVIDER_URL, FOOTER_TEXT, MAILING_ADDRESS, BANNER_URL
 )
 
+CHECKMARK_EMOJI = "<:CheckMark:1544505870904459264>"
+XMARK_EMOJI = "❌"
+
 
 def _set_brand_image(embed: discord.Embed, url: str) -> None:
     if url:
@@ -103,7 +106,7 @@ def generic_ticket_welcome(member: discord.Member, label: str, emoji: str) -> di
 
 def ticket_closed_dm(ticket_name: str) -> discord.Embed:
     embed = _base_embed(
-        title="<:RArrow:1540951788889575504>  Ticket Closed",
+        title=f"{CHECKMARK_EMOJI}  Ticket Closed",
         description=(
             f"Your support ticket **#{ticket_name}** has been successfully closed.\n\n"
             "Thank you for contacting **Delta Air Lines Support**. "
@@ -119,7 +122,7 @@ def ticket_closed_dm(ticket_name: str) -> discord.Embed:
 
 def ticket_closed_channel() -> discord.Embed:
     embed = _base_embed(
-        title="<:RArrow:1540951788889575504>  Ticket Closing",
+        title=f"{CHECKMARK_EMOJI}  Ticket Closing",
         description=(
             "This ticket has been marked as **closed** and will be deleted shortly.\n\n"
             "Thank you for contacting Delta Air Lines Support."
@@ -145,7 +148,7 @@ def already_open_ticket(channel: discord.TextChannel) -> discord.Embed:
 
 def error_embed(message: str) -> discord.Embed:
     embed = discord.Embed(
-        title="<:RArrow:1540951788889575504>  Error",
+        title=f"{XMARK_EMOJI}  Error",
         description=message,
         color=DELTA_RED,
     )
@@ -155,7 +158,7 @@ def error_embed(message: str) -> discord.Embed:
 
 def success_embed(message: str) -> discord.Embed:
     embed = discord.Embed(
-        title="<:BArrow:1540951845147639809>  Success",
+        title=f"{CHECKMARK_EMOJI}  Success",
         description=message,
         color=DELTA_RED,
     )
