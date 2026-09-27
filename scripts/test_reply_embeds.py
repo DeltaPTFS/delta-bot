@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bot"))
 
 import main  # noqa: E402
+import config  # noqa: E402
 
 
 class _Avatar:
@@ -59,5 +60,8 @@ assert main.delta_status_emoji(_Guild(), success=False) == str(_Emoji())
 assert main.success_embed("Delivered").title.startswith(main.CHECKMARK_EMOJI)
 main.XMARK_EMOJI = main.delta_status_emoji(_Guild(), success=False)
 assert main.error_embed("Failed").title.startswith(str(_Emoji()))
+assert main.BOT_VERSION == config.BOT_VERSION
+assert main.format_uptime(90_061) == "1d 1h 1m 1s"
+assert main.deployed_source() != "local/unknown"
 
 print("Reply privacy, staff attribution, colors, and custom status emojis are valid.")

@@ -1,12 +1,11 @@
 {
-  "title": "Support Message Formatting Fix",
-  "summary": "Support replies and delivery statuses now use the requested private and staff-facing formats.",
+  "title": "Complete Leadership and HR Formats",
+  "summary": "Application formats now include both the available positions and all required submission instructions.",
   "added": [],
   "changed": [
-    "Successful actions now use the server CheckMark emoji instead of the blue arrow.",
-    "Customer DMs identify replies as Delta Support and no longer expose the customer ID.",
-    "Private ticket records continue to identify the staff member who sent each reply.",
-    "Ticket transcripts and release notices now use server logs channel 1539005101941850274."
+    "The Leadership Application format now includes the CV, statement of intent, department response, and minimum-quality requirements.",
+    "The HR Application format now includes the CV, statement of intent, department response, and minimum-quality requirements.",
+    "The Chief Financial Officer availability in the Leadership format is now listed as available."
   ],
   "removed": []
 }
