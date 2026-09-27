@@ -1,6 +1,6 @@
 """
-Delta Air Lines HelpDesk Discord Bot — Single-file version
-All configuration, embeds, views, and commands in one file.
+Delta Air Lines HelpDesk Discord Bot — production entry point.
+Runtime behavior lives here; shared settings live in config.py.
 
 Usage:
     python main.py
@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import subprocess
 import threading
 import time
 from datetime import datetime
@@ -28,40 +29,44 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from config import (
+    ADMIN_ROLE_ID,
+    BLUE_ARROW_EMOJI,
+    BOT_VERSION,
+    CHECKMARK_EMOJI,
+    DELTA_BLUE,
+    DELTA_RED,
+    DISCORD_RECONNECT_DELAY,
+    DIVIDER_URL,
+    DM_TICKET_CATEGORY_MARKER,
+    DM_TICKET_CLAIM_MARKER,
+    DM_TICKET_OWNER_MARKER,
+    FOOTER_TEXT,
+    GUILD_ID,
+    IDENTIFICATION_EMOJI,
+    INVITE_URL,
+    MAILING_ADDRESS,
+    MESSAGE_EMOJI,
+    RATING_TIMEOUT,
+    RIGHT_ARROW_EMOJI,
+    STAFF_ROLE_ID,
+    SUPPORT_EMOJI,
+    TICKET_CATEGORY_ID,
+    TICKET_CLOSE_DELAY,
+    TICKET_CONFIG,
+    TRANSCRIPT_CHANNEL_ID,
+    UPDATE_CHANNEL_ID,
+    WING_PIN_EMOJI,
+)
+
 # ════════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
 # ════════════════════════════════════════════════════════════════════════════════
 
-DELTA_RED       = 0xC8102E
-DELTA_BLUE      = 0x003087
-FOOTER_TEXT     = "Delta Air Lines • Keep Climbing"
-MAILING_ADDRESS = "P.O. Box 20980, Department 980, Atlanta, GA 30320-2980"
-
-DIVIDER_URL = os.getenv("DIVIDER_URL", "")
-
-GUILD_ID                = 1538738611988467782
-TICKET_CATEGORY_ID      = 1543674278711529562
-STAFF_ROLE_ID           = 1539005030189891684
-ADMIN_ROLE_ID           = 1539005297417519205
 # Backward-compatible name used by earlier command permission checks.
 BOT_COMMAND_ROLE_ID     = STAFF_ROLE_ID
-TRANSCRIPT_CHANNEL_ID   = 1543674377953087649
-UPDATE_CHANNEL_ID       = TRANSCRIPT_CHANNEL_ID
-BOT_VERSION             = "2.1.9"
-TICKET_CLOSE_DELAY      = 5
-RATING_TIMEOUT          = 15 * 24 * 60 * 60
-DISCORD_RECONNECT_DELAY = 15
-DM_TICKET_OWNER_MARKER  = "Delta DM Ticket Owner:"
-DM_TICKET_CATEGORY_MARKER = "Delta Ticket Category:"
-DM_TICKET_CLAIM_MARKER  = "Delta Ticket Claimed By:"
-INVITE_URL               = "https://discord.gg/hccQX6nGJw"
-SUPPORT_EMOJI             = "<:Support:1540927430179553321>"
-RIGHT_ARROW_EMOJI         = "<:RArrow:1540951788889575504>"
-BLUE_ARROW_EMOJI          = "<:BArrow:1540951845147639809>"
-WING_PIN_EMOJI            = "<:WingPinLogo:1540927847709802607>"
-MESSAGE_EMOJI             = "<:Message:1544506028752769134>"
-IDENTIFICATION_EMOJI      = "<:Identification:1544505969575198821>"
-CHECKMARK_EMOJI            = "<:CheckMark:1544505870904459264>"
+# Updated from the authorized server's custom emoji collection in on_ready.
+XMARK_EMOJI                = "❌"
 
 # Serializes history-check-and-send operations within each ticket. Without this,
 # two concurrent gateway deliveries can both check history before either copy is
@@ -112,58 +117,18 @@ If you'd like to contact our team or create a support ticket, click the **Create
 
 UPDATE_MESSAGE = f"""# <:DeltaLogo:1540927958116601980> Delta Support Bot — Update {BOT_VERSION}
 
-This is a **patch update** for the version 2 ticket-system release.
+This update improves deployment stability without changing the ticket workflow.
 
-## What's Fixed
-- Suppressed duplicate customer messages and repeated `/reply` deliveries.
-- Customer DMs identify human replies only as **Delta Air Lines Support**.
-- Private ticket records identify the support member who used `/reply`.
-- Human support replies use matching Delta-blue embeds and CheckMark confirmations.
-- Customers receive a private, anonymous notice when their ticket is claimed.
-- Serialized each ticket's relay operation so simultaneous gateway events cannot
-  pass duplicate detection together.
-- Render startup logs now identify the running bot version and source commit.
-- Removed automatic server departure and message deletion. Unauthorized servers
-  remain locked out, but the bot can no longer accidentally remove itself.
-- Moved the Ticket Claimed notice into validated JSON so web conflict resolution
-  cannot turn its Markdown into invalid Python syntax.
-- Built DM and staff `/reply` embeds independently: customers see Delta Support,
-  while only the private ticket channel sees the responding member's identity.
-- Locked success confirmations to the CheckMark emoji and expanded X-emoji lookup.
+## What's Changed
+- `bot/main.py` is now the only production HelpDesk implementation.
+- Configuration and the version now have one source of truth.
+- Startup logs show the version, Git branch, commit, and detected host.
+- Startup validates the configured guild, ticket category, logs channel, and roles.
+- `/version` now includes uptime and Discord latency for support staff.
+- Assistance dropdown failures now print full exception details to the host console.
+- Leadership and HR `/format` options now include their complete application requirements.
 
--# Version format: major.minor.patch • Patch releases increase the final number."""
-
-# Each key maps to a ticket category. Add new rows here to add new categories.
-TICKET_CONFIG: dict[str, dict] = {
-    "general_inquiries": {
-        "label":       "General Inquires",
-        "prefix":      "general-support",
-        "role_id":     STAFF_ROLE_ID,
-        "emoji":       "<:Plane:1540926994332651580>",
-        "description": "General questions about Delta Air Lines services.",
-    },
-    "skymiles": {
-        "label":       "SkyMiles",
-        "prefix":      "skymiles",
-        "role_id":     STAFF_ROLE_ID,
-        "emoji":       "<:CreditCard:1540927195357253702>",
-        "description": "Questions about SkyMiles accounts and benefits.",
-    },
-    "partnership_requests": {
-        "label":       "Partner Request",
-        "prefix":      "partnership",
-        "role_id":     STAFF_ROLE_ID,
-        "emoji":       "<:Partners:1540927071822549114>",
-        "description": "Inquiries regarding business partnerships.",
-    },
-    "careers": {
-        "label":       "Careers",
-        "prefix":      "careers",
-        "role_id":     STAFF_ROLE_ID,
-        "emoji":       "<:Nametag:1541175704622993428>",
-        "description": "Questions about careers and applications.",
-    },
-}
+-# Version format: major.minor.patch."""
 
 # ════════════════════════════════════════════════════════════════════════════════
 # EMBEDS
@@ -219,7 +184,7 @@ def generic_ticket_welcome(member: discord.Member, label: str, emoji: str) -> di
 
 def ticket_closed_dm(ticket_name: str) -> discord.Embed:
     embed = _base_embed(
-        title="<:RArrow:1540951788889575504>  Ticket Closed",
+        title=f"{CHECKMARK_EMOJI}  Ticket Closed",
         description=(
             f"Your support ticket **#{ticket_name}** has been successfully closed.\n\n"
             "Thank you for contacting **Delta Air Lines Support**. "
@@ -235,7 +200,7 @@ def ticket_closed_dm(ticket_name: str) -> discord.Embed:
 
 def ticket_closed_channel() -> discord.Embed:
     embed = _base_embed(
-        title="<:RArrow:1540951788889575504>  Ticket Closing",
+        title=f"{CHECKMARK_EMOJI}  Ticket Closing",
         description=f"This ticket has been marked as **closed** and will be deleted in **{TICKET_CLOSE_DELAY} seconds**.\n\nThank you for contacting Delta Air Lines Support.",
     )
     _set_brand_image(embed, DIVIDER_URL)
@@ -255,13 +220,13 @@ def already_open_ticket(channel: discord.TextChannel) -> discord.Embed:
 
 
 def error_embed(message: str) -> discord.Embed:
-    embed = discord.Embed(title="<:RArrow:1540951788889575504>  Error", description=message, color=DELTA_RED)
+    embed = discord.Embed(title=f"{XMARK_EMOJI}  Error", description=message, color=DELTA_RED)
     embed.set_footer(text=FOOTER_TEXT)
     return embed
 
 
 def success_embed(message: str) -> discord.Embed:
-    embed = discord.Embed(title="<:BArrow:1540951845147639809>  Success", description=message, color=DELTA_RED)
+    embed = discord.Embed(title=f"{CHECKMARK_EMOJI}  Success", description=message, color=DELTA_RED)
     embed.set_footer(text=FOOTER_TEXT)
     return embed
 
@@ -310,12 +275,93 @@ def delta_status_emoji(guild: discord.Guild | None, success: bool) -> str:
         for name in preferred_names:
             if emoji := emojis.get(name):
                 return str(emoji)
-    return RIGHT_ARROW_EMOJI
+    return XMARK_EMOJI
+
+
+def _git_output(*args: str) -> str | None:
+    """Read local Git metadata without making startup depend on Git being present."""
+    try:
+        result = subprocess.run(
+            ("git", *args),
+            cwd=Path(__file__).resolve().parents[1],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return None
+    return result.stdout.strip() or None
 
 
 def deployed_source() -> str:
-    """Return the source revision supplied by Render, or a local fallback."""
-    return os.getenv("RENDER_GIT_COMMIT", "local/unknown")[:12]
+    """Return the deployed commit SHA, or the clean fallback ``unknown``."""
+    value = next(
+        (
+            os.getenv(name)
+            for name in (
+                "RAVEN_GIT_COMMIT",
+                "RENDER_GIT_COMMIT",
+                "RAILWAY_GIT_COMMIT_SHA",
+                "GITHUB_SHA",
+                "COMMIT_SHA",
+            )
+            if os.getenv(name)
+        ),
+        None,
+    )
+    return (value or _git_output("rev-parse", "HEAD") or "unknown")[:12]
+
+
+def deployed_branch() -> str:
+    """Return the deployment branch when provided by the host or local Git."""
+    value = next(
+        (
+            os.getenv(name)
+            for name in (
+                "RAVEN_GIT_BRANCH",
+                "RENDER_GIT_BRANCH",
+                "RAILWAY_GIT_BRANCH",
+                "GITHUB_REF_NAME",
+                "BRANCH_NAME",
+            )
+            if os.getenv(name)
+        ),
+        None,
+    )
+    return value or _git_output("branch", "--show-current") or "unknown"
+
+
+def hosting_environment() -> str:
+    """Identify common deployment hosts from their environment variables."""
+    if any(name.startswith("RAVEN_") for name in os.environ) or os.getenv("RAVEN_HOST"):
+        return "Raven Host"
+    if os.getenv("RENDER") or os.getenv("RENDER_SERVICE_ID"):
+        return "Render"
+    if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID"):
+        return "Railway"
+    if os.getenv("REPL_ID") or os.getenv("REPL_SLUG"):
+        return "Replit"
+    if os.getenv("GITHUB_ACTIONS"):
+        return "GitHub Actions"
+    return "unknown"
+
+
+def format_uptime(seconds: float) -> str:
+    """Format a monotonic duration for the staff status command."""
+    total = max(0, int(seconds))
+    days, remainder = divmod(total, 86_400)
+    hours, remainder = divmod(remainder, 3_600)
+    minutes, secs = divmod(remainder, 60)
+    parts = []
+    if days:
+        parts.append(f"{days}d")
+    if hours or days:
+        parts.append(f"{hours}h")
+    if minutes or hours or days:
+        parts.append(f"{minutes}m")
+    parts.append(f"{secs}s")
+    return " ".join(parts)
 
 
 def get_ticket_owner_id(channel: discord.TextChannel) -> int | None:
@@ -533,22 +579,6 @@ def conversation_embed(
     embed.timestamp = timestamp
     return embed
 
-def anonymous_support_reply_embed(
-    content: str,
-    customer_id: int | str,
-    timestamp: datetime | None = None,
-) -> discord.Embed:
-    """Build the Delta-blue reply delivered to a customer without agent identity."""
-    embed = customer_response_embed(content, customer_id, timestamp)
-    embed.description = embed.description.replace(
-        f"{MESSAGE_EMOJI} **Customer Response**",
-        f"{MESSAGE_EMOJI} **Delta Support Reply**",
-        1,
-    )
-    embed.color = DELTA_BLUE
-    embed.set_author(name="Delta Air Lines Support")
-    return embed
-
 def customer_response_embed(
     content: str,
     customer_id: int | str,
@@ -567,14 +597,17 @@ def anonymous_support_reply_embed(
     timestamp: datetime | None = None,
 ) -> discord.Embed:
     """Build the Delta-blue reply delivered to a customer without agent identity."""
-    embed = conversation_embed(
-        content,
-        customer_id,
-        "Delta Support Reply",
-        timestamp,
+    # Customer-facing replies intentionally omit all internal identifiers. The
+    # attributed copy posted in the private ticket retains both the customer ID
+    # and the responding support member for auditing.
+    safe_content = content if len(content) <= 4000 else f"{content[:3997]}..."
+    embed = discord.Embed(
+        description=f"{MESSAGE_EMOJI} **Delta Support Reply**\n\n{safe_content}",
         color=DELTA_BLUE,
     )
-    embed.set_author(name="Delta Air Lines Support")
+    embed.set_author(name="Delta Support")
+    embed.set_footer(text=FOOTER_TEXT)
+    embed.timestamp = timestamp
     return embed
 
 
@@ -654,7 +687,7 @@ async def open_dm_ticket(
         value=(
             "1. Select **Claim Ticket** before replying.\n"
             "2. Send replies normally in this channel.\n"
-            "3. A <:BArrow:1540951845147639809> confirms delivery to the customer."
+            f"3. A {CHECKMARK_EMOJI} confirms delivery to the customer."
         ),
         inline=False,
     )
@@ -894,7 +927,7 @@ class RatingView(discord.ui.View):
             self.rating = stars
             self.stop()
             confirm = _base_embed(
-                title="<:BArrow:1540951845147639809>  Rating Submitted",
+                title=f"{CHECKMARK_EMOJI}  Rating Submitted",
                 description=(
                     f"Thank you! You rated your support experience **{stars} / 5 {WING_PIN_EMOJI}**.\n\n"
                     "*Delta Air Lines — Keep Climbing.*"
@@ -1033,10 +1066,10 @@ class TicketActionView(discord.ui.View):
                 embed=success_embed("You have unclaimed this ticket."), ephemeral=True
             )
             status_embed = _base_embed(
-                title="<:BArrow:1540951845147639809>  Ticket Unclaimed",
+                title=f"{CHECKMARK_EMOJI}  Ticket Unclaimed",
                 description=f"This ticket has been unclaimed by {member.mention}.",
             )
-            owner_title = "<:BArrow:1540951845147639809>  Support Agent Disconnected"
+            owner_title = f"{CHECKMARK_EMOJI}  Support Agent Disconnected"
             owner_message = (
                 "The support agent handling your ticket has unclaimed it. "
                 "Another agent can now assist you."
@@ -1131,6 +1164,21 @@ class AssistanceSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        try:
+            await self._handle_selection(interaction)
+        except Exception:
+            log.exception(
+                "DM assistance dropdown failed for user %s (interaction %s).",
+                interaction.user.id,
+                interaction.id,
+            )
+            try:
+                sender = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+                await sender(embed=error_embed("I could not open your ticket. Please try again."))
+            except discord.HTTPException:
+                log.exception("Could not send the DM dropdown failure response for interaction %s.", interaction.id)
+
+    async def _handle_selection(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
 
         user = interaction.user
@@ -1160,6 +1208,11 @@ class AssistanceSelect(discord.ui.Select):
         try:
             _, created = await open_dm_ticket(self.bot, user, selected_key)
         except Exception as exc:
+            log.exception(
+                "Could not open DM assistance ticket for user %s in category %s.",
+                user.id,
+                selected_key,
+            )
             self.bot._dm_prompted_users.discard(user.id)
             await interaction.followup.send(
                 embed=error_embed(f"Failed to create your ticket: {exc}"),
@@ -1207,6 +1260,24 @@ class ServerAssistanceSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        try:
+            await self._handle_selection(interaction)
+        except Exception:
+            log.exception(
+                "Server assistance dropdown failed for user %s (interaction %s).",
+                interaction.user.id,
+                interaction.id,
+            )
+            try:
+                sender = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+                await sender(
+                    embed=error_embed("I could not open your ticket. Please try again."),
+                    ephemeral=True,
+                )
+            except discord.HTTPException:
+                log.exception("Could not send the server dropdown failure response for interaction %s.", interaction.id)
+
+    async def _handle_selection(self, interaction: discord.Interaction) -> None:
         selected_key = self.values[0]
         cfg = TICKET_CONFIG[selected_key]
         await interaction.response.defer(ephemeral=True)
@@ -1227,6 +1298,11 @@ class ServerAssistanceSelect(discord.ui.Select):
             )
             await dm_message.edit(content=None, embed=notice)
         except (discord.HTTPException, ValueError) as exc:
+            log.exception(
+                "Could not open server assistance ticket for user %s in category %s.",
+                interaction.user.id,
+                selected_key,
+            )
             try:
                 await dm_message.edit(content="Delta Support could not open your ticket. Please try again.")
             except discord.HTTPException:
@@ -1331,6 +1407,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         "resolved",
         "revoke",
         "ticket",
+        "tickets",
         "version",
     ):
         tree.remove_command(command_name, type=discord.AppCommandType.chat_input)
@@ -1386,11 +1463,22 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             ephemeral=True,
         )
 
-    @tree.command(name="version", description="Show the running bot release and source revision.")
+    @tree.command(name="version", description="Show the running HelpDesk status and release.")
     @staff_only()
     async def version(interaction: discord.Interaction) -> None:
+        bot = interaction.client
+        uptime = format_uptime(time.monotonic() - bot.started_monotonic)
+        latency_ms = round(bot.latency * 1000)
         await interaction.response.send_message(
-            f"Delta Air Lines HelpDesk `{BOT_VERSION}` • source `{deployed_source()}`",
+            embed=_base_embed(
+                title=f"{SUPPORT_EMOJI}  HelpDesk Status",
+                description=(
+                    f"**Version:** `{BOT_VERSION}`\n"
+                    f"**Git commit:** `{deployed_source()}`\n"
+                    f"**Uptime:** `{uptime}`\n"
+                    f"**Discord latency:** `{latency_ms} ms`"
+                ),
+            ),
             ephemeral=True,
         )
 
@@ -1892,6 +1980,7 @@ class DeltaBot(commands.Bot):
         self.admin_undo_actions: list[tuple] = []
         self.processed_dm_messages: set[int] = set()
         self.processed_reply_interactions: set[int] = set()
+        self.started_monotonic = time.monotonic()
 
     async def setup_hook(self) -> None:
         self.add_view(TicketActionView())
@@ -1905,11 +1994,17 @@ class DeltaBot(commands.Bot):
         log.info("Synced %d application command(s) to guild %s.", len(synced), GUILD_ID)
 
     async def on_ready(self) -> None:
+        global XMARK_EMOJI
+        # Resolve the server-owned X mark once so every later error embed uses
+        # the same custom status language as successful CheckMark responses.
+        XMARK_EMOJI = delta_status_emoji(self.get_guild(GUILD_ID), success=False)
         log.info("Logged in as %s (ID: %s)", self.user, self.user.id if self.user else "unknown")
         log.info(
-            "Delta Air Lines HelpDesk %s is online (source %s).",
+            "Delta Air Lines HelpDesk %s is online | branch=%s | commit=%s | host=%s.",
             BOT_VERSION,
+            deployed_branch(),
             deployed_source(),
+            hosting_environment(),
         )
         await self.change_presence(
             activity=discord.Activity(
@@ -1919,15 +2014,10 @@ class DeltaBot(commands.Bot):
             )
         )
 
+        authorized_guild = self.get_guild(GUILD_ID)
+        self._validate_startup_configuration(authorized_guild)
         await self._post_release_update()
 
-        authorized_guild = self.get_guild(GUILD_ID)
-        if authorized_guild is None:
-            log.error(
-                "AUTHORIZED SERVER NOT FOUND: invite the bot to guild %s; "
-                "commands remain locked to that guild.",
-                GUILD_ID,
-            )
         for guild in self.guilds:
             if guild.id != GUILD_ID:
                 log.warning(
@@ -1935,6 +2025,40 @@ class DeltaBot(commands.Bot):
                     guild.name,
                     guild.id,
                 )
+
+    def _validate_startup_configuration(self, guild: discord.Guild | None) -> None:
+        """Log every invalid Discord resource ID without stopping the bot."""
+        if guild is None:
+            log.warning(
+                "Startup validation: guild %s was not found; all dependent resources are unavailable.",
+                GUILD_ID,
+            )
+            return
+
+        checks = (
+            ("ticket category", TICKET_CATEGORY_ID, discord.CategoryChannel),
+            ("transcript/log channel", TRANSCRIPT_CHANNEL_ID, discord.TextChannel),
+        )
+        invalid = False
+        for label, resource_id, expected_type in checks:
+            resource = guild.get_channel(resource_id)
+            if not isinstance(resource, expected_type):
+                invalid = True
+                log.warning(
+                    "Startup validation: configured %s ID %s is missing or has the wrong type.",
+                    label,
+                    resource_id,
+                )
+        for label, role_id in (("staff role", STAFF_ROLE_ID), ("admin role", ADMIN_ROLE_ID)):
+            if guild.get_role(role_id) is None:
+                invalid = True
+                log.warning(
+                    "Startup validation: configured %s ID %s was not found.",
+                    label,
+                    role_id,
+                )
+        if not invalid:
+            log.info("Startup validation passed for guild %s (%s).", guild.name, guild.id)
 
     async def _post_release_update(self) -> None:
         """Post this release once to the update/transcript channel."""
@@ -2156,7 +2280,7 @@ def run_health_server() -> None:
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.send_header("X-Delta-Bot-Version", BOT_VERSION)
-            self.send_header("X-Render-Git-Commit", deployed_source())
+            self.send_header("X-Git-Commit", deployed_source())
             self.end_headers()
 
         def do_GET(self) -> None:
@@ -2206,9 +2330,11 @@ def main() -> None:
     thread = threading.Thread(target=run_health_server, daemon=True)
     thread.start()
     log.info(
-        "Starting Delta Air Lines HelpDesk %s (source %s).",
+        "Starting Delta Air Lines HelpDesk %s | branch=%s | commit=%s | host=%s.",
         BOT_VERSION,
+        deployed_branch(),
         deployed_source(),
+        hosting_environment(),
     )
     log.info("Health-check server started.")
 
@@ -2216,9 +2342,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    # Keep this stable launcher tiny so future pull-request conflicts can be
-    # resolved in GitHub's web editor. The active implementation lives in the
-    # additive delta_bot module, which does not conflict with the legacy file.
-    from delta_bot import main as run_current_bot
-
-    run_current_bot()
+    main()
