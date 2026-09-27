@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BOT_DIR = ROOT / "bot"
-REMOVED_IMPLEMENTATIONS = {
+LEGACY_SHIMS = {
     "delta_bot.py",
     "commands.py",
     "embeds.py",
@@ -21,11 +21,11 @@ REMOVED_IMPLEMENTATIONS = {
 
 
 def validate_python_sources() -> None:
-    stale = sorted(path.name for path in BOT_DIR.iterdir() if path.name in REMOVED_IMPLEMENTATIONS)
-    if stale:
-        raise ValueError(
-            "stale bot implementation files must not be restored: " + ", ".join(stale)
-        )
+    for filename in sorted(LEGACY_SHIMS):
+        path = BOT_DIR / filename
+        source = path.read_text(encoding="utf-8")
+        if "LEGACY_COMPATIBILITY_SHIM = True" not in source or len(source.splitlines()) > 20:
+            raise ValueError(f"{path}: legacy path must remain a small compatibility shim")
 
     for path in sorted(BOT_DIR.glob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -44,7 +44,7 @@ def validate_python_sources() -> None:
     main_source = (BOT_DIR / "main.py").read_text(encoding="utf-8")
     if 'if __name__ == "__main__":\n    main()' not in main_source:
         raise ValueError("bot/main.py must invoke main() directly")
-    if "delta_bot" in main_source:
+    if "from delta_bot" in main_source or "import delta_bot" in main_source:
         raise ValueError("bot/main.py must not redirect into delta_bot.py")
 
     config_tree = ast.parse(

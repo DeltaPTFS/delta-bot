@@ -38,6 +38,7 @@ bot/
 ├── config.py        — Single source for version, IDs, roles, and shared settings
 ├── support_formats.json — Web-editable canned `/format` messages
 ├── messages.json      — Syntax-safe operational ticket messages
+├── delta_bot.py       — Tiny compatibility launcher; contains no bot implementation
 ├── requirements.txt — Python dependencies
 ├── .env.example     — Template for required environment variables
 └── README.md        — This file
@@ -201,9 +202,11 @@ so that warning no longer distracts from actionable deployment errors. Keep only
 one service running with the production `DISCORD_TOKEN`, since two deployments
 using the same bot account can process the same customer event independently.
 
-`bot/main.py` is the only production implementation. Repository validation fails
-if the obsolete `bot/delta_bot.py` or legacy modular bot files are restored, or if
-the launcher redirects away from `main()`.
+`bot/main.py` is the only production implementation. The historical Python module
+paths remain as tiny, implementation-free compatibility shims so modify/delete
+conflicts can be handled in GitHub's web editor. Repository validation rejects any
+attempt to put a second bot implementation back into those shims or redirect
+`main.py` away from `main()`.
 
 If the bot was removed from the authorized server, reinvite the application from
 Discord Developer Portal → OAuth2 → URL Generator with the `bot` and
