@@ -1,10 +1,12 @@
 {
-  "title": "Ticket Close Command Fix",
-  "summary": "The ticket close command no longer fails while checking the support role.",
+  "title": "Ticket-Only Runtime Cleanup",
+  "summary": "General server moderation and activity logging were removed while all ticket functionality remains intact.",
   "added": [],
   "changed": [
-    "Restored the command-role configuration name expected by previously deployed permission checks.",
-    "The command and staff role names both resolve to the sole authorized role, 1539005030189891684."
+    "Removed member join and leave logging.",
+    "Removed message edit and deletion logging.",
+    "Removed general moderation event logging and lounge AutoMod.",
+    "Kept ticket transcripts, release updates, ticket controls, DM relay, /reply, and /format unchanged."
   ],
   "removed": []
 }

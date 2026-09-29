@@ -12,17 +12,17 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Assistance Panel | Support or admins can post the plain-text contact panel or upload custom top and bottom banner images with `/panel`; confirmation continues in DMs |
 | Private Tickets | Members stay in DMs while staff work from a hidden relay channel |
 | Duplicate Guard | Prevents users from opening multiple simultaneous tickets |
-| Close Ticket | Button *and* `/close` slash command; DMs the user on close |
+| Close Ticket | Persistent button plus `/ticket control` and `/ticket admin`; DMs the user on close |
 | Message Relay | Per-ticket locking suppresses concurrent duplicate events; customer messages and Delta-blue human replies are recorded once |
-| Agent Privacy | Customer DMs identify replies as Delta Air Lines Support; only the private ticket record identifies the agent |
+| Agent Privacy | Customer DMs receive plain reply text; only the private ticket retains the attributed reply embed |
 | Ticket Reuse | Repeat creation attempts reconnect the customer to their existing ticket instead of opening a duplicate |
-| Staff Commands | `/reply`, `/format`, `/ticket add-customer`, `/ticket add-support`, and `/ticket close` are support role-gated |
-| Admin Commands | `/ticket admin remove`, `punish`, `unpunish`, and `undo` are admin role-gated |
+| Staff Commands | `/reply`, `/format`, and claimant-only `/ticket control` are support role-gated |
+| Admin Commands | `/ticket admin` consolidates assignment, removal, punishment, close, and undo actions |
 | Delta Branding | Red (#C8102E), optional server-owned images, and a consistent footer |
 | Claim State | Support can claim and unclaim repeatedly; claim ownership survives bot restarts |
 | Transcripts | Closed-ticket transcripts are posted to the private transcript channel |
 | Server Safety | Commands and tickets are locked to server `1538738611988467782`, but the bot never removes itself from a server |
-| Release Updates | Posts and pins each release once in channel `1543674377953087649`; the current release is `2.1.9` |
+| Release Updates | Posts and pins each release once in server logs channel `1539005101941850274`; the current release comes from `config.py` |
 
 Versions use `major.minor.patch`. Breaking or especially large releases increase
 the first number, regular feature releases increase the second, and fixes increase
@@ -34,15 +34,11 @@ the third.
 
 ```
 bot/
-├── main.py          — Entry point; bot class, login, view registration
+├── main.py          — The only production implementation and entry point
+├── config.py        — Single source for version, IDs, roles, and shared settings
 ├── support_formats.json — Web-editable canned `/format` messages
 ├── messages.json      — Syntax-safe operational ticket messages
-├── config.py        — All IDs, colours, branding constants
-├── embeds.py        — Factory functions for every embed
-├── views.py         — UI components (Select dropdown, Close button, Panel view)
-├── tickets.py       — Ticket close orchestration helper
-├── commands.py      — All slash commands + error handler
-├── utils.py         — Shared helpers (permission checks, channel creation)
+├── delta_bot.py       — Tiny compatibility launcher; contains no bot implementation
 ├── requirements.txt — Python dependencies
 ├── .env.example     — Template for required environment variables
 └── README.md        — This file
@@ -99,26 +95,29 @@ python main.py
 | Command | Description | Who Can Use |
 |---|---|---|
 | `/panel` | Post the private-ticket Assistance Panel in the current channel | DL Leadership only |
-| `/close` | Close the current ticket | Support/admin role or ticket creator |
-| `/reply` | Send an anonymous branded reply to the claimed ticket customer | Claiming support/admin member |
+| `/reply` | Send plain reply text to the customer and retain the attributed embed in the ticket | Claimant or support member added to that ticket |
 | `/format` | Choose one of the prewritten customer notices | Staff only |
-| `/ticket` | Add people, close tickets, and use role-appropriate administration tools | Staff/admin, depending on subcommand |
+| `/ticket control` | Add/remove customers or support and close the current ticket | Staff member who claimed that ticket |
+| `/ticket admin` | Run consolidated assignment, removal, punishment, close, or undo actions | Admin only |
+| `/version` | Show version, commit, uptime, and Discord latency | Staff only |
 
 ---
 
 ## Configuration
 
-The active single-file bot keeps its IDs and constants in **`main.py`**:
+All shared production settings live in **`config.py`**. `main.py` imports them;
+do not copy version or Discord IDs back into the entry point.
 
 | Constant | Default Value | Purpose |
 |---|---|---|
 | `GUILD_ID` | `1538738611988467782` | The only authorized Discord server |
 | `TICKET_CATEGORY_ID` | `1543674278711529562` | Category for private ticket relay channels |
 | `STAFF_ROLE_ID` | `1539005030189891684` | Support/admin role for commands, access, and ticket pings |
-| `TRANSCRIPT_CHANNEL_ID` | `1543674377953087649` | Channel that receives closed-ticket transcripts |
+| `TRANSCRIPT_CHANNEL_ID` | `1539005101941850274` | Server logs channel that receives closed-ticket transcripts and release notices |
 | `DELTA_RED` | `0xC8102E` | Embed accent colour |
 
-To add a new ticket category, add an entry to the `TICKET_CONFIG` dictionary in `main.py`. The rest of the bot picks it up automatically.
+To add a new ticket category, add an entry to `TICKET_CONFIG` in `config.py`.
+The production implementation in `main.py` consumes it automatically.
 
 The bot publishes commands only to `GUILD_ID`, clears its former global commands,
 and accepts DM tickets only from members of the authorized server. Other guilds
@@ -137,14 +136,39 @@ remain inert; the bot never automatically leaves a server.
 
 ## Deployment
 
-### Render / Railway
+### Raven Host
+
+Raven must launch the repository-root entry point directly. Configure:
+
+```text
+Build Command: python -m pip install -r requirements.txt
+Start Command: python bot/main.py
+Environment: DISCORD_TOKEN=<the current bot token>
+```
+
+No wrapper module is involved: `bot/main.py` ends with `main()` and is the only
+production implementation. Persistent ticket buttons and the public Assistance
+dropdown are registered during `setup_hook` before commands are synchronized.
+
+At startup, the Raven console reports the version, detected Git branch and commit,
+and hosting environment. It then validates the guild, ticket category, logs
+channel, staff role, and admin role. Any incorrect configured ID produces a clear
+warning without hiding the remaining checks. Assistance dropdown exceptions are
+logged with a full traceback, so an “application didn't respond” incident can be
+diagnosed in the Raven console.
+
+After deployment, run `/version` as staff to verify the commit, uptime, and Discord
+latency. Raven only needs the current `DISCORD_TOKEN`; no entry-point change is
+required.
+
+### Render / Railway (alternative hosts)
 
 1. Push your repository to GitHub (make sure `.env` is in `.gitignore`).
 2. Create a new **Web Service** (Render) or **Service** (Railway).
 3. Set the **Start Command** to: `python bot/main.py`
 4. Add the `DISCORD_TOKEN` environment variable in the platform dashboard.
 
-#### Render recovery checklist
+#### Deployment recovery checklist
 
 Use these exact service settings:
 
@@ -158,9 +182,9 @@ After merging an update, choose **Manual Deploy → Clear build cache & deploy**
 In the deploy logs, verify both of these lines appear:
 
 ```text
-Starting Delta Air Lines HelpDesk 2.1.9 (source <merged commit>).
+Starting Delta Air Lines HelpDesk <version> | branch=<branch> | commit=<commit> | host=<host>.
 Synced 8 application command(s) to guild 1538738611988467782.
-Delta Air Lines HelpDesk 2.1.9 is online (source <merged commit>).
+Delta Air Lines HelpDesk <version> is online | branch=<branch> | commit=<commit> | host=<host>.
 ```
 
 If the source hash is not the commit you merged, Render is deploying the wrong
@@ -178,9 +202,11 @@ so that warning no longer distracts from actionable deployment errors. Keep only
 one service running with the production `DISCORD_TOKEN`, since two deployments
 using the same bot account can process the same customer event independently.
 
-`bot/main.py` is the only production implementation. The obsolete
-`bot/delta_bot.py` copy was removed so the Render start command cannot silently
-launch stale behavior again.
+`bot/main.py` is the only production implementation. The historical Python module
+paths remain as tiny, implementation-free compatibility shims so modify/delete
+conflicts can be handled in GitHub's web editor. Repository validation rejects any
+attempt to put a second bot implementation back into those shims or redirect
+`main.py` away from `main()`.
 
 If the bot was removed from the authorized server, reinvite the application from
 Discord Developer Portal → OAuth2 → URL Generator with the `bot` and

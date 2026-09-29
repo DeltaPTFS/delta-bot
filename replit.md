@@ -20,13 +20,11 @@ python main.py
 
 ```
 bot/
-├── main.py      — Bot entry point, login, persistent view registration
-├── config.py    — All IDs, colours, branding constants (edit this to configure)
-├── embeds.py    — All Discord embed factory functions
-├── views.py     — UI: AssistancePanelView (dropdown), CloseTicketButton
-├── tickets.py   — Ticket close orchestration
-├── commands.py  — All slash commands (/assistance panel, /close, /connected, /resolved)
-└── utils.py     — Shared helpers (permission checks, channel creation, duplicate guard)
+├── main.py            — Only production implementation and direct entry point
+├── config.py          — Version, Discord IDs, colours, and shared settings
+├── support_formats.json — Validated `/format` content
+├── messages.json      — Validated operational messages
+└── delta_bot.py       — Implementation-free compatibility launcher only
 ```
 
 ## Architecture Decisions
@@ -36,6 +34,7 @@ bot/
 - **`config.py` as single source of truth** for all IDs; adding a new ticket category only requires a new entry in `TICKET_CONFIG`.
 - **Staff-only commands guarded** with `app_commands.check` using `STAFF_ROLE_ID`.
 - **Ephemeral staff confirmations** — staff see "Message sent successfully", users see the full branded embed.
+- **Single production entry point** — Raven, Replit, and local runs all execute `bot/main.py`; compatibility paths contain no alternate bot implementation.
 
 ## User Preferences
 
@@ -48,3 +47,4 @@ bot/
 - The bot needs **Server Members Intent** enabled in the Discord Developer Portal.
 - Slash commands can take up to 1 hour to propagate globally after first sync. Use guild-scoped sync during development (see comment in `main.py`).
 - `DISCORD_TOKEN` must be set in `.env` (copy `.env.example`).
+- Raven Host must use `python bot/main.py` as its start command from the repository root.
