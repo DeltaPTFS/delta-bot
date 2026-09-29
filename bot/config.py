@@ -22,7 +22,7 @@ UPDATE_CHANNEL_ID = TRANSCRIPT_CHANNEL_ID
 # channels named "lounge". A value of 0 falls back to an exact name lookup.
 LOUNGE_CHANNEL_ID = int(os.getenv("LOUNGE_CHANNEL_ID", "0"))
 
-BOT_VERSION = "2.7.0"
+BOT_VERSION = "2.9.0"
 
 # ── Runtime behavior ─────────────────────────────────────────────────────────
 TICKET_CLOSE_DELAY = 5
@@ -44,11 +44,8 @@ IDENTIFICATION_EMOJI = "<:Identification:1544505969575198821>"
 CHECKMARK_EMOJI = "<:CheckMark:1544505870904459264>"
 
 # ── Role IDs ─────────────────────────────────────────────────────────────────
-STAFF_ROLE_ID           = 1539005030189891684  # May use staff-only commands
-ADMIN_ROLE_ID           = 1539005297417519205  # May use ticket administration commands
-# Role granted and removed by /authentication-control. Keeping this configurable
-# avoids baking a server role into the bot when authentication roles are replaced.
-AUTHENTICATED_ROLE_ID   = int(os.getenv("AUTHENTICATED_ROLE_ID", "0"))
+STAFF_ROLE_ID           = 1539005030189891684  # Delta Leadership; may use ticket control
+ADMIN_ROLE_ID           = 1539005297417519205  # Delta Founder; may use ticket admin and control
 GENERAL_SUPPORT_ROLE_ID = STAFF_ROLE_ID
 
 # ── Ticket-category → channel-prefix / role map ───────────────────────────────

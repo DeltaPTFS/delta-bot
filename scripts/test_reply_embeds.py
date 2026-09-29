@@ -85,11 +85,18 @@ assert main.deployed_source() != "local/unknown"
 assert main.find_blocked_term("this is sh1t") == "shit"
 assert main.find_blocked_term("f.u.c.k") == "fuck"
 assert main.find_blocked_term("class assignment") is None
+partnership_accepted = main.SUPPORT_FORMATS["partnership_accepted"]
+assert "External Affairs Office" in partnership_accepted
+assert "## Delta Air Lines | SkyTeam" in partnership_accepted
+assert "over [5,000]" in partnership_accepted
+assert "https://discord.gg/u8GJF2br2M" in partnership_accepted
+assert "Ad not done yet" not in partnership_accepted
+assert len(partnership_accepted) <= 4096
 assert main.is_release_update_message(
-    _Message("# Delta Support Bot — Update 2.7.0", 123), 123
+    _Message("# Delta Support Bot — Update 2.9.0", 123), 123
 )
 assert not main.is_release_update_message(
-    _Message("# Delta Support Bot — Update 2.7.0", 456), 123
+    _Message("# Delta Support Bot — Update 2.9.0", 456), 123
 )
 assert not main.is_release_update_message(_Message("ordinary log message", 123), 123)
 assert config.TICKET_CONFIG["careers"]["role_id"] == config.ADMIN_ROLE_ID
@@ -99,8 +106,8 @@ assert main.ticket_access_role_ids("general_inquiries") == {
     config.ADMIN_ROLE_ID,
 }
 assert main.can_use_ticket_control(_Member(config.STAFF_ROLE_ID))
-assert not main.can_use_ticket_control(_Member(config.ADMIN_ROLE_ID))
-assert not main.can_use_ticket_control(
+assert main.can_use_ticket_control(_Member(config.ADMIN_ROLE_ID))
+assert main.can_use_ticket_control(
     _Member(config.STAFF_ROLE_ID, config.ADMIN_ROLE_ID)
 )
 
@@ -115,5 +122,10 @@ main.register_commands(bot.tree)
 commands = {command.name: command for command in bot.tree.get_commands()}
 assert set(commands) == {"panel", "version", "reply", "format", "ticket"}
 assert {command.name for command in commands["ticket"].commands} == {"control", "admin"}
+ticket_control = next(command for command in commands["ticket"].commands if command.name == "control")
+ticket_admin = next(command for command in commands["ticket"].commands if command.name == "admin")
+control_actions = {choice.value for choice in ticket_control._params["command"].choices}
+admin_actions = {choice.value for choice in ticket_admin._params["command"].choices}
+assert control_actions <= admin_actions
 
 print("Reply privacy, staff attribution, colors, and custom status emojis are valid.")

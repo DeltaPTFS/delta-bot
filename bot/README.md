@@ -121,12 +121,12 @@ do not copy version or Discord IDs back into the entry point.
 To add a new ticket category, add an entry to `TICKET_CONFIG` in `config.py`.
 The production implementation in `main.py` consumes it automatically.
 
-Careers tickets are visible only to role `1539005297417519205`; the regular
-leadership/support role is not granted access. Responses from `/ticket admin` are
-ephemeral to the administrator who invoked it, while `/ticket control` responses
-are posted visibly in the current ticket channel. The Careers role is authorized
-for `/ticket admin` and explicitly denied `/ticket control`, even if a member also
-holds the regular support role.
+Careers tickets are visible only to the Delta Founder role
+`1539005297417519205`; Delta Leadership (`1539005030189891684`) is not granted
+access to Careers channels. Both roles can use `/ticket control` in channels they
+can access. Only the Delta Founder can use `/ticket admin`; its actions bypass
+claim ownership and include every `/ticket control` action. Admin responses are
+ephemeral, while control responses are visible in the current ticket channel.
 
 The bot publishes commands only to `GUILD_ID`, clears its former global commands,
 and accepts DM tickets only from members of the authorized server. Other guilds

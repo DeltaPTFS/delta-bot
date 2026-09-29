@@ -131,7 +131,9 @@ This update keeps the logs channel's release announcement current.
 - Restarting the same version does not post duplicate update messages.
 - Careers tickets are private to the configured careers role.
 - `/ticket admin` replies are private; `/ticket control` replies are visible in the ticket.
-- The Careers role can use `/ticket admin`, but not `/ticket control`.
+- Delta Leadership and the Delta Founder can use `/ticket control`.
+- `/ticket admin` is Founder-only and overrides control actions and claim ownership.
+- Partnership Acceptance now includes the complete approved Delta advertisement.
 
 -# Version format: major.minor.patch."""
 
@@ -273,8 +275,8 @@ def ticket_access_role_ids(category_key: str) -> set[int]:
 
 
 def can_use_ticket_control(member: discord.Member) -> bool:
-    """Keep the Careers/admin role out of the support control command."""
-    return is_staff(member) and not is_admin(member)
+    """Allow both Delta Leadership and the Delta Founder to control tickets."""
+    return is_staff(member) or is_admin(member)
 
 
 def delta_status_emoji(guild: discord.Guild | None, success: bool) -> str:
@@ -2019,8 +2021,8 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             if command_name == "ticket control":
                 message = (
                     "You do not have permission to use this command.\n"
-                    "`/ticket control` is restricted to the regular support role; "
-                    "Careers administrators must use `/ticket admin`."
+                    "`/ticket control` is restricted to **Delta Leadership** and "
+                    "the **Delta Founder**."
                 )
             else:
                 message = (
