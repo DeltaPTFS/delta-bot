@@ -40,7 +40,6 @@ bot/
 ├── config.py        — Single source for version, IDs, roles, and shared settings
 ├── support_formats.json — Web-editable canned `/format` messages
 ├── messages.json      — Syntax-safe operational ticket messages
-├── automod_terms.json — Web-editable blocked terms for `#lounge`
 ├── delta_bot.py       — Tiny compatibility launcher; contains no bot implementation
 ├── requirements.txt — Python dependencies
 ├── .env.example     — Template for required environment variables
@@ -117,7 +116,6 @@ do not copy version or Discord IDs back into the entry point.
 | `TICKET_CATEGORY_ID` | `1543674278711529562` | Category for private ticket relay channels |
 | `STAFF_ROLE_ID` | `1539005030189891684` | Support/admin role for commands, access, and ticket pings |
 | `TRANSCRIPT_CHANNEL_ID` | `1539005101941850274` | Server logs channel that receives closed-ticket transcripts and release notices |
-| `LOUNGE_CHANNEL_ID` | `0` | Optional explicit lounge channel ID; `0` finds a text channel named `lounge` |
 | `DELTA_RED` | `0xC8102E` | Embed accent colour |
 
 To add a new ticket category, add an entry to `TICKET_CONFIG` in `config.py`.

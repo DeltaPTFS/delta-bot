@@ -14,7 +14,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import re
 import subprocess
 import threading
 import time
@@ -48,7 +47,6 @@ from config import (
     GUILD_ID,
     IDENTIFICATION_EMOJI,
     INVITE_URL,
-    LOUNGE_CHANNEL_ID,
     MAILING_ADDRESS,
     MESSAGE_EMOJI,
     RATING_TIMEOUT,
@@ -135,8 +133,6 @@ This update improves deployment stability without changing the ticket workflow.
 - `/version` now includes uptime and Discord latency for support staff.
 - Assistance dropdown failures now print full exception details to the host console.
 - Leadership and HR `/format` options now include their complete application requirements.
-- Server logs now record member, message, and moderation events.
-- Delta AutoMod removes configured offensive language from #lounge.
 - Added support members can use `/reply`, and ticket actions are consolidated under
   `/ticket control` and `/ticket admin`.
 - Customer `/reply` deliveries are plain text; the attributed embed remains only in
@@ -376,52 +372,6 @@ def format_uptime(seconds: float) -> str:
         parts.append(f"{minutes}m")
     parts.append(f"{secs}s")
     return " ".join(parts)
-
-
-_AUTOMOD_TRANSLATION = str.maketrans({
-    "0": "o",
-    "1": "i",
-    "3": "e",
-    "4": "a",
-    "5": "s",
-    "7": "t",
-    "@": "a",
-    "$": "s",
-})
-
-
-def normalize_automod_text(content: str) -> str:
-    """Normalize common punctuation and substitutions before term matching."""
-    normalized = unicodedata.normalize("NFKC", content).casefold().translate(_AUTOMOD_TRANSLATION)
-    return " ".join(re.findall(r"[a-z]+", normalized))
-
-
-def find_blocked_term(content: str) -> str | None:
-    """Return the configured offensive term found in content, if any."""
-    normalized_text = normalize_automod_text(content)
-    normalized = f" {normalized_text} "
-    tokens = normalized_text.split()
-    for term in AUTOMOD_TERMS:
-        candidate = normalize_automod_text(term)
-        if candidate and f" {candidate} " in normalized:
-            return term
-        # Catch simple punctuation evasion such as "f.u.c.k" without matching
-        # a blocked sequence inside an innocent word such as "class".
-        if " " not in candidate and len(candidate) > 1:
-            width = len(candidate)
-            if any(
-                all(len(token) == 1 for token in tokens[start:start + width])
-                and "".join(tokens[start:start + width]) == candidate
-                for start in range(len(tokens) - width + 1)
-            ):
-                return term
-    return None
-
-
-def safe_log_text(content: str, limit: int = 1000) -> str:
-    """Keep log fields readable and within Discord embed limits."""
-    value = content or "*(no text content)*"
-    return value if len(value) <= limit else f"{value[:limit - 3]}..."
 
 
 def get_ticket_owner_id(channel: discord.TextChannel) -> int | None:
@@ -2037,7 +1987,6 @@ class DeltaBot(commands.Bot):
         self.admin_undo_actions: list[tuple] = []
         self.processed_dm_messages: set[int] = set()
         self.processed_reply_interactions: set[int] = set()
-        self._automod_deletions: set[int] = set()
         self.started_monotonic = time.monotonic()
 
     async def setup_hook(self) -> None:
@@ -2107,19 +2056,6 @@ class DeltaBot(commands.Bot):
                     label,
                     resource_id,
                 )
-        lounge = (
-            guild.get_channel(LOUNGE_CHANNEL_ID)
-            if LOUNGE_CHANNEL_ID
-            else discord.utils.find(
-                lambda channel: isinstance(channel, discord.TextChannel)
-                and channel.name.casefold() == "lounge",
-                guild.channels,
-            )
-        )
-        if not isinstance(lounge, discord.TextChannel):
-            invalid = True
-            target = str(LOUNGE_CHANNEL_ID) if LOUNGE_CHANNEL_ID else "#lounge"
-            log.warning("Startup validation: AutoMod lounge channel %s was not found.", target)
         for label, role_id in (("staff role", STAFF_ROLE_ID), ("admin role", ADMIN_ROLE_ID)):
             if guild.get_role(role_id) is None:
                 invalid = True
