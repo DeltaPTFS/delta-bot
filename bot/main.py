@@ -14,7 +14,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import re
 import subprocess
 import threading
 import time
@@ -48,7 +47,6 @@ from config import (
     GUILD_ID,
     IDENTIFICATION_EMOJI,
     INVITE_URL,
-    LOUNGE_CHANNEL_ID,
     MAILING_ADDRESS,
     MESSAGE_EMOJI,
     RATING_TIMEOUT,
@@ -682,26 +680,6 @@ def customer_response_embed(
     )
 
 
-def anonymous_support_reply_embed(
-    content: str,
-    customer_id: int | str,
-    timestamp: datetime | None = None,
-) -> discord.Embed:
-    """Build the Delta-blue reply delivered to a customer without agent identity."""
-    # Customer-facing replies intentionally omit all internal identifiers. The
-    # attributed copy posted in the private ticket retains both the customer ID
-    # and the responding support member for auditing.
-    safe_content = content if len(content) <= 4000 else f"{content[:3997]}..."
-    embed = discord.Embed(
-        description=f"{MESSAGE_EMOJI} **Delta Support Reply**\n\n{safe_content}",
-        color=DELTA_BLUE,
-    )
-    embed.set_author(name="Delta Support")
-    embed.set_footer(text=FOOTER_TEXT)
-    embed.timestamp = timestamp
-    return embed
-
-
 def attributed_staff_reply_embed(
     content: str,
     customer_id: int | str,
@@ -722,12 +700,12 @@ def attributed_staff_reply_embed(
 async def deliver_support_reply(
     client: discord.Client,
     owner_id: str,
-    embed: discord.Embed,
+    content: str,
 ) -> bool:
-    """Deliver exactly one reply embed to the ticket owner's DMs."""
+    """Deliver plain text to the customer while embeds remain staff-only."""
     try:
         user = client.get_user(int(owner_id)) or await client.fetch_user(int(owner_id))
-        await user.send(embed=embed)
+        await user.send(content, allowed_mentions=discord.AllowedMentions.none())
         return True
     except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
         log.warning("Could not relay support message to %s: %s", owner_id, exc)
@@ -1525,6 +1503,8 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         "ticket",
         "tickets",
         "version",
+        "authentication-control",
+        "economy",
     ):
         tree.remove_command(command_name, type=discord.AppCommandType.chat_input)
 
@@ -1602,7 +1582,10 @@ def register_commands(tree: app_commands.CommandTree) -> None:
     @tree.command(name="reply", description="Send a reply to the ticket customer's DMs.")
     @staff_only()
     @app_commands.describe(message="The message to send to the customer.")
-    async def reply(interaction: discord.Interaction, message: str) -> None:
+    async def reply(
+        interaction: discord.Interaction,
+        message: app_commands.Range[str, 1, 2000],
+    ) -> None:
         channel = interaction.channel
         member = interaction.user
         x_emoji = delta_status_emoji(interaction.guild, success=False)
@@ -1661,8 +1644,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
 
         await interaction.response.defer(ephemeral=True)
         interaction.client.processed_reply_interactions.add(interaction.id)
-        customer_embed = anonymous_support_reply_embed(message, owner_id, interaction.created_at)
-        if not await deliver_support_reply(interaction.client, owner_id, customer_embed):
+        if not await deliver_support_reply(interaction.client, owner_id, message):
             interaction.client.processed_reply_interactions.discard(interaction.id)
             await interaction.followup.send(
                 f"{x_emoji} The reply could not be delivered to the customer's DMs.",
@@ -2102,7 +2084,6 @@ class DeltaBot(commands.Bot):
         self.admin_undo_actions: list[tuple] = []
         self.processed_dm_messages: set[int] = set()
         self.processed_reply_interactions: set[int] = set()
-        self._automod_deletions: set[int] = set()
         self.started_monotonic = time.monotonic()
 
     async def setup_hook(self) -> None:
@@ -2172,19 +2153,6 @@ class DeltaBot(commands.Bot):
                     label,
                     resource_id,
                 )
-        lounge = (
-            guild.get_channel(LOUNGE_CHANNEL_ID)
-            if LOUNGE_CHANNEL_ID
-            else discord.utils.find(
-                lambda channel: isinstance(channel, discord.TextChannel)
-                and channel.name.casefold() == "lounge",
-                guild.channels,
-            )
-        )
-        if not isinstance(lounge, discord.TextChannel):
-            invalid = True
-            target = str(LOUNGE_CHANNEL_ID) if LOUNGE_CHANNEL_ID else "#lounge"
-            log.warning("Startup validation: AutoMod lounge channel %s was not found.", target)
         for label, role_id in (("staff role", STAFF_ROLE_ID), ("admin role", ADMIN_ROLE_ID)):
             if guild.get_role(role_id) is None:
                 invalid = True

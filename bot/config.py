@@ -46,6 +46,9 @@ CHECKMARK_EMOJI = "<:CheckMark:1544505870904459264>"
 # ── Role IDs ─────────────────────────────────────────────────────────────────
 STAFF_ROLE_ID           = 1539005030189891684  # May use staff-only commands
 ADMIN_ROLE_ID           = 1539005297417519205  # May use ticket administration commands
+# Role granted and removed by /authentication-control. Keeping this configurable
+# avoids baking a server role into the bot when authentication roles are replaced.
+AUTHENTICATED_ROLE_ID   = int(os.getenv("AUTHENTICATED_ROLE_ID", "0"))
 GENERAL_SUPPORT_ROLE_ID = STAFF_ROLE_ID
 
 # ── Ticket-category → channel-prefix / role map ───────────────────────────────
