@@ -101,8 +101,21 @@ def validate_messages() -> None:
         raise ValueError(f"{path}: every message must be a non-empty string")
 
 
+def validate_automod_terms() -> None:
+    path = BOT_DIR / "automod_terms.json"
+    terms = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(terms, list) or not terms:
+        raise ValueError(f"{path}: expected a non-empty list")
+    if not all(isinstance(term, str) and term.strip() for term in terms):
+        raise ValueError(f"{path}: every AutoMod term must be a non-empty string")
+    normalized = [term.casefold().strip() for term in terms]
+    if len(normalized) != len(set(normalized)):
+        raise ValueError(f"{path}: AutoMod terms must be unique")
+
+
 if __name__ == "__main__":
     validate_python_sources()
     validate_support_formats()
     validate_messages()
+    validate_automod_terms()
     print("Bot Python syntax, definitions, support formats, and messages are valid.")

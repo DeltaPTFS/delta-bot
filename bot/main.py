@@ -17,6 +17,7 @@ import os
 import subprocess
 import threading
 import time
+import unicodedata
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -104,6 +105,10 @@ MESSAGES_PATH = Path(__file__).with_name("messages.json")
 with MESSAGES_PATH.open(encoding="utf-8") as messages_file:
     _MESSAGES: dict[str, str] = __import__("json").load(messages_file)
 TICKET_CLAIMED_MESSAGE = _MESSAGES["ticket_claimed"]
+
+AUTOMOD_TERMS_PATH = Path(__file__).with_name("automod_terms.json")
+with AUTOMOD_TERMS_PATH.open(encoding="utf-8") as automod_file:
+    AUTOMOD_TERMS: tuple[str, ...] = tuple(__import__("json").load(automod_file))
 
 NON_MEMBER_MESSAGE = """# <:DeltaLogo:1540927958116601980> Delta Air Lines | Direct Messages <:SkyTeamLogo:1540927923618316359>
 
@@ -1419,6 +1424,8 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         "ticket",
         "tickets",
         "version",
+        "authentication-control",
+        "economy",
     ):
         tree.remove_command(command_name, type=discord.AppCommandType.chat_input)
 
@@ -1948,6 +1955,7 @@ log = logging.getLogger("delta-helpdesk")
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
+intents.moderation = True
 
 
 class DeltaCommandTree(app_commands.CommandTree):
@@ -2104,9 +2112,186 @@ class DeltaBot(commands.Bot):
                 guild.id,
             )
 
+    def _is_lounge(self, channel: discord.abc.GuildChannel | discord.Thread) -> bool:
+        if channel.guild.id != GUILD_ID:
+            return False
+        if LOUNGE_CHANNEL_ID:
+            return channel.id == LOUNGE_CHANNEL_ID
+        return isinstance(channel, discord.TextChannel) and channel.name.casefold() == "lounge"
+
+    async def _send_server_log(
+        self,
+        title: str,
+        description: str,
+        *,
+        color: int = DELTA_BLUE,
+    ) -> None:
+        """Send a server event to the configured logs channel without disrupting it."""
+        channel = self.get_channel(TRANSCRIPT_CHANNEL_ID)
+        if not isinstance(channel, discord.TextChannel):
+            log.warning("Could not write %s log: channel %s is unavailable.", title, TRANSCRIPT_CHANNEL_ID)
+            return
+        embed = discord.Embed(title=title, description=description, color=color)
+        embed.set_footer(text=FOOTER_TEXT)
+        embed.timestamp = discord.utils.utcnow()
+        try:
+            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+            log.warning("Could not write %s log: %s", title, exc)
+
+    async def _moderate_lounge_message(self, message: discord.Message) -> bool:
+        """Delete configured offensive language in #lounge and record the action."""
+        if not isinstance(message.channel, discord.TextChannel) or not self._is_lounge(message.channel):
+            return False
+        blocked_term = find_blocked_term(message.content)
+        if blocked_term is None:
+            return False
+
+        self._automod_deletions.add(message.id)
+        if len(self._automod_deletions) > 10_000:
+            self._automod_deletions.pop()
+        try:
+            await message.delete(reason="Delta AutoMod: offensive language in #lounge")
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+            self._automod_deletions.discard(message.id)
+            log.warning("AutoMod could not delete message %s: %s", message.id, exc)
+            return False
+
+        try:
+            await message.channel.send(
+                f"{message.author.mention}, that message was removed because offensive language "
+                "is not allowed in this channel.",
+                delete_after=8,
+                allowed_mentions=discord.AllowedMentions(users=True),
+            )
+        except (discord.Forbidden, discord.HTTPException):
+            log.warning("AutoMod removed message %s but could not post its warning.", message.id)
+
+        await self._send_server_log(
+            "AutoMod Action",
+            f"**Member:** {message.author} (`{message.author.id}`)\n"
+            f"**Channel:** {message.channel.mention}\n"
+            f"**Matched rule:** `{blocked_term}`\n"
+            f"**Message:** {safe_log_text(message.content)}",
+            color=DELTA_RED,
+        )
+        return True
+
+    async def on_member_join(self, member: discord.Member) -> None:
+        if member.guild.id == GUILD_ID:
+            await self._send_server_log(
+                "Member Joined",
+                f"**Member:** {member.mention} (`{member.id}`)\n"
+                f"**Account created:** {discord.utils.format_dt(member.created_at, 'F')}",
+            )
+
+    async def on_member_remove(self, member: discord.Member) -> None:
+        if member.guild.id == GUILD_ID:
+            await self._send_server_log(
+                "Member Left",
+                f"**Member:** {member} (`{member.id}`)",
+                color=DELTA_RED,
+            )
+
+    async def on_member_ban(self, guild: discord.Guild, user: discord.User) -> None:
+        if guild.id == GUILD_ID:
+            await self._send_server_log(
+                "Moderation — Member Banned",
+                f"**Member:** {user} (`{user.id}`)",
+                color=DELTA_RED,
+            )
+
+    async def on_member_unban(self, guild: discord.Guild, user: discord.User) -> None:
+        if guild.id == GUILD_ID:
+            await self._send_server_log(
+                "Moderation — Member Unbanned",
+                f"**Member:** {user} (`{user.id}`)",
+            )
+
+    async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
+        if after.guild.id != GUILD_ID:
+            return
+        changes: list[str] = []
+        if before.nick != after.nick:
+            changes.append(f"**Nickname:** `{before.nick or before.name}` → `{after.nick or after.name}`")
+        if before.roles != after.roles:
+            before_ids = {role.id for role in before.roles}
+            after_ids = {role.id for role in after.roles}
+            added = [role.mention for role in after.roles if role.id not in before_ids]
+            removed = [role.name for role in before.roles if role.id not in after_ids]
+            if added:
+                changes.append(f"**Roles added:** {', '.join(added)}")
+            if removed:
+                changes.append(f"**Roles removed:** {', '.join(removed)}")
+        if before.timed_out_until != after.timed_out_until:
+            timeout = (
+                discord.utils.format_dt(after.timed_out_until, "F")
+                if after.timed_out_until is not None
+                else "Removed"
+            )
+            changes.append(f"**Timeout:** {timeout}")
+        if changes:
+            await self._send_server_log(
+                "Moderation — Member Updated",
+                f"**Member:** {after.mention} (`{after.id}`)\n" + "\n".join(changes),
+            )
+
+    async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
+        if (
+            before.guild is None
+            or before.guild.id != GUILD_ID
+            or before.author.bot
+            or before.content == after.content
+        ):
+            return
+        if await self._moderate_lounge_message(after):
+            return
+        await self._send_server_log(
+            "Message Edited",
+            f"**Member:** {after.author} (`{after.author.id}`)\n"
+            f"**Channel:** {after.channel.mention}\n"
+            f"**Before:** {safe_log_text(before.content)}\n"
+            f"**After:** {safe_log_text(after.content)}\n"
+            f"[Jump to message]({after.jump_url})",
+        )
+
+    async def on_message_delete(self, message: discord.Message) -> None:
+        if message.id in self._automod_deletions:
+            self._automod_deletions.discard(message.id)
+            return
+        if message.guild is None or message.guild.id != GUILD_ID or message.author.bot:
+            return
+        await self._send_server_log(
+            "Message Deleted",
+            f"**Member:** {message.author} (`{message.author.id}`)\n"
+            f"**Channel:** {message.channel.mention}\n"
+            f"**Message:** {safe_log_text(message.content)}",
+            color=DELTA_RED,
+        )
+
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent) -> None:
+        """Record uncached deletions that do not produce on_message_delete."""
+        if payload.cached_message is not None or payload.guild_id != GUILD_ID:
+            return
+        if payload.message_id in self._automod_deletions:
+            self._automod_deletions.discard(payload.message_id)
+            return
+        channel = self.get_channel(payload.channel_id)
+        channel_text = getattr(channel, "mention", f"`{payload.channel_id}`")
+        await self._send_server_log(
+            "Message Deleted",
+            f"**Message ID:** `{payload.message_id}`\n"
+            f"**Channel:** {channel_text}\n"
+            "**Message:** *(content was not cached)*",
+            color=DELTA_RED,
+        )
+
     async def on_message(self, message: discord.Message) -> None:
         """Relay customer DMs and claimed support-channel replies."""
         if message.author.bot:
+            return
+
+        if message.guild is not None and await self._moderate_lounge_message(message):
             return
 
         if isinstance(message.channel, discord.DMChannel):
