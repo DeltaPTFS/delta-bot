@@ -1,10 +1,15 @@
 {
-  "title": "Ticket Close Command Fix",
-  "summary": "The ticket close command no longer fails while checking the support role.",
-  "added": [],
+  "title": "Consolidated Ticket Controls",
+  "summary": "Ticket commands are cleaner and explicitly added support members can now reply to customers.",
+  "added": [
+    "A claimant-only /ticket control command with customer, support, and close actions.",
+    "A consolidated /ticket admin command with assignment, removal, punishment, close, and undo actions.",
+    "Remove Support actions for both ticket claimants and administrators."
+  ],
   "changed": [
-    "Restored the command-role configuration name expected by previously deployed permission checks.",
-    "The command and staff role names both resolve to the sole authorized role, 1539005030189891684."
+    "Support members added to a ticket can now use /reply without replacing the original claimant.",
+    "Legacy explicit support permissions remain recognized for existing open tickets.",
+    "Former standalone ticket-management commands are consolidated under /ticket."
   ],
   "removed": []
 }
