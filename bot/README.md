@@ -24,7 +24,7 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Server Logs | Member joins/leaves, message edits/deletions, and moderation changes are sent to the configured logs channel |
 | Lounge AutoMod | Messages matching configurable curse/offensive terms are removed from `#lounge`, with actions recorded in server logs |
 | Server Safety | Commands and tickets are locked to server `1538738611988467782`, but the bot never removes itself from a server |
-| Release Updates | Posts and pins each release once in server logs channel `1539005101941850274`; the current release comes from `config.py` |
+| Release Updates | Posts and pins the newest release in server logs channel `1539005101941850274`, then removes the previous update and any duplicates |
 
 Versions use `major.minor.patch`. Breaking or especially large releases increase
 the first number, regular feature releases increase the second, and fixes increase
@@ -120,6 +120,13 @@ do not copy version or Discord IDs back into the entry point.
 
 To add a new ticket category, add an entry to `TICKET_CONFIG` in `config.py`.
 The production implementation in `main.py` consumes it automatically.
+
+Careers tickets are visible only to role `1539005297417519205`; the regular
+leadership/support role is not granted access. Responses from `/ticket admin` are
+ephemeral to the administrator who invoked it, while `/ticket control` responses
+are posted visibly in the current ticket channel. The Careers role is authorized
+for `/ticket admin` and explicitly denied `/ticket control`, even if a member also
+holds the regular support role.
 
 The bot publishes commands only to `GUILD_ID`, clears its former global commands,
 and accepts DM tickets only from members of the authorized server. Other guilds
