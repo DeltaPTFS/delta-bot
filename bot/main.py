@@ -1474,6 +1474,8 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         "ticket",
         "tickets",
         "version",
+        "authentication-control",
+        "economy",
     ):
         tree.remove_command(command_name, type=discord.AppCommandType.chat_input)
 
