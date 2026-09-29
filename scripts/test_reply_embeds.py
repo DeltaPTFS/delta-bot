@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
 
@@ -50,21 +51,18 @@ class _Message:
 customer = main.anonymous_support_reply_embed("Hello.", 123)
 staff = main.attributed_staff_reply_embed("Hello.", 123, _Agent())
 
-customer_payload = str(customer.to_dict())
 staff_payload = str(staff.to_dict())
-
-assert "Delta Support" in customer_payload
-assert "Delta Support Reply" in customer_payload
-assert "Example Agent" not in customer_payload
-assert "private_support_username" not in customer_payload
-assert "Customer Response" not in customer_payload
-assert "123" not in customer_payload
-assert "Customer ID" not in customer_payload
 
 assert "Example Agent" in staff_payload
 assert "private_support_username" in staff_payload
 assert "Customer Response" not in staff_payload
-assert staff.color == customer.color
+assert "123" in staff_payload
+assert "Customer ID" in staff_payload
+
+dm_user = _DMUser()
+assert asyncio.run(main.deliver_support_reply(_Client(dm_user), "123", "Hello."))
+assert dm_user.args == ("Hello.",)
+assert "embed" not in dm_user.kwargs
 
 assert main.delta_status_emoji(_Guild(), success=True) == main.CHECKMARK_EMOJI
 assert main.delta_status_emoji(_Guild(), success=False) == str(_Emoji())

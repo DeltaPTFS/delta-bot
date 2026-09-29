@@ -14,7 +14,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import re
 import subprocess
 import threading
 import time
@@ -51,7 +50,6 @@ from config import (
     GUILD_ID,
     IDENTIFICATION_EMOJI,
     INVITE_URL,
-    LOUNGE_CHANNEL_ID,
     MAILING_ADDRESS,
     MESSAGE_EMOJI,
     RATING_TIMEOUT,
@@ -151,6 +149,8 @@ This update improves server operations, moderation reporting, and release announ
   the prior release message is removed automatically.
 - Added support members can use `/reply`, and ticket actions are consolidated under
   `/ticket control` and `/ticket admin`.
+- Customer `/reply` deliveries are plain text; the attributed embed remains only in
+  the private support ticket.
 
 -# Version format: major.minor.patch."""
 
@@ -705,26 +705,6 @@ def customer_response_embed(
     )
 
 
-def anonymous_support_reply_embed(
-    content: str,
-    customer_id: int | str,
-    timestamp: datetime | None = None,
-) -> discord.Embed:
-    """Build the Delta-blue reply delivered to a customer without agent identity."""
-    # Customer-facing replies intentionally omit all internal identifiers. The
-    # attributed copy posted in the private ticket retains both the customer ID
-    # and the responding support member for auditing.
-    safe_content = content if len(content) <= 4000 else f"{content[:3997]}..."
-    embed = discord.Embed(
-        description=f"{MESSAGE_EMOJI} **Delta Support Reply**\n\n{safe_content}",
-        color=DELTA_BLUE,
-    )
-    embed.set_author(name="Delta Support")
-    embed.set_footer(text=FOOTER_TEXT)
-    embed.timestamp = timestamp
-    return embed
-
-
 def attributed_staff_reply_embed(
     content: str,
     customer_id: int | str,
@@ -745,12 +725,12 @@ def attributed_staff_reply_embed(
 async def deliver_support_reply(
     client: discord.Client,
     owner_id: str,
-    embed: discord.Embed,
+    content: str,
 ) -> bool:
-    """Deliver exactly one reply embed to the ticket owner's DMs."""
+    """Deliver plain text to the customer while embeds remain staff-only."""
     try:
         user = client.get_user(int(owner_id)) or await client.fetch_user(int(owner_id))
-        await user.send(embed=embed)
+        await user.send(content, allowed_mentions=discord.AllowedMentions.none())
         return True
     except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
         log.warning("Could not relay support message to %s: %s", owner_id, exc)
@@ -1704,7 +1684,10 @@ def register_commands(tree: app_commands.CommandTree) -> None:
     @tree.command(name="reply", description="Send a reply to the ticket customer's DMs.")
     @staff_only()
     @app_commands.describe(message="The message to send to the customer.")
-    async def reply(interaction: discord.Interaction, message: str) -> None:
+    async def reply(
+        interaction: discord.Interaction,
+        message: app_commands.Range[str, 1, 2000],
+    ) -> None:
         channel = interaction.channel
         member = interaction.user
         x_emoji = delta_status_emoji(interaction.guild, success=False)
@@ -1763,8 +1746,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
 
         await interaction.response.defer(ephemeral=True)
         interaction.client.processed_reply_interactions.add(interaction.id)
-        customer_embed = anonymous_support_reply_embed(message, owner_id, interaction.created_at)
-        if not await deliver_support_reply(interaction.client, owner_id, customer_embed):
+        if not await deliver_support_reply(interaction.client, owner_id, message):
             interaction.client.processed_reply_interactions.discard(interaction.id)
             await interaction.followup.send(
                 f"{x_emoji} The reply could not be delivered to the customer's DMs.",

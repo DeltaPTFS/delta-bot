@@ -14,7 +14,7 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Duplicate Guard | Prevents users from opening multiple simultaneous tickets |
 | Close Ticket | Persistent button plus `/ticket control` and `/ticket admin`; DMs the user on close |
 | Message Relay | Per-ticket locking suppresses concurrent duplicate events; customer messages and Delta-blue human replies are recorded once |
-| Agent Privacy | Customer DMs identify replies as Delta Support; only the private ticket record identifies the agent |
+| Agent Privacy | Customer DMs receive plain reply text; only the private ticket retains the attributed reply embed |
 | Ticket Reuse | Repeat creation attempts reconnect the customer to their existing ticket instead of opening a duplicate |
 | Staff Commands | `/reply`, `/format`, and claimant-only `/ticket control` are support role-gated |
 | Admin Commands | `/ticket admin` consolidates assignment, removal, punishment, close, and undo actions |
@@ -44,7 +44,6 @@ bot/
 ├── config.py        — Single source for version, IDs, roles, and shared settings
 ├── support_formats.json — Web-editable canned `/format` messages
 ├── messages.json      — Syntax-safe operational ticket messages
-├── automod_terms.json — Web-editable blocked terms for `#lounge`
 ├── delta_bot.py       — Tiny compatibility launcher; contains no bot implementation
 ├── requirements.txt — Python dependencies
 ├── .env.example     — Template for required environment variables
@@ -102,7 +101,7 @@ python main.py
 | Command | Description | Who Can Use |
 |---|---|---|
 | `/panel` | Post the private-ticket Assistance Panel in the current channel | DL Leadership only |
-| `/reply` | Send an anonymous branded reply to the ticket customer | Claimant or support member added to that ticket |
+| `/reply` | Send plain reply text to the customer and retain the attributed embed in the ticket | Claimant or support member added to that ticket |
 | `/format` | Choose one of the prewritten customer notices | Staff only |
 | `/ticket control` | Add/remove customers or support and close the current ticket | Staff member who claimed that ticket |
 | `/ticket admin` | Run consolidated assignment, removal, punishment, close, or undo actions | Admin only |
