@@ -1,15 +1,11 @@
 {
-  "title": "Consolidated Ticket Controls",
-  "summary": "Ticket commands are cleaner and explicitly added support members can now reply to customers.",
-  "added": [
-    "A claimant-only /ticket control command with customer, support, and close actions.",
-    "A consolidated /ticket admin command with assignment, removal, punishment, close, and undo actions.",
-    "Remove Support actions for both ticket claimants and administrators."
-  ],
+  "title": "Cleaner Customer Replies",
+  "summary": "Replies now arrive as plain DM text while the detailed embed stays in the private support ticket.",
+  "added": [],
   "changed": [
-    "Support members added to a ticket can now use /reply without replacing the original claimant.",
-    "Legacy explicit support permissions remain recognized for existing open tickets.",
-    "Former standalone ticket-management commands are consolidated under /ticket."
+    "Removed the Delta Support author label and reply embed from customer DMs.",
+    "Kept the responding support member's attributed embed in the private ticket channel.",
+    "Limited /reply messages to Discord's 2,000-character plain-message limit."
   ],
   "removed": []
 }

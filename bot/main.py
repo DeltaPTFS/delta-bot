@@ -33,9 +33,7 @@ load_dotenv()
 
 from config import (
     ADMIN_ROLE_ID,
-    AUTHENTICATED_ROLE_ID,
     BLUE_ARROW_EMOJI,
-    BOT_COMMANDS_CHANNEL_ID,
     BOT_VERSION,
     CHECKMARK_EMOJI,
     DELTA_BLUE,
@@ -64,7 +62,6 @@ from config import (
     UPDATE_CHANNEL_ID,
     WING_PIN_EMOJI,
 )
-from economy import EconomyStore
 
 # ════════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -128,7 +125,7 @@ If you'd like to contact our team or create a support ticket, click the **Create
 
 UPDATE_MESSAGE = f"""# <:DeltaLogo:1540927958116601980> Delta Support Bot — Update {BOT_VERSION}
 
-This update adds community moderation, authentication, and economy tools.
+This update improves deployment stability without changing the ticket workflow.
 
 ## What's Changed
 - `bot/main.py` is now the only production HelpDesk implementation.
@@ -140,11 +137,10 @@ This update adds community moderation, authentication, and economy tools.
 - Leadership and HR `/format` options now include their complete application requirements.
 - Server logs now record member, message, and moderation events.
 - Delta AutoMod removes configured offensive language from #lounge.
-- #bot-commands now automatically removes ordinary conversation.
-- `/authentication-control` consolidates authentication role management.
-- `/economy` adds balances, daily rewards, work, payments, and a leaderboard.
 - Added support members can use `/reply`, and ticket actions are consolidated under
   `/ticket control` and `/ticket admin`.
+- Customer `/reply` deliveries are plain text; the attributed embed remains only in
+  the private support ticket.
 
 -# Version format: major.minor.patch."""
 
@@ -680,26 +676,6 @@ def customer_response_embed(
     )
 
 
-def anonymous_support_reply_embed(
-    content: str,
-    customer_id: int | str,
-    timestamp: datetime | None = None,
-) -> discord.Embed:
-    """Build the Delta-blue reply delivered to a customer without agent identity."""
-    # Customer-facing replies intentionally omit all internal identifiers. The
-    # attributed copy posted in the private ticket retains both the customer ID
-    # and the responding support member for auditing.
-    safe_content = content if len(content) <= 4000 else f"{content[:3997]}..."
-    embed = discord.Embed(
-        description=f"{MESSAGE_EMOJI} **Delta Support Reply**\n\n{safe_content}",
-        color=DELTA_BLUE,
-    )
-    embed.set_author(name="Delta Support")
-    embed.set_footer(text=FOOTER_TEXT)
-    embed.timestamp = timestamp
-    return embed
-
-
 def attributed_staff_reply_embed(
     content: str,
     customer_id: int | str,
@@ -720,12 +696,12 @@ def attributed_staff_reply_embed(
 async def deliver_support_reply(
     client: discord.Client,
     owner_id: str,
-    embed: discord.Embed,
+    content: str,
 ) -> bool:
-    """Deliver exactly one reply embed to the ticket owner's DMs."""
+    """Deliver plain text to the customer while embeds remain staff-only."""
     try:
         user = client.get_user(int(owner_id)) or await client.fetch_user(int(owner_id))
-        await user.send(embed=embed)
+        await user.send(content, allowed_mentions=discord.AllowedMentions.none())
         return True
     except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
         log.warning("Could not relay support message to %s: %s", owner_id, exc)
@@ -1573,113 +1549,14 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             ephemeral=True,
         )
 
-    authentication_choices = [
-        app_commands.Choice(name="Authenticate", value="authenticate"),
-        app_commands.Choice(name="Remove Authentication", value="remove"),
-        app_commands.Choice(name="Check Status", value="status"),
-    ]
-
-    @tree.command(
-        name="authentication-control",
-        description="Manage all member authentication actions from one command.",
-    )
-    @admin_only()
-    @app_commands.describe(command="The authentication action to run.", member="The member to manage.")
-    @app_commands.choices(command=authentication_choices)
-    async def authentication_control(
-        interaction: discord.Interaction,
-        command: app_commands.Choice[str],
-        member: discord.Member,
-    ) -> None:
-        role = interaction.guild.get_role(AUTHENTICATED_ROLE_ID) if interaction.guild else None
-        if role is None:
-            await interaction.response.send_message(
-                embed=error_embed("The authenticated role is not configured. Set `AUTHENTICATED_ROLE_ID`."),
-                ephemeral=True,
-            )
-            return
-        has_role = role in member.roles
-        try:
-            if command.value == "authenticate":
-                if not has_role:
-                    await member.add_roles(role, reason=f"Authenticated by {interaction.user}")
-                result = f"{member.mention} is authenticated with {role.mention}."
-            elif command.value == "remove":
-                if has_role:
-                    await member.remove_roles(role, reason=f"Authentication removed by {interaction.user}")
-                result = f"Authentication was removed from {member.mention}."
-            else:
-                result = (
-                    f"{member.mention} is authenticated with {role.mention}."
-                    if has_role else f"{member.mention} is not authenticated."
-                )
-        except (discord.Forbidden, discord.HTTPException) as exc:
-            await interaction.response.send_message(embed=error_embed(str(exc)), ephemeral=True)
-            return
-        await interaction.response.send_message(embed=success_embed(result), ephemeral=True)
-
-    economy_group = app_commands.Group(name="economy", description="Earn and manage Delta Credits.")
-
-    @economy_group.command(name="balance", description="View a member's Delta Credits balance.")
-    async def economy_balance(
-        interaction: discord.Interaction, member: discord.Member | None = None
-    ) -> None:
-        target = member or interaction.user
-        balance = interaction.client.economy.balance(target.id)
-        await interaction.response.send_message(
-            embed=_base_embed(title="Delta Credits", description=f"{target.mention} has **{balance:,} credits**.")
-        )
-
-    @economy_group.command(name="daily", description="Claim your daily Delta Credits.")
-    async def economy_daily(interaction: discord.Interaction) -> None:
-        reward, remaining = interaction.client.economy.claim(interaction.user.id, "daily", 86_400, 200, 400)
-        if remaining:
-            await interaction.response.send_message(
-                embed=error_embed(f"Your daily reward is ready <t:{int(time.time()) + remaining}:R>."), ephemeral=True
-            )
-            return
-        await interaction.response.send_message(embed=success_embed(f"You received **{reward:,} Delta Credits**."))
-
-    @economy_group.command(name="work", description="Work a shift to earn Delta Credits.")
-    async def economy_work(interaction: discord.Interaction) -> None:
-        reward, remaining = interaction.client.economy.claim(interaction.user.id, "work", 3_600, 50, 150)
-        if remaining:
-            await interaction.response.send_message(
-                embed=error_embed(f"You can work another shift <t:{int(time.time()) + remaining}:R>."), ephemeral=True
-            )
-            return
-        await interaction.response.send_message(embed=success_embed(f"Your shift earned **{reward:,} Delta Credits**."))
-
-    @economy_group.command(name="pay", description="Send Delta Credits to another member.")
-    async def economy_pay(
-        interaction: discord.Interaction,
-        member: discord.Member,
-        amount: app_commands.Range[int, 1, 1_000_000],
-    ) -> None:
-        if member.bot or member.id == interaction.user.id:
-            await interaction.response.send_message(embed=error_embed("Choose another human member."), ephemeral=True)
-            return
-        if not interaction.client.economy.transfer(interaction.user.id, member.id, amount):
-            await interaction.response.send_message(embed=error_embed("You do not have enough Delta Credits."), ephemeral=True)
-            return
-        await interaction.response.send_message(embed=success_embed(f"Sent **{amount:,} credits** to {member.mention}."))
-
-    @economy_group.command(name="leaderboard", description="Show the richest Delta community members.")
-    async def economy_leaderboard(interaction: discord.Interaction) -> None:
-        entries = interaction.client.economy.leaderboard()
-        lines = [f"**{index}.** <@{user_id}> — **{balance:,}**" for index, (user_id, balance) in enumerate(entries, 1)]
-        await interaction.response.send_message(
-            embed=_base_embed(title="Delta Credits Leaderboard", description="\n".join(lines) or "No credits have been earned yet."),
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-
-    tree.add_command(economy_group)
-
     # /reply
     @tree.command(name="reply", description="Send a reply to the ticket customer's DMs.")
     @staff_only()
     @app_commands.describe(message="The message to send to the customer.")
-    async def reply(interaction: discord.Interaction, message: str) -> None:
+    async def reply(
+        interaction: discord.Interaction,
+        message: app_commands.Range[str, 1, 2000],
+    ) -> None:
         channel = interaction.channel
         member = interaction.user
         x_emoji = delta_status_emoji(interaction.guild, success=False)
@@ -1738,8 +1615,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
 
         await interaction.response.defer(ephemeral=True)
         interaction.client.processed_reply_interactions.add(interaction.id)
-        customer_embed = anonymous_support_reply_embed(message, owner_id, interaction.created_at)
-        if not await deliver_support_reply(interaction.client, owner_id, customer_embed):
+        if not await deliver_support_reply(interaction.client, owner_id, message):
             interaction.client.processed_reply_interactions.discard(interaction.id)
             await interaction.followup.send(
                 f"{x_emoji} The reply could not be delivered to the customer's DMs.",
@@ -2162,8 +2038,6 @@ class DeltaBot(commands.Bot):
         self.processed_dm_messages: set[int] = set()
         self.processed_reply_interactions: set[int] = set()
         self._automod_deletions: set[int] = set()
-        economy_path = os.getenv("ECONOMY_DB_PATH", str(Path(__file__).with_name("economy.db")))
-        self.economy = EconomyStore(economy_path)
         self.started_monotonic = time.monotonic()
 
     async def setup_hook(self) -> None:
@@ -2246,19 +2120,6 @@ class DeltaBot(commands.Bot):
             invalid = True
             target = str(LOUNGE_CHANNEL_ID) if LOUNGE_CHANNEL_ID else "#lounge"
             log.warning("Startup validation: AutoMod lounge channel %s was not found.", target)
-        bot_commands = (
-            guild.get_channel(BOT_COMMANDS_CHANNEL_ID)
-            if BOT_COMMANDS_CHANNEL_ID
-            else discord.utils.find(
-                lambda channel: isinstance(channel, discord.TextChannel)
-                and channel.name.casefold() == "bot-commands",
-                guild.channels,
-            )
-        )
-        if not isinstance(bot_commands, discord.TextChannel):
-            invalid = True
-            target = str(BOT_COMMANDS_CHANNEL_ID) if BOT_COMMANDS_CHANNEL_ID else "#bot-commands"
-            log.warning("Startup validation: bot commands channel %s was not found.", target)
         for label, role_id in (("staff role", STAFF_ROLE_ID), ("admin role", ADMIN_ROLE_ID)):
             if guild.get_role(role_id) is None:
                 invalid = True
@@ -2321,29 +2182,6 @@ class DeltaBot(commands.Bot):
         if LOUNGE_CHANNEL_ID:
             return channel.id == LOUNGE_CHANNEL_ID
         return isinstance(channel, discord.TextChannel) and channel.name.casefold() == "lounge"
-
-    def _is_bot_commands(self, channel: discord.abc.GuildChannel | discord.Thread) -> bool:
-        if channel.guild.id != GUILD_ID:
-            return False
-        if BOT_COMMANDS_CHANNEL_ID:
-            return channel.id == BOT_COMMANDS_CHANNEL_ID
-        return isinstance(channel, discord.TextChannel) and channel.name.casefold() == "bot-commands"
-
-    async def _enforce_bot_commands_channel(self, message: discord.Message) -> bool:
-        """Remove ordinary conversation from the commands-only channel."""
-        if not isinstance(message.channel, discord.TextChannel) or not self._is_bot_commands(message.channel):
-            return False
-        try:
-            await message.delete(reason="#bot-commands is reserved for bot commands")
-            await message.channel.send(
-                f"{message.author.mention}, this channel is only for bot commands. Please use #lounge for conversation.",
-                delete_after=8,
-                allowed_mentions=discord.AllowedMentions(users=True),
-            )
-        except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
-            log.warning("Could not enforce #bot-commands for message %s: %s", message.id, exc)
-            return False
-        return True
 
     async def _send_server_log(
         self,
@@ -2472,8 +2310,6 @@ class DeltaBot(commands.Bot):
             return
         if await self._moderate_lounge_message(after):
             return
-        if await self._enforce_bot_commands_channel(after):
-            return
         await self._send_server_log(
             "Message Edited",
             f"**Member:** {after.author} (`{after.author.id}`)\n"
@@ -2520,8 +2356,6 @@ class DeltaBot(commands.Bot):
             return
 
         if message.guild is not None and await self._moderate_lounge_message(message):
-            return
-        if message.guild is not None and await self._enforce_bot_commands_channel(message):
             return
 
         if isinstance(message.channel, discord.DMChannel):

@@ -21,10 +21,8 @@ UPDATE_CHANNEL_ID = TRANSCRIPT_CHANNEL_ID
 # Set this in Raven when the lounge channel is renamed or there are duplicate
 # channels named "lounge". A value of 0 falls back to an exact name lookup.
 LOUNGE_CHANNEL_ID = int(os.getenv("LOUNGE_CHANNEL_ID", "0"))
-# A value of 0 falls back to an exact ``bot-commands`` name lookup.
-BOT_COMMANDS_CHANNEL_ID = int(os.getenv("BOT_COMMANDS_CHANNEL_ID", "0"))
 
-BOT_VERSION = "2.5.0"
+BOT_VERSION = "2.4.1"
 
 # ── Runtime behavior ─────────────────────────────────────────────────────────
 TICKET_CLOSE_DELAY = 5

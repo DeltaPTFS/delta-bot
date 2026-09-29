@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
 
@@ -36,24 +37,38 @@ class _Guild:
     emojis = [_Emoji()]
 
 
-customer = main.anonymous_support_reply_embed("Hello.", 123)
+class _DMUser:
+    def __init__(self) -> None:
+        self.args = ()
+        self.kwargs = {}
+
+    async def send(self, *args, **kwargs) -> None:
+        self.args = args
+        self.kwargs = kwargs
+
+
+class _Client:
+    def __init__(self, user: _DMUser) -> None:
+        self.user = user
+
+    def get_user(self, user_id: int) -> _DMUser:
+        return self.user
+
+
 staff = main.attributed_staff_reply_embed("Hello.", 123, _Agent())
 
-customer_payload = str(customer.to_dict())
 staff_payload = str(staff.to_dict())
-
-assert "Delta Support" in customer_payload
-assert "Delta Support Reply" in customer_payload
-assert "Example Agent" not in customer_payload
-assert "private_support_username" not in customer_payload
-assert "Customer Response" not in customer_payload
-assert "123" not in customer_payload
-assert "Customer ID" not in customer_payload
 
 assert "Example Agent" in staff_payload
 assert "private_support_username" in staff_payload
 assert "Customer Response" not in staff_payload
-assert staff.color == customer.color
+assert "123" in staff_payload
+assert "Customer ID" in staff_payload
+
+dm_user = _DMUser()
+assert asyncio.run(main.deliver_support_reply(_Client(dm_user), "123", "Hello."))
+assert dm_user.args == ("Hello.",)
+assert "embed" not in dm_user.kwargs
 
 assert main.delta_status_emoji(_Guild(), success=True) == main.CHECKMARK_EMOJI
 assert main.delta_status_emoji(_Guild(), success=False) == str(_Emoji())
@@ -76,22 +91,7 @@ assert main.get_ticket_support_ids(topic) == {789}
 bot = main.DeltaBot()
 main.register_commands(bot.tree)
 commands = {command.name: command for command in bot.tree.get_commands()}
-assert set(commands) == {
-    "panel",
-    "version",
-    "reply",
-    "format",
-    "ticket",
-    "authentication-control",
-    "economy",
-}
+.assert set(commands) == {"panel", "version", "reply", "format", "ticket"}
 assert {command.name for command in commands["ticket"].commands} == {"control", "admin"}
-assert {command.name for command in commands["economy"].commands} == {
-    "balance",
-    "daily",
-    "work",
-    "pay",
-    "leaderboard",
-}
 
 print("Reply privacy, staff attribution, colors, and custom status emojis are valid.")
