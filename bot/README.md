@@ -23,6 +23,9 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Transcripts | Closed-ticket transcripts are posted to the private transcript channel |
 | Server Logs | Member joins/leaves, message edits/deletions, and moderation changes are sent to the configured logs channel |
 | Lounge AutoMod | Messages matching configurable curse/offensive terms are removed from `#lounge`, with actions recorded in server logs |
+| Commands-only Channel | Ordinary member messages are automatically removed from `#bot-commands` |
+| Authentication | Admins grant, remove, or check the configured authentication role through one `/authentication-control` command |
+| Economy | Persistent Delta Credits with balance, daily, work, pay, and leaderboard commands |
 | Server Safety | Commands and tickets are locked to server `1538738611988467782`, but the bot never removes itself from a server |
 | Release Updates | Posts and pins each release once in server logs channel `1539005101941850274`; the current release comes from `config.py` |
 
@@ -103,6 +106,12 @@ python main.py
 | `/ticket control` | Add/remove customers or support and close the current ticket | Staff member who claimed that ticket |
 | `/ticket admin` | Run consolidated assignment, removal, punishment, close, or undo actions | Admin only |
 | `/version` | Show version, commit, uptime, and Discord latency | Staff only |
+| `/authentication-control command: member:` | Authenticate, remove authentication, or check a member | Admin only |
+| `/economy balance [member]` | View a Delta Credits balance | Everyone |
+| `/economy daily` | Claim a reward every 24 hours | Everyone |
+| `/economy work` | Earn credits once per hour | Everyone |
+| `/economy pay member: amount:` | Transfer credits safely | Everyone |
+| `/economy leaderboard` | Show the ten highest balances | Everyone |
 
 ---
 
@@ -118,6 +127,9 @@ do not copy version or Discord IDs back into the entry point.
 | `STAFF_ROLE_ID` | `1539005030189891684` | Support/admin role for commands, access, and ticket pings |
 | `TRANSCRIPT_CHANNEL_ID` | `1539005101941850274` | Server logs channel that receives closed-ticket transcripts and release notices |
 | `LOUNGE_CHANNEL_ID` | `0` | Optional explicit lounge channel ID; `0` finds a text channel named `lounge` |
+| `BOT_COMMANDS_CHANNEL_ID` | `0` | Optional commands channel ID; `0` finds a text channel named `bot-commands` |
+| `AUTHENTICATED_ROLE_ID` | `0` | Role managed by `/authentication-control` |
+| `ECONOMY_DB_PATH` | `bot/economy.db` | Persistent SQLite economy database path |
 | `DELTA_RED` | `0xC8102E` | Embed accent colour |
 
 To add a new ticket category, add an entry to `TICKET_CONFIG` in `config.py`.
@@ -132,6 +144,9 @@ case-insensitive and recognizes common number/symbol substitutions. If the serve
 has more than one channel named `lounge`, set `LOUNGE_CHANNEL_ID` in Raven to the
 correct channel ID. The bot requires **Manage Messages** in that channel and
 **Send Messages** plus **Embed Links** in the configured logs channel.
+The bot also requires **Manage Messages** in `#bot-commands`. Set
+`AUTHENTICATED_ROLE_ID` to the role that administrators should manage; the bot's
+highest role must be above it in the server role list.
 
 ## DM Ticket Flow
 
