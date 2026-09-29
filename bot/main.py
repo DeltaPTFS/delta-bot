@@ -125,22 +125,19 @@ If you'd like to contact our team or create a support ticket, click the **Create
 
 UPDATE_MESSAGE = f"""# <:DeltaLogo:1540927958116601980> Delta Support Bot — Update {BOT_VERSION}
 
-This update improves deployment stability without changing the ticket workflow.
+This update keeps the logs channel's release announcement current.
 
 ## What's Changed
-- `bot/main.py` is now the only production HelpDesk implementation.
-- Configuration and the version now have one source of truth.
-- Startup logs show the version, Git branch, commit, and detected host.
-- Startup validates the configured guild, ticket category, logs channel, and roles.
-- `/version` now includes uptime and Discord latency for support staff.
-- Assistance dropdown failures now print full exception details to the host console.
-- Leadership and HR `/format` options now include their complete application requirements.
-- Server logs now record member, message, and moderation events.
-- Delta AutoMod removes configured offensive language from #lounge.
-- Added support members can use `/reply`, and ticket actions are consolidated under
-  `/ticket control` and `/ticket admin`.
+- The newest update is posted and pinned in the logs channel.
+- The previous update is automatically removed after the new update is ready.
+- Restarting the same version does not post duplicate update messages.
+- Careers tickets are private to the configured careers role.
+- `/ticket admin` replies are private; `/ticket control` replies are visible in the ticket.
+- The Careers role can use `/ticket admin`, but not `/ticket control`.
 
 -# Version format: major.minor.patch."""
+
+RELEASE_UPDATE_MARKER = "Delta Support Bot — Update"
 
 # ════════════════════════════════════════════════════════════════════════════════
 # EMBEDS
@@ -267,6 +264,19 @@ def is_staff(member: discord.Member) -> bool:
 
 def is_admin(member: discord.Member) -> bool:
     return any(role.id == ADMIN_ROLE_ID for role in member.roles)
+
+
+def ticket_access_role_ids(category_key: str) -> set[int]:
+    """Return the only roles granted access when a ticket channel is created."""
+    configured_role_id = TICKET_CONFIG[category_key]["role_id"]
+    if category_key == "careers":
+        return {configured_role_id}
+    return {configured_role_id, STAFF_ROLE_ID, ADMIN_ROLE_ID}
+
+
+def can_use_ticket_control(member: discord.Member) -> bool:
+    """Keep the Careers/admin role out of the support control command."""
+    return is_staff(member) and not is_admin(member)
 
 
 def delta_status_emoji(guild: discord.Guild | None, success: bool) -> str:
@@ -422,6 +432,11 @@ def safe_log_text(content: str, limit: int = 1000) -> str:
     return value if len(value) <= limit else f"{value[:limit - 3]}..."
 
 
+def is_release_update_message(message: discord.Message, bot_user_id: int) -> bool:
+    """Return whether a message is one of this bot's release announcements."""
+    return message.author.id == bot_user_id and RELEASE_UPDATE_MARKER in message.content
+
+
 def get_ticket_owner_id(channel: discord.TextChannel) -> int | None:
     """Return the ticket creator stored in the channel topic."""
     topic = channel.topic or ""
@@ -529,20 +544,13 @@ async def create_dm_ticket_channel(
             read_message_history=True,
         ),
     }
-    # Leadership always gets full admin on every ticket
-    staff_role = guild.get_role(STAFF_ROLE_ID)
-    if staff_role is not None:
-        overwrites[staff_role] = discord.PermissionOverwrite(
-            view_channel=True,
-            send_messages=True,
-            read_message_history=True,
-            manage_channels=True,
-            manage_permissions=True,
-            manage_messages=True,
-        )
-    admin_role = guild.get_role(ADMIN_ROLE_ID)
-    if admin_role is not None:
-        overwrites[admin_role] = discord.PermissionOverwrite(
+    # Careers is deliberately restricted to its configured role. Leadership
+    # retains access to every other ticket category.
+    for role_id in ticket_access_role_ids(category_key):
+        role = guild.get_role(role_id)
+        if role is None:
+            continue
+        overwrites[role] = discord.PermissionOverwrite(
             view_channel=True,
             send_messages=True,
             read_message_history=True,
@@ -747,7 +755,7 @@ async def open_dm_ticket(
         category_key=category_key,
         prefix=cfg["prefix"],
     )
-    mention_ids = [STAFF_ROLE_ID]
+    mention_ids = [cfg["role_id"]]
     mentions = [
         role.mention
         for role_id in dict.fromkeys(mention_ids)
@@ -893,14 +901,21 @@ class CloseReasonModal(discord.ui.Modal, title="Close Ticket — Delta Air Lines
         required=True,
     )
 
-    def __init__(self, channel: discord.TextChannel, closer: discord.Member) -> None:
+    def __init__(
+        self,
+        channel: discord.TextChannel,
+        closer: discord.Member,
+        *,
+        private_response: bool,
+    ) -> None:
         super().__init__()
         self._channel = channel
         self._closer  = closer
+        self._private_response = private_response
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         # Acknowledge the modal immediately
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer(ephemeral=self._private_response)
 
         # Find the ticket owner from the channel topic
         owner_id = get_ticket_owner_id(self._channel)
@@ -938,13 +953,13 @@ class CloseReasonModal(discord.ui.Modal, title="Close Ticket — Delta Air Lines
         if dm_sent:
             await interaction.followup.send(
                 embed=success_embed(f"A rating request was sent by DM. The ticket will close in {TICKET_CLOSE_DELAY} seconds."),
-                ephemeral=True,
+                ephemeral=self._private_response,
             )
         else:
             # DMs disabled — finalize immediately without rating
             await interaction.followup.send(
                 embed=success_embed("Closing in progress — please wait."),
-                ephemeral=True,
+                ephemeral=self._private_response,
             )
         # Closing the channel and expiring the DM rating are independent: the
         # channel still closes after five seconds, while the one DM remains.
@@ -1218,7 +1233,9 @@ class TicketActionView(discord.ui.View):
             )
             return
 
-        await interaction.response.send_modal(CloseReasonModal(channel, member))
+        await interaction.response.send_modal(
+            CloseReasonModal(channel, member, private_response=True)
+        )
 
 
 # Keep old name as alias so existing persistent views still resolve
@@ -1473,6 +1490,22 @@ def admin_only() -> app_commands.check:
     return app_commands.check(predicate)
 
 
+def ticket_control_only() -> app_commands.check:
+    async def predicate(interaction: discord.Interaction) -> bool:
+        member = interaction.user
+        if not isinstance(member, discord.Member) or not can_use_ticket_control(member):
+            return False
+        restriction = getattr(interaction.client, "ticket_restrictions", {}).get(member.id)
+        if restriction is None:
+            return True
+        _, expires_at = restriction
+        if expires_at is None or expires_at > time.time():
+            return False
+        interaction.client.ticket_restrictions.pop(member.id, None)
+        return True
+    return app_commands.check(predicate)
+
+
 def register_commands(tree: app_commands.CommandTree) -> None:
     # Clear commands owned by this module before rebuilding the tree. This makes
     # registration safe if startup is retried or the tree was populated earlier,
@@ -1719,13 +1752,14 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         interaction: discord.Interaction,
         *,
         claimant_only: bool,
+        private_response: bool,
     ) -> tuple[discord.TextChannel, discord.Member] | None:
         channel = interaction.channel
         member = interaction.user
         if not isinstance(channel, discord.TextChannel) or not isinstance(member, discord.Member):
             await interaction.response.send_message(
                 embed=error_embed("Use this command inside the ticket you want to control."),
-                ephemeral=True,
+                ephemeral=private_response,
             )
             return None
         try:
@@ -1733,13 +1767,13 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
             await interaction.response.send_message(
                 embed=error_embed(f"I could not load this ticket: {exc}"),
-                ephemeral=True,
+                ephemeral=private_response,
             )
             return None
         if not isinstance(fresh_channel, discord.TextChannel) or not is_ticket_channel(fresh_channel):
             await interaction.response.send_message(
                 embed=error_embed("This command can only be used in the ticket channel that was created for the customer."),
-                ephemeral=True,
+                ephemeral=private_response,
             )
             return None
         if claimant_only and get_topic_value(
@@ -1747,7 +1781,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         ) != str(member.id):
             await interaction.response.send_message(
                 embed=error_embed("Only the support member who claimed this ticket can use `/ticket control`."),
-                ephemeral=True,
+                ephemeral=private_response,
             )
             return None
         return fresh_channel, member
@@ -1832,7 +1866,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         return f"Removed {member.mention} from this ticket."
 
     @ticket_group.command(name="control", description="Run a control action in your claimed ticket.")
-    @staff_only()
+    @ticket_control_only()
     @app_commands.describe(command="The ticket action to run.", member="Customer or support member for this action.")
     @app_commands.choices(command=control_choices)
     async def ticket_control(
@@ -1840,16 +1874,20 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         command: app_commands.Choice[str],
         member: discord.Member | None = None,
     ) -> None:
-        selected = await current_ticket(interaction, claimant_only=True)
+        selected = await current_ticket(
+            interaction, claimant_only=True, private_response=False
+        )
         if selected is None:
             return
         channel, actor = selected
         if command.value == "close":
-            await interaction.response.send_modal(CloseReasonModal(channel, actor))
+            await interaction.response.send_modal(
+                CloseReasonModal(channel, actor, private_response=False)
+            )
             return
         if command.value in {"add_customer", "add_support", "remove_support"} and member is None:
             await interaction.response.send_message(
-                embed=error_embed("Select a member for that command."), ephemeral=True
+                embed=error_embed("Select a member for that command."), ephemeral=False
             )
             return
         try:
@@ -1862,9 +1900,9 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             else:
                 result = await remove_ticket_support(interaction, channel, member)
         except (discord.Forbidden, discord.HTTPException, ValueError) as exc:
-            await interaction.response.send_message(embed=error_embed(str(exc)), ephemeral=True)
+            await interaction.response.send_message(embed=error_embed(str(exc)), ephemeral=False)
             return
-        await interaction.response.send_message(embed=success_embed(result), ephemeral=True)
+        await interaction.response.send_message(embed=success_embed(result), ephemeral=False)
 
     @ticket_group.command(name="admin", description="Run an administrative ticket action.")
     @admin_only()
@@ -1939,12 +1977,16 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             await interaction.response.send_message(embed=success_embed(result), ephemeral=True)
             return
 
-        selected = await current_ticket(interaction, claimant_only=False)
+        selected = await current_ticket(
+            interaction, claimant_only=False, private_response=True
+        )
         if selected is None:
             return
         channel, actor = selected
         if command.value == "close":
-            await interaction.response.send_modal(CloseReasonModal(channel, actor))
+            await interaction.response.send_modal(
+                CloseReasonModal(channel, actor, private_response=True)
+            )
             return
         if command.value in {"add_customer", "add_support", "remove_support", "claim"} and member is None:
             await interaction.response.send_message(
@@ -1991,11 +2033,20 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         error: app_commands.AppCommandError,
     ) -> None:
         if isinstance(error, app_commands.CheckFailure):
-            await interaction.response.send_message(
-                embed=error_embed(
+            command_name = interaction.command.qualified_name if interaction.command else ""
+            if command_name == "ticket control":
+                message = (
+                    "You do not have permission to use this command.\n"
+                    "`/ticket control` is restricted to the regular support role; "
+                    "Careers administrators must use `/ticket admin`."
+                )
+            else:
+                message = (
                     "You do not have permission to use this command.\n"
                     "This command is restricted to **Delta Air Lines Staff** only."
-                ),
+                )
+            await interaction.response.send_message(
+                embed=error_embed(message),
                 ephemeral=True,
             )
         else:
@@ -2146,7 +2197,7 @@ class DeltaBot(commands.Bot):
             log.info("Startup validation passed for guild %s (%s).", guild.name, guild.id)
 
     async def _post_release_update(self) -> None:
-        """Post this release once to the update/transcript channel."""
+        """Keep only the newest release announcement in the logs channel."""
         channel = self.get_channel(UPDATE_CHANNEL_ID)
         if not isinstance(channel, discord.TextChannel):
             try:
@@ -2158,17 +2209,32 @@ class DeltaBot(commands.Bot):
         if channel is None or channel.guild.id != GUILD_ID or self.user is None:
             return
 
-        marker = f"Update {BOT_VERSION}"
         try:
             pinned = await channel.pins()
             recent = [message async for message in channel.history(limit=200)]
         except (discord.Forbidden, discord.HTTPException) as exc:
             log.warning("Could not check existing update announcements: %s", exc)
             return
-        if any(
-            message.author.id == self.user.id and marker in message.content
+        release_messages = {
+            message.id: message
             for message in (*pinned, *recent)
-        ):
+            if is_release_update_message(message, self.user.id)
+        }
+        current_marker = f"{RELEASE_UPDATE_MARKER} {BOT_VERSION}"
+        current = next(
+            (message for message in release_messages.values() if current_marker in message.content),
+            None,
+        )
+        if current is not None:
+            # A reconnect must not create another copy. It is also a convenient
+            # opportunity to remove stale or duplicate announcements.
+            for message in release_messages.values():
+                if message.id == current.id:
+                    continue
+                try:
+                    await message.delete(reason=f"Replaced by Delta Support Bot {BOT_VERSION}")
+                except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                    log.warning("Could not remove previous update %s: %s", message.id, exc)
             return
 
         try:
@@ -2177,6 +2243,13 @@ class DeltaBot(commands.Bot):
                 await announcement.pin(reason=f"Delta Support Bot release {BOT_VERSION}")
             except (discord.Forbidden, discord.HTTPException):
                 log.warning("Posted update %s but could not pin it.", BOT_VERSION)
+            # Post first, then remove the old message. A temporary send failure
+            # therefore never leaves the logs channel without an announcement.
+            for message in release_messages.values():
+                try:
+                    await message.delete(reason=f"Replaced by Delta Support Bot {BOT_VERSION}")
+                except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                    log.warning("Could not remove previous update %s: %s", message.id, exc)
             log.info("Posted release update %s to channel %s.", BOT_VERSION, UPDATE_CHANNEL_ID)
         except (discord.Forbidden, discord.HTTPException) as exc:
             log.warning("Could not post release update %s: %s", BOT_VERSION, exc)

@@ -22,7 +22,7 @@ UPDATE_CHANNEL_ID = TRANSCRIPT_CHANNEL_ID
 # channels named "lounge". A value of 0 falls back to an exact name lookup.
 LOUNGE_CHANNEL_ID = int(os.getenv("LOUNGE_CHANNEL_ID", "0"))
 
-BOT_VERSION = "2.4.0"
+BOT_VERSION = "2.7.0"
 
 # ── Runtime behavior ─────────────────────────────────────────────────────────
 TICKET_CLOSE_DELAY = 5
@@ -75,7 +75,7 @@ TICKET_CONFIG: dict[str, dict] = {
     "careers": {
         "label":       "Careers",
         "prefix":      "careers",
-        "role_id":     STAFF_ROLE_ID,
+        "role_id":     ADMIN_ROLE_ID,
         "emoji":       "<:Nametag:1541175704622993428>",
         "description": "Questions about careers and applications.",
     },
