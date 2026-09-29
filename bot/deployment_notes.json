@@ -1,15 +1,12 @@
 {
-  "title": "Consolidated Ticket Controls",
-  "summary": "Ticket commands are cleaner and explicitly added support members can now reply to customers.",
-  "added": [
-    "A claimant-only /ticket control command with customer, support, and close actions.",
-    "A consolidated /ticket admin command with assignment, removal, punishment, close, and undo actions.",
-    "Remove Support actions for both ticket claimants and administrators."
-  ],
+  "title": "Ticket-Only Runtime Cleanup",
+  "summary": "General server moderation and activity logging were removed while all ticket functionality remains intact.",
+  "added": [],
   "changed": [
-    "Support members added to a ticket can now use /reply without replacing the original claimant.",
-    "Legacy explicit support permissions remain recognized for existing open tickets.",
-    "Former standalone ticket-management commands are consolidated under /ticket."
+    "Removed member join and leave logging.",
+    "Removed message edit and deletion logging.",
+    "Removed general moderation event logging and lounge AutoMod.",
+    "Kept ticket transcripts, release updates, ticket controls, DM relay, /reply, and /format unchanged."
   ],
   "removed": []
 }
