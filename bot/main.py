@@ -18,9 +18,10 @@ import subprocess
 import threading
 import time
 import unicodedata
-from datetime import datetime
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import aiohttp
 import discord
@@ -32,7 +33,9 @@ load_dotenv()
 
 from config import (
     ADMIN_ROLE_ID,
+    AUTHENTICATED_ROLE_ID,
     BLUE_ARROW_EMOJI,
+    BOT_COMMANDS_CHANNEL_ID,
     BOT_VERSION,
     CHECKMARK_EMOJI,
     DELTA_BLUE,
@@ -60,6 +63,8 @@ from config import (
     UPDATE_CHANNEL_ID,
     WING_PIN_EMOJI,
 )
+from economy import EconomyStore
+from audit_log import AuditLogStore
 
 # ════════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -123,7 +128,7 @@ If you'd like to contact our team or create a support ticket, click the **Create
 
 UPDATE_MESSAGE = f"""# <:DeltaLogo:1540927958116601980> Delta Support Bot — Update {BOT_VERSION}
 
-This update improves deployment stability without changing the ticket workflow.
+This update improves server operations, moderation reporting, and release announcements.
 
 ## What's Changed
 - `bot/main.py` is now the only production HelpDesk implementation.
@@ -133,12 +138,23 @@ This update improves deployment stability without changing the ticket workflow.
 - `/version` now includes uptime and Discord latency for support staff.
 - Assistance dropdown failures now print full exception details to the host console.
 - Leadership and HR `/format` options now include their complete application requirements.
+- Server logs now record member, message, and moderation events.
+- Delta AutoMod removes configured offensive language from #lounge.
+- #bot-commands now automatically removes ordinary conversation.
+- `/authentication-control` consolidates authentication role management.
+- `/economy` adds balances, daily rewards, work, payments, and a leaderboard.
+- Server activity logs now use polished Delta embeds and include a Sunday
+  midnight Eastern weekly moderation digest.
+- Each deployment keeps only the newest update announcement in the logs channel;
+  the prior release message is removed automatically.
 - Added support members can use `/reply`, and ticket actions are consolidated under
   `/ticket control` and `/ticket admin`.
 - Customer `/reply` deliveries are plain text; the attributed embed remains only in
   the private support ticket.
 
 -# Version format: major.minor.patch."""
+
+RELEASE_UPDATE_MARKER = "Delta Support Bot — Update"
 
 # ════════════════════════════════════════════════════════════════════════════════
 # EMBEDS
@@ -372,6 +388,69 @@ def format_uptime(seconds: float) -> str:
         parts.append(f"{minutes}m")
     parts.append(f"{secs}s")
     return " ".join(parts)
+
+
+_AUTOMOD_TRANSLATION = str.maketrans({
+    "0": "o",
+    "1": "i",
+    "3": "e",
+    "4": "a",
+    "5": "s",
+    "7": "t",
+    "@": "a",
+    "$": "s",
+})
+
+
+def normalize_automod_text(content: str) -> str:
+    """Normalize common punctuation and substitutions before term matching."""
+    normalized = unicodedata.normalize("NFKC", content).casefold().translate(_AUTOMOD_TRANSLATION)
+    return " ".join(re.findall(r"[a-z]+", normalized))
+
+
+def find_blocked_term(content: str) -> str | None:
+    """Return the configured offensive term found in content, if any."""
+    normalized_text = normalize_automod_text(content)
+    normalized = f" {normalized_text} "
+    tokens = normalized_text.split()
+    for term in AUTOMOD_TERMS:
+        candidate = normalize_automod_text(term)
+        if candidate and f" {candidate} " in normalized:
+            return term
+        # Catch simple punctuation evasion such as "f.u.c.k" without matching
+        # a blocked sequence inside an innocent word such as "class".
+        if " " not in candidate and len(candidate) > 1:
+            width = len(candidate)
+            if any(
+                all(len(token) == 1 for token in tokens[start:start + width])
+                and "".join(tokens[start:start + width]) == candidate
+                for start in range(len(tokens) - width + 1)
+            ):
+                return term
+    return None
+
+
+def safe_log_text(content: str, limit: int = 1000) -> str:
+    """Keep log fields readable and within Discord embed limits."""
+    value = content or "*(no text content)*"
+    return value if len(value) <= limit else f"{value[:limit - 3]}..."
+
+
+def is_release_update_message(message: discord.Message, bot_user_id: int) -> bool:
+    """Return whether a message is one of this bot's release announcements."""
+    return message.author.id == bot_user_id and RELEASE_UPDATE_MARKER in message.content
+
+
+EASTERN_TIME = ZoneInfo("America/New_York")
+
+
+def latest_sunday_midnight(now: datetime | None = None) -> datetime:
+    """Return the latest Sunday 12:00 a.m. in US Eastern time."""
+    current = (now or datetime.now(EASTERN_TIME)).astimezone(EASTERN_TIME)
+    days_since_sunday = (current.weekday() + 1) % 7
+    return (current - timedelta(days=days_since_sunday)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
 
 
 def get_ticket_owner_id(channel: discord.TextChannel) -> int | None:
@@ -1499,6 +1578,108 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             ephemeral=True,
         )
 
+    authentication_choices = [
+        app_commands.Choice(name="Authenticate", value="authenticate"),
+        app_commands.Choice(name="Remove Authentication", value="remove"),
+        app_commands.Choice(name="Check Status", value="status"),
+    ]
+
+    @tree.command(
+        name="authentication-control",
+        description="Manage all member authentication actions from one command.",
+    )
+    @admin_only()
+    @app_commands.describe(command="The authentication action to run.", member="The member to manage.")
+    @app_commands.choices(command=authentication_choices)
+    async def authentication_control(
+        interaction: discord.Interaction,
+        command: app_commands.Choice[str],
+        member: discord.Member,
+    ) -> None:
+        role = interaction.guild.get_role(AUTHENTICATED_ROLE_ID) if interaction.guild else None
+        if role is None:
+            await interaction.response.send_message(
+                embed=error_embed("The authenticated role is not configured. Set `AUTHENTICATED_ROLE_ID`."),
+                ephemeral=True,
+            )
+            return
+        has_role = role in member.roles
+        try:
+            if command.value == "authenticate":
+                if not has_role:
+                    await member.add_roles(role, reason=f"Authenticated by {interaction.user}")
+                result = f"{member.mention} is authenticated with {role.mention}."
+            elif command.value == "remove":
+                if has_role:
+                    await member.remove_roles(role, reason=f"Authentication removed by {interaction.user}")
+                result = f"Authentication was removed from {member.mention}."
+            else:
+                result = (
+                    f"{member.mention} is authenticated with {role.mention}."
+                    if has_role else f"{member.mention} is not authenticated."
+                )
+        except (discord.Forbidden, discord.HTTPException) as exc:
+            await interaction.response.send_message(embed=error_embed(str(exc)), ephemeral=True)
+            return
+        await interaction.response.send_message(embed=success_embed(result), ephemeral=True)
+
+    economy_group = app_commands.Group(name="economy", description="Earn and manage Delta Credits.")
+
+    @economy_group.command(name="balance", description="View a member's Delta Credits balance.")
+    async def economy_balance(
+        interaction: discord.Interaction, member: discord.Member | None = None
+    ) -> None:
+        target = member or interaction.user
+        balance = interaction.client.economy.balance(target.id)
+        await interaction.response.send_message(
+            embed=_base_embed(title="Delta Credits", description=f"{target.mention} has **{balance:,} credits**.")
+        )
+
+    @economy_group.command(name="daily", description="Claim your daily Delta Credits.")
+    async def economy_daily(interaction: discord.Interaction) -> None:
+        reward, remaining = interaction.client.economy.claim(interaction.user.id, "daily", 86_400, 200, 400)
+        if remaining:
+            await interaction.response.send_message(
+                embed=error_embed(f"Your daily reward is ready <t:{int(time.time()) + remaining}:R>."), ephemeral=True
+            )
+            return
+        await interaction.response.send_message(embed=success_embed(f"You received **{reward:,} Delta Credits**."))
+
+    @economy_group.command(name="work", description="Work a shift to earn Delta Credits.")
+    async def economy_work(interaction: discord.Interaction) -> None:
+        reward, remaining = interaction.client.economy.claim(interaction.user.id, "work", 3_600, 50, 150)
+        if remaining:
+            await interaction.response.send_message(
+                embed=error_embed(f"You can work another shift <t:{int(time.time()) + remaining}:R>."), ephemeral=True
+            )
+            return
+        await interaction.response.send_message(embed=success_embed(f"Your shift earned **{reward:,} Delta Credits**."))
+
+    @economy_group.command(name="pay", description="Send Delta Credits to another member.")
+    async def economy_pay(
+        interaction: discord.Interaction,
+        member: discord.Member,
+        amount: app_commands.Range[int, 1, 1_000_000],
+    ) -> None:
+        if member.bot or member.id == interaction.user.id:
+            await interaction.response.send_message(embed=error_embed("Choose another human member."), ephemeral=True)
+            return
+        if not interaction.client.economy.transfer(interaction.user.id, member.id, amount):
+            await interaction.response.send_message(embed=error_embed("You do not have enough Delta Credits."), ephemeral=True)
+            return
+        await interaction.response.send_message(embed=success_embed(f"Sent **{amount:,} credits** to {member.mention}."))
+
+    @economy_group.command(name="leaderboard", description="Show the richest Delta community members.")
+    async def economy_leaderboard(interaction: discord.Interaction) -> None:
+        entries = interaction.client.economy.leaderboard()
+        lines = [f"**{index}.** <@{user_id}> — **{balance:,}**" for index, (user_id, balance) in enumerate(entries, 1)]
+        await interaction.response.send_message(
+            embed=_base_embed(title="Delta Credits Leaderboard", description="\n".join(lines) or "No credits have been earned yet."),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    tree.add_command(economy_group)
+
     # /reply
     @tree.command(name="reply", description="Send a reply to the ticket customer's DMs.")
     @staff_only()
@@ -1987,6 +2168,12 @@ class DeltaBot(commands.Bot):
         self.admin_undo_actions: list[tuple] = []
         self.processed_dm_messages: set[int] = set()
         self.processed_reply_interactions: set[int] = set()
+        self._automod_deletions: set[int] = set()
+        economy_path = os.getenv("ECONOMY_DB_PATH", str(Path(__file__).with_name("economy.db")))
+        self.economy = EconomyStore(economy_path)
+        audit_path = os.getenv("AUDIT_DB_PATH", str(Path(__file__).with_name("audit.db")))
+        self.audit_log = AuditLogStore(audit_path)
+        self._weekly_log_task: asyncio.Task | None = None
         self.started_monotonic = time.monotonic()
 
     async def setup_hook(self) -> None:
@@ -1999,6 +2186,14 @@ class DeltaBot(commands.Bot):
         await self.tree.sync()
         synced = await self.tree.sync(guild=target_guild)
         log.info("Synced %d application command(s) to guild %s.", len(synced), GUILD_ID)
+        self._weekly_log_task = asyncio.create_task(
+            self._weekly_log_worker(), name="delta-weekly-log"
+        )
+
+    async def close(self) -> None:
+        if self._weekly_log_task is not None:
+            self._weekly_log_task.cancel()
+        await super().close()
 
     async def on_ready(self) -> None:
         global XMARK_EMOJI
@@ -2056,6 +2251,32 @@ class DeltaBot(commands.Bot):
                     label,
                     resource_id,
                 )
+        lounge = (
+            guild.get_channel(LOUNGE_CHANNEL_ID)
+            if LOUNGE_CHANNEL_ID
+            else discord.utils.find(
+                lambda channel: isinstance(channel, discord.TextChannel)
+                and channel.name.casefold() == "lounge",
+                guild.channels,
+            )
+        )
+        if not isinstance(lounge, discord.TextChannel):
+            invalid = True
+            target = str(LOUNGE_CHANNEL_ID) if LOUNGE_CHANNEL_ID else "#lounge"
+            log.warning("Startup validation: AutoMod lounge channel %s was not found.", target)
+        bot_commands = (
+            guild.get_channel(BOT_COMMANDS_CHANNEL_ID)
+            if BOT_COMMANDS_CHANNEL_ID
+            else discord.utils.find(
+                lambda channel: isinstance(channel, discord.TextChannel)
+                and channel.name.casefold() == "bot-commands",
+                guild.channels,
+            )
+        )
+        if not isinstance(bot_commands, discord.TextChannel):
+            invalid = True
+            target = str(BOT_COMMANDS_CHANNEL_ID) if BOT_COMMANDS_CHANNEL_ID else "#bot-commands"
+            log.warning("Startup validation: bot commands channel %s was not found.", target)
         for label, role_id in (("staff role", STAFF_ROLE_ID), ("admin role", ADMIN_ROLE_ID)):
             if guild.get_role(role_id) is None:
                 invalid = True
@@ -2068,7 +2289,7 @@ class DeltaBot(commands.Bot):
             log.info("Startup validation passed for guild %s (%s).", guild.name, guild.id)
 
     async def _post_release_update(self) -> None:
-        """Post this release once to the update/transcript channel."""
+        """Keep exactly one release announcement—the newest—in the logs channel."""
         channel = self.get_channel(UPDATE_CHANNEL_ID)
         if not isinstance(channel, discord.TextChannel):
             try:
@@ -2080,17 +2301,35 @@ class DeltaBot(commands.Bot):
         if channel is None or channel.guild.id != GUILD_ID or self.user is None:
             return
 
-        marker = f"Update {BOT_VERSION}"
         try:
             pinned = await channel.pins()
             recent = [message async for message in channel.history(limit=200)]
         except (discord.Forbidden, discord.HTTPException) as exc:
             log.warning("Could not check existing update announcements: %s", exc)
             return
-        if any(
-            message.author.id == self.user.id and marker in message.content
+        # A release message should normally be pinned, while the recent-history
+        # lookup also catches a message whose pin failed. Deduplicate the two
+        # collections before deciding which announcement to retain.
+        candidates = {
+            message.id: message
             for message in (*pinned, *recent)
-        ):
+            if is_release_update_message(message, self.user.id)
+        }
+        current_marker = f"{RELEASE_UPDATE_MARKER} {BOT_VERSION}"
+        current = next(
+            (message for message in candidates.values() if current_marker in message.content),
+            None,
+        )
+        if current is not None:
+            # Clean up any stale or duplicate announcements even when this
+            # version was already posted by an earlier ready event.
+            for message in candidates.values():
+                if message.id == current.id:
+                    continue
+                try:
+                    await message.delete(reason=f"Replaced by Delta Support Bot {BOT_VERSION}")
+                except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                    log.warning("Could not remove old release update %s: %s", message.id, exc)
             return
 
         try:
@@ -2099,6 +2338,11 @@ class DeltaBot(commands.Bot):
                 await announcement.pin(reason=f"Delta Support Bot release {BOT_VERSION}")
             except (discord.Forbidden, discord.HTTPException):
                 log.warning("Posted update %s but could not pin it.", BOT_VERSION)
+            for message in candidates.values():
+                try:
+                    await message.delete(reason=f"Replaced by Delta Support Bot {BOT_VERSION}")
+                except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                    log.warning("Could not remove old release update %s: %s", message.id, exc)
             log.info("Posted release update %s to channel %s.", BOT_VERSION, UPDATE_CHANNEL_ID)
         except (discord.Forbidden, discord.HTTPException) as exc:
             log.warning("Could not post release update %s: %s", BOT_VERSION, exc)
@@ -2119,25 +2363,141 @@ class DeltaBot(commands.Bot):
             return channel.id == LOUNGE_CHANNEL_ID
         return isinstance(channel, discord.TextChannel) and channel.name.casefold() == "lounge"
 
+    def _is_bot_commands(self, channel: discord.abc.GuildChannel | discord.Thread) -> bool:
+        if channel.guild.id != GUILD_ID:
+            return False
+        if BOT_COMMANDS_CHANNEL_ID:
+            return channel.id == BOT_COMMANDS_CHANNEL_ID
+        return isinstance(channel, discord.TextChannel) and channel.name.casefold() == "bot-commands"
+
+    async def _enforce_bot_commands_channel(self, message: discord.Message) -> bool:
+        """Remove ordinary conversation from the commands-only channel."""
+        if not isinstance(message.channel, discord.TextChannel) or not self._is_bot_commands(message.channel):
+            return False
+        self._automod_deletions.add(message.id)
+        try:
+            await message.delete(reason="#bot-commands is reserved for bot commands")
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+            self._automod_deletions.discard(message.id)
+            log.warning("Could not enforce #bot-commands for message %s: %s", message.id, exc)
+            return False
+        try:
+            await message.channel.send(
+                content=message.author.mention,
+                embed=discord.Embed(
+                    title=f"{MESSAGE_EMOJI}  Commands Only",
+                    description=(
+                        "Your message was removed because this channel is reserved for bot commands. "
+                        "Please continue general conversation in **#lounge**."
+                    ),
+                    color=DELTA_BLUE,
+                ).set_footer(text=FOOTER_TEXT),
+                delete_after=8,
+                allowed_mentions=discord.AllowedMentions(users=True),
+            )
+        except (discord.Forbidden, discord.HTTPException) as exc:
+            log.warning("Removed message %s but could not post commands-only notice: %s", message.id, exc)
+        await self._send_server_log(
+            "Commands Channel Violation",
+            f"{IDENTIFICATION_EMOJI} **Member**\n{message.author.mention} • `{message.author.id}`\n\n"
+            f"{MESSAGE_EMOJI} **Channel**\n{message.channel.mention}\n\n"
+            f"{RIGHT_ARROW_EMOJI} **Removed Content**\n{safe_log_text(message.content)}",
+            color=DELTA_RED,
+            event_type="command_channel",
+            emoji=MESSAGE_EMOJI,
+        )
+        return True
+
     async def _send_server_log(
         self,
         title: str,
         description: str,
         *,
         color: int = DELTA_BLUE,
+        event_type: str = "other",
+        emoji: str = BLUE_ARROW_EMOJI,
     ) -> None:
         """Send a server event to the configured logs channel without disrupting it."""
+        self.audit_log.record(event_type)
         channel = self.get_channel(TRANSCRIPT_CHANNEL_ID)
         if not isinstance(channel, discord.TextChannel):
             log.warning("Could not write %s log: channel %s is unavailable.", title, TRANSCRIPT_CHANNEL_ID)
             return
-        embed = discord.Embed(title=title, description=description, color=color)
-        embed.set_footer(text=FOOTER_TEXT)
+        embed = discord.Embed(
+            title=f"{emoji}  {title}",
+            description=description,
+            color=color,
+        )
+        embed.set_author(name="Delta Air Lines • Server Operations")
+        embed.add_field(name="Event", value=event_type.replace("_", " ").title(), inline=True)
+        embed.add_field(name="Recorded", value=discord.utils.format_dt(discord.utils.utcnow(), "R"), inline=True)
+        embed.set_footer(text=f"{FOOTER_TEXT} • Audit Log")
         embed.timestamp = discord.utils.utcnow()
         try:
             await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
         except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
             log.warning("Could not write %s log: %s", title, exc)
+
+    async def _publish_due_weekly_report(self) -> None:
+        """Publish exactly one digest for the most recently completed Eastern week."""
+        boundary_dt = latest_sunday_midnight()
+        boundary = int(boundary_dt.timestamp())
+        last_report = self.audit_log.last_report()
+        if last_report == 0:
+            self.audit_log.mark_reported(boundary)
+            return
+        if last_report >= boundary:
+            return
+
+        start_dt = boundary_dt - timedelta(days=7)
+        start = int(start_dt.timestamp())
+        counts = self.audit_log.counts(start, boundary)
+        ordered_events = (
+            ("member_join", "Members Joined", CHECKMARK_EMOJI),
+            ("member_leave", "Members Left", RIGHT_ARROW_EMOJI),
+            ("message_edit", "Messages Edited", MESSAGE_EMOJI),
+            ("message_delete", "Messages Deleted", MESSAGE_EMOJI),
+            ("automod", "AutoMod Violations", XMARK_EMOJI),
+            ("command_channel", "Commands Channel Violations", MESSAGE_EMOJI),
+            ("member_update", "Member Updates", IDENTIFICATION_EMOJI),
+            ("member_ban", "Bans", XMARK_EMOJI),
+            ("member_unban", "Unbans", CHECKMARK_EMOJI),
+        )
+        total = sum(counts.values())
+        lines = [f"{emoji} **{label}:** `{counts[key]:,}`" for key, label, emoji in ordered_events]
+        embed = discord.Embed(
+            title=f"{WING_PIN_EMOJI}  Weekly Server Operations Report",
+            description=(
+                f"Complete activity summary for {discord.utils.format_dt(start_dt, 'D')} through "
+                f"{discord.utils.format_dt(boundary_dt, 'D')}.\n\n" + "\n".join(lines)
+            ),
+            color=DELTA_BLUE,
+        )
+        embed.add_field(name=f"{SUPPORT_EMOJI} Total Logged Events", value=f"**{total:,}**", inline=True)
+        embed.add_field(name=f"{BLUE_ARROW_EMOJI} Reporting Time", value="Sunday • 12:00 a.m. ET", inline=True)
+        embed.set_footer(text=f"{FOOTER_TEXT} • Weekly Audit Digest")
+        embed.timestamp = boundary_dt
+
+        channel = self.get_channel(TRANSCRIPT_CHANNEL_ID)
+        if not isinstance(channel, discord.TextChannel):
+            log.warning("Could not publish weekly report: log channel is unavailable.")
+            return
+        try:
+            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+            log.warning("Could not publish weekly report: %s", exc)
+            return
+        self.audit_log.mark_reported(boundary)
+
+    async def _weekly_log_worker(self) -> None:
+        """Check for a due weekly report and recover missed reports after restarts."""
+        await self.wait_until_ready()
+        while not self.is_closed():
+            try:
+                await self._publish_due_weekly_report()
+            except Exception:
+                log.exception("Unexpected failure while preparing the weekly server report.")
+            await asyncio.sleep(60)
 
     async def _moderate_lounge_message(self, message: discord.Message) -> bool:
         """Delete configured offensive language in #lounge and record the action."""
@@ -2159,8 +2519,15 @@ class DeltaBot(commands.Bot):
 
         try:
             await message.channel.send(
-                f"{message.author.mention}, that message was removed because offensive language "
-                "is not allowed in this channel.",
+                content=message.author.mention,
+                embed=discord.Embed(
+                    title=f"{XMARK_EMOJI}  Message Removed",
+                    description=(
+                        "Delta AutoMod detected language that is not permitted in **#lounge**. "
+                        "Please keep the community welcoming and respectful."
+                    ),
+                    color=DELTA_RED,
+                ).set_footer(text=FOOTER_TEXT),
                 delete_after=8,
                 allowed_mentions=discord.AllowedMentions(users=True),
             )
@@ -2169,11 +2536,13 @@ class DeltaBot(commands.Bot):
 
         await self._send_server_log(
             "AutoMod Action",
-            f"**Member:** {message.author} (`{message.author.id}`)\n"
-            f"**Channel:** {message.channel.mention}\n"
-            f"**Matched rule:** `{blocked_term}`\n"
-            f"**Message:** {safe_log_text(message.content)}",
+            f"{IDENTIFICATION_EMOJI} **Member**\n{message.author.mention} • `{message.author.id}`\n\n"
+            f"{MESSAGE_EMOJI} **Location**\n{message.channel.mention}\n\n"
+            f"{XMARK_EMOJI} **Rule Triggered**\nOffensive language (`{blocked_term}`)\n\n"
+            f"{BLUE_ARROW_EMOJI} **Removed Content**\n{safe_log_text(message.content)}",
             color=DELTA_RED,
+            event_type="automod",
+            emoji=XMARK_EMOJI,
         )
         return True
 
@@ -2181,31 +2550,45 @@ class DeltaBot(commands.Bot):
         if member.guild.id == GUILD_ID:
             await self._send_server_log(
                 "Member Joined",
-                f"**Member:** {member.mention} (`{member.id}`)\n"
-                f"**Account created:** {discord.utils.format_dt(member.created_at, 'F')}",
+                f"{IDENTIFICATION_EMOJI} **Member**\n{member.mention} • `{member.id}`\n\n"
+                f"{BLUE_ARROW_EMOJI} **Account Created**\n"
+                f"{discord.utils.format_dt(member.created_at, 'F')} "
+                f"({discord.utils.format_dt(member.created_at, 'R')})\n\n"
+                f"{SUPPORT_EMOJI} **Server Member Count**\n`{member.guild.member_count or 0:,}`",
+                event_type="member_join",
+                emoji=CHECKMARK_EMOJI,
             )
 
     async def on_member_remove(self, member: discord.Member) -> None:
         if member.guild.id == GUILD_ID:
             await self._send_server_log(
                 "Member Left",
-                f"**Member:** {member} (`{member.id}`)",
+                f"{IDENTIFICATION_EMOJI} **Member**\n{member} • `{member.id}`\n\n"
+                f"{BLUE_ARROW_EMOJI} **Joined Server**\n"
+                f"{discord.utils.format_dt(member.joined_at, 'F') if member.joined_at else 'Unknown'}\n\n"
+                f"{SUPPORT_EMOJI} **Roles Held**\n`{max(0, len(member.roles) - 1)}`",
                 color=DELTA_RED,
+                event_type="member_leave",
+                emoji=RIGHT_ARROW_EMOJI,
             )
 
     async def on_member_ban(self, guild: discord.Guild, user: discord.User) -> None:
         if guild.id == GUILD_ID:
             await self._send_server_log(
                 "Moderation — Member Banned",
-                f"**Member:** {user} (`{user.id}`)",
+                f"{IDENTIFICATION_EMOJI} **Member**\n{user} • `{user.id}`",
                 color=DELTA_RED,
+                event_type="member_ban",
+                emoji=XMARK_EMOJI,
             )
 
     async def on_member_unban(self, guild: discord.Guild, user: discord.User) -> None:
         if guild.id == GUILD_ID:
             await self._send_server_log(
                 "Moderation — Member Unbanned",
-                f"**Member:** {user} (`{user.id}`)",
+                f"{IDENTIFICATION_EMOJI} **Member**\n{user} • `{user.id}`",
+                event_type="member_unban",
+                emoji=CHECKMARK_EMOJI,
             )
 
     async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
@@ -2233,7 +2616,10 @@ class DeltaBot(commands.Bot):
         if changes:
             await self._send_server_log(
                 "Moderation — Member Updated",
-                f"**Member:** {after.mention} (`{after.id}`)\n" + "\n".join(changes),
+                f"{IDENTIFICATION_EMOJI} **Member**\n{after.mention} • `{after.id}`\n\n"
+                + "\n".join(changes),
+                event_type="member_update",
+                emoji=IDENTIFICATION_EMOJI,
             )
 
     async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
@@ -2246,13 +2632,16 @@ class DeltaBot(commands.Bot):
             return
         if await self._moderate_lounge_message(after):
             return
+        if await self._enforce_bot_commands_channel(after):
+            return
         await self._send_server_log(
             "Message Edited",
-            f"**Member:** {after.author} (`{after.author.id}`)\n"
-            f"**Channel:** {after.channel.mention}\n"
-            f"**Before:** {safe_log_text(before.content)}\n"
-            f"**After:** {safe_log_text(after.content)}\n"
-            f"[Jump to message]({after.jump_url})",
+            f"{IDENTIFICATION_EMOJI} **Member**\n{after.author.mention} • `{after.author.id}`\n\n"
+            f"{MESSAGE_EMOJI} **Channel**\n{after.channel.mention} • [View message]({after.jump_url})\n\n"
+            f"{RIGHT_ARROW_EMOJI} **Before**\n{safe_log_text(before.content)}\n\n"
+            f"{BLUE_ARROW_EMOJI} **After**\n{safe_log_text(after.content)}",
+            event_type="message_edit",
+            emoji=MESSAGE_EMOJI,
         )
 
     async def on_message_delete(self, message: discord.Message) -> None:
@@ -2263,10 +2652,12 @@ class DeltaBot(commands.Bot):
             return
         await self._send_server_log(
             "Message Deleted",
-            f"**Member:** {message.author} (`{message.author.id}`)\n"
-            f"**Channel:** {message.channel.mention}\n"
-            f"**Message:** {safe_log_text(message.content)}",
+            f"{IDENTIFICATION_EMOJI} **Member**\n{message.author.mention} • `{message.author.id}`\n\n"
+            f"{MESSAGE_EMOJI} **Channel**\n{message.channel.mention}\n\n"
+            f"{RIGHT_ARROW_EMOJI} **Deleted Content**\n{safe_log_text(message.content)}",
             color=DELTA_RED,
+            event_type="message_delete",
+            emoji=MESSAGE_EMOJI,
         )
 
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent) -> None:
@@ -2280,10 +2671,12 @@ class DeltaBot(commands.Bot):
         channel_text = getattr(channel, "mention", f"`{payload.channel_id}`")
         await self._send_server_log(
             "Message Deleted",
-            f"**Message ID:** `{payload.message_id}`\n"
-            f"**Channel:** {channel_text}\n"
-            "**Message:** *(content was not cached)*",
+            f"{MESSAGE_EMOJI} **Channel**\n{channel_text}\n\n"
+            f"{IDENTIFICATION_EMOJI} **Message ID**\n`{payload.message_id}`\n\n"
+            f"{RIGHT_ARROW_EMOJI} **Deleted Content**\n*(Content was not cached.)*",
             color=DELTA_RED,
+            event_type="message_delete",
+            emoji=MESSAGE_EMOJI,
         )
 
     async def on_message(self, message: discord.Message) -> None:
@@ -2292,6 +2685,8 @@ class DeltaBot(commands.Bot):
             return
 
         if message.guild is not None and await self._moderate_lounge_message(message):
+            return
+        if message.guild is not None and await self._enforce_bot_commands_channel(message):
             return
 
         if isinstance(message.channel, discord.DMChannel):

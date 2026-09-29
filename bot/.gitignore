@@ -20,6 +20,9 @@ env/
 economy.db
 economy.db-shm
 economy.db-wal
+audit.db
+audit.db-shm
+audit.db-wal
 
 # ── OS / editor ───────────────────────────────────────────────────────────────
 .DS_Store

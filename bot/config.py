@@ -18,7 +18,13 @@ GUILD_ID = 1538738611988467782
 TICKET_CATEGORY_ID = 1543674278711529562   # All ticket channels live here
 TRANSCRIPT_CHANNEL_ID = 1539005101941850274
 UPDATE_CHANNEL_ID = TRANSCRIPT_CHANNEL_ID
-BOT_VERSION = "2.4.2"
+# Set this in Raven when the lounge channel is renamed or there are duplicate
+# channels named "lounge". A value of 0 falls back to an exact name lookup.
+LOUNGE_CHANNEL_ID = int(os.getenv("LOUNGE_CHANNEL_ID", "0"))
+# A value of 0 falls back to an exact ``bot-commands`` name lookup.
+BOT_COMMANDS_CHANNEL_ID = int(os.getenv("BOT_COMMANDS_CHANNEL_ID", "0"))
+
+BOT_VERSION = "2.7.0"
 
 # ── Runtime behavior ─────────────────────────────────────────────────────────
 TICKET_CLOSE_DELAY = 5

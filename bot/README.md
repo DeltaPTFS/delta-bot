@@ -22,9 +22,13 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Claim State | Support can claim and unclaim repeatedly; claim ownership survives bot restarts |
 | Transcripts | Closed-ticket transcripts are posted to the private transcript channel |
 | Server Logs | Member joins/leaves, message edits/deletions, and moderation changes are sent to the configured logs channel |
+| Weekly Audit Digest | Every Sunday at 12:00 a.m. Eastern, posts the complete weekly event totals and recovers a missed report after a restart |
 | Lounge AutoMod | Messages matching configurable curse/offensive terms are removed from `#lounge`, with actions recorded in server logs |
+| Commands-only Channel | Ordinary member messages are automatically removed from `#bot-commands` |
+| Authentication | Admins grant, remove, or check the configured authentication role through one `/authentication-control` command |
+| Economy | Persistent Delta Credits with balance, daily, work, pay, and leaderboard commands |
 | Server Safety | Commands and tickets are locked to server `1538738611988467782`, but the bot never removes itself from a server |
-| Release Updates | Posts and pins each release once in server logs channel `1539005101941850274`; the current release comes from `config.py` |
+| Release Updates | Posts and pins the newest release in server logs channel `1539005101941850274`, then removes every older or duplicate update |
 
 Versions use `major.minor.patch`. Breaking or especially large releases increase
 the first number, regular feature releases increase the second, and fixes increase
@@ -102,6 +106,12 @@ python main.py
 | `/ticket control` | Add/remove customers or support and close the current ticket | Staff member who claimed that ticket |
 | `/ticket admin` | Run consolidated assignment, removal, punishment, close, or undo actions | Admin only |
 | `/version` | Show version, commit, uptime, and Discord latency | Staff only |
+| `/authentication-control command: member:` | Authenticate, remove authentication, or check a member | Admin only |
+| `/economy balance [member]` | View a Delta Credits balance | Everyone |
+| `/economy daily` | Claim a reward every 24 hours | Everyone |
+| `/economy work` | Earn credits once per hour | Everyone |
+| `/economy pay member: amount:` | Transfer credits safely | Everyone |
+| `/economy leaderboard` | Show the ten highest balances | Everyone |
 
 ---
 
@@ -116,6 +126,11 @@ do not copy version or Discord IDs back into the entry point.
 | `TICKET_CATEGORY_ID` | `1543674278711529562` | Category for private ticket relay channels |
 | `STAFF_ROLE_ID` | `1539005030189891684` | Support/admin role for commands, access, and ticket pings |
 | `TRANSCRIPT_CHANNEL_ID` | `1539005101941850274` | Server logs channel that receives closed-ticket transcripts and release notices |
+| `LOUNGE_CHANNEL_ID` | `0` | Optional explicit lounge channel ID; `0` finds a text channel named `lounge` |
+| `BOT_COMMANDS_CHANNEL_ID` | `0` | Optional commands channel ID; `0` finds a text channel named `bot-commands` |
+| `AUTHENTICATED_ROLE_ID` | `0` | Role managed by `/authentication-control` |
+| `ECONOMY_DB_PATH` | `bot/economy.db` | Persistent SQLite economy database path |
+| `AUDIT_DB_PATH` | `bot/audit.db` | Persistent counters and weekly-report checkpoint |
 | `DELTA_RED` | `0xC8102E` | Embed accent colour |
 
 To add a new ticket category, add an entry to `TICKET_CONFIG` in `config.py`.
@@ -130,6 +145,16 @@ case-insensitive and recognizes common number/symbol substitutions. If the serve
 has more than one channel named `lounge`, set `LOUNGE_CHANNEL_ID` in Raven to the
 correct channel ID. The bot requires **Manage Messages** in that channel and
 **Send Messages** plus **Embed Links** in the configured logs channel.
+The bot also requires **Manage Messages** in `#bot-commands`. Set
+`AUTHENTICATED_ROLE_ID` to the role that administrators should manage; the bot's
+highest role must be above it in the server role list.
+
+Operational logs use branded Delta embeds for joins, leaves, edits, deletions,
+member updates, bans, and AutoMod actions. At Sunday 12:00 a.m. in the
+`America/New_York` timezone, the bot posts a weekly digest to
+`TRANSCRIPT_CHANNEL_ID`. Daylight-saving changes are handled automatically. Keep
+`AUDIT_DB_PATH` on persistent storage so a restart can recover a report that was
+temporarily missed.
 
 ## DM Ticket Flow
 
@@ -164,6 +189,12 @@ channel, staff role, and admin role. Any incorrect configured ID produces a clea
 warning without hiding the remaining checks. Assistance dropdown exceptions are
 logged with a full traceback, so an “application didn't respond” incident can be
 diagnosed in the Raven console.
+
+The release announcement is automatically maintained as a single message. When
+`BOT_VERSION` changes, the bot posts and pins the new update before deleting the
+previous announcement. Reconnects do not repost the same update, and any older or
+duplicate update messages found in the pinned messages or recent log history are
+removed.
 
 After deployment, run `/version` as staff to verify the commit, uptime, and Discord
 latency. Raven only needs the current `DISCORD_TOKEN`; no entry-point change is

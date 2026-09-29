@@ -37,24 +37,18 @@ class _Guild:
     emojis = [_Emoji()]
 
 
-class _DMUser:
-    def __init__(self) -> None:
-        self.args = ()
-        self.kwargs = {}
-
-    async def send(self, *args, **kwargs) -> None:
-        self.args = args
-        self.kwargs = kwargs
+class _Author:
+    def __init__(self, user_id: int) -> None:
+        self.id = user_id
 
 
-class _Client:
-    def __init__(self, user: _DMUser) -> None:
-        self.user = user
-
-    def get_user(self, user_id: int) -> _DMUser:
-        return self.user
+class _Message:
+    def __init__(self, content: str, author_id: int) -> None:
+        self.content = content
+        self.author = _Author(author_id)
 
 
+customer = main.anonymous_support_reply_embed("Hello.", 123)
 staff = main.attributed_staff_reply_embed("Hello.", 123, _Agent())
 
 staff_payload = str(staff.to_dict())
@@ -78,6 +72,17 @@ assert main.error_embed("Failed").title.startswith(str(_Emoji()))
 assert main.BOT_VERSION == config.BOT_VERSION
 assert main.format_uptime(90_061) == "1d 1h 1m 1s"
 assert main.deployed_source() != "local/unknown"
+assert main.find_blocked_term("this is sh1t") == "shit"
+assert main.find_blocked_term("f.u.c.k") == "fuck"
+assert main.find_blocked_term("class assignment") is None
+assert main.is_release_update_message(
+    _Message("# Delta Support Bot — Update 2.7.0", 123), 123
+)
+assert not main.is_release_update_message(
+    _Message("# Delta Support Bot — Update 2.7.0", 456), 123
+)
+assert not main.is_release_update_message(_Message("ordinary log message", 123), 123)
+
 topic = f"{main.DM_TICKET_OWNER_MARKER} 123"
 topic = main.set_ticket_support_ids(topic, {456, 789})
 assert main.get_ticket_support_ids(topic) == {456, 789}
@@ -87,7 +92,22 @@ assert main.get_ticket_support_ids(topic) == {789}
 bot = main.DeltaBot()
 main.register_commands(bot.tree)
 commands = {command.name: command for command in bot.tree.get_commands()}
-assert set(commands) == {"panel", "version", "reply", "format", "ticket"}
+assert set(commands) == {
+    "panel",
+    "version",
+    "reply",
+    "format",
+    "ticket",
+    "authentication-control",
+    "economy",
+}
 assert {command.name for command in commands["ticket"].commands} == {"control", "admin"}
+assert {command.name for command in commands["economy"].commands} == {
+    "balance",
+    "daily",
+    "work",
+    "pay",
+    "leaderboard",
+}
 
 print("Reply privacy, staff attribution, colors, and custom status emojis are valid.")
