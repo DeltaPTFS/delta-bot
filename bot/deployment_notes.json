@@ -1,10 +1,11 @@
 {
-  "title": "Ticket Close Command Fix",
-  "summary": "The ticket close command no longer fails while checking the support role.",
+  "title": "Cleaner Customer Replies",
+  "summary": "Replies now arrive as plain DM text while the detailed embed stays in the private support ticket.",
   "added": [],
   "changed": [
-    "Restored the command-role configuration name expected by previously deployed permission checks.",
-    "The command and staff role names both resolve to the sole authorized role, 1539005030189891684."
+    "Removed the Delta Support author label and reply embed from customer DMs.",
+    "Kept the responding support member's attributed embed in the private ticket channel.",
+    "Limited /reply messages to Discord's 2,000-character plain-message limit."
   ],
   "removed": []
 }
