@@ -63,5 +63,20 @@ assert main.error_embed("Failed").title.startswith(str(_Emoji()))
 assert main.BOT_VERSION == config.BOT_VERSION
 assert main.format_uptime(90_061) == "1d 1h 1m 1s"
 assert main.deployed_source() != "local/unknown"
+assert main.find_blocked_term("this is sh1t") == "shit"
+assert main.find_blocked_term("f.u.c.k") == "fuck"
+assert main.find_blocked_term("class assignment") is None
+
+topic = f"{main.DM_TICKET_OWNER_MARKER} 123"
+topic = main.set_ticket_support_ids(topic, {456, 789})
+assert main.get_ticket_support_ids(topic) == {456, 789}
+topic = main.set_ticket_support_ids(topic, {789})
+assert main.get_ticket_support_ids(topic) == {789}
+
+bot = main.DeltaBot()
+main.register_commands(bot.tree)
+commands = {command.name: command for command in bot.tree.get_commands()}
+assert set(commands) == {"panel", "version", "reply", "format", "ticket"}
+assert {command.name for command in commands["ticket"].commands} == {"control", "admin"}
 
 print("Reply privacy, staff attribution, colors, and custom status emojis are valid.")

@@ -12,15 +12,17 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Assistance Panel | Support or admins can post the plain-text contact panel or upload custom top and bottom banner images with `/panel`; confirmation continues in DMs |
 | Private Tickets | Members stay in DMs while staff work from a hidden relay channel |
 | Duplicate Guard | Prevents users from opening multiple simultaneous tickets |
-| Close Ticket | Button *and* `/close` slash command; DMs the user on close |
+| Close Ticket | Persistent button plus `/ticket control` and `/ticket admin`; DMs the user on close |
 | Message Relay | Per-ticket locking suppresses concurrent duplicate events; customer messages and Delta-blue human replies are recorded once |
 | Agent Privacy | Customer DMs identify replies as Delta Support; only the private ticket record identifies the agent |
 | Ticket Reuse | Repeat creation attempts reconnect the customer to their existing ticket instead of opening a duplicate |
-| Staff Commands | `/reply`, `/format`, `/ticket add-customer`, `/ticket add-support`, and `/ticket close` are support role-gated |
-| Admin Commands | `/ticket admin remove`, `punish`, `unpunish`, and `undo` are admin role-gated |
+| Staff Commands | `/reply`, `/format`, and claimant-only `/ticket control` are support role-gated |
+| Admin Commands | `/ticket admin` consolidates assignment, removal, punishment, close, and undo actions |
 | Delta Branding | Red (#C8102E), optional server-owned images, and a consistent footer |
 | Claim State | Support can claim and unclaim repeatedly; claim ownership survives bot restarts |
 | Transcripts | Closed-ticket transcripts are posted to the private transcript channel |
+| Server Logs | Member joins/leaves, message edits/deletions, and moderation changes are sent to the configured logs channel |
+| Lounge AutoMod | Messages matching configurable curse/offensive terms are removed from `#lounge`, with actions recorded in server logs |
 | Server Safety | Commands and tickets are locked to server `1538738611988467782`, but the bot never removes itself from a server |
 | Release Updates | Posts and pins each release once in server logs channel `1539005101941850274`; the current release comes from `config.py` |
 
@@ -38,6 +40,7 @@ bot/
 ├── config.py        — Single source for version, IDs, roles, and shared settings
 ├── support_formats.json — Web-editable canned `/format` messages
 ├── messages.json      — Syntax-safe operational ticket messages
+├── automod_terms.json — Web-editable blocked terms for `#lounge`
 ├── delta_bot.py       — Tiny compatibility launcher; contains no bot implementation
 ├── requirements.txt — Python dependencies
 ├── .env.example     — Template for required environment variables
@@ -95,10 +98,10 @@ python main.py
 | Command | Description | Who Can Use |
 |---|---|---|
 | `/panel` | Post the private-ticket Assistance Panel in the current channel | DL Leadership only |
-| `/close` | Close the current ticket | Support/admin role or ticket creator |
-| `/reply` | Send an anonymous branded reply to the claimed ticket customer | Claiming support/admin member |
+| `/reply` | Send an anonymous branded reply to the ticket customer | Claimant or support member added to that ticket |
 | `/format` | Choose one of the prewritten customer notices | Staff only |
-| `/ticket` | Add people, close tickets, and use role-appropriate administration tools | Staff/admin, depending on subcommand |
+| `/ticket control` | Add/remove customers or support and close the current ticket | Staff member who claimed that ticket |
+| `/ticket admin` | Run consolidated assignment, removal, punishment, close, or undo actions | Admin only |
 | `/version` | Show version, commit, uptime, and Discord latency | Staff only |
 
 ---
@@ -114,6 +117,7 @@ do not copy version or Discord IDs back into the entry point.
 | `TICKET_CATEGORY_ID` | `1543674278711529562` | Category for private ticket relay channels |
 | `STAFF_ROLE_ID` | `1539005030189891684` | Support/admin role for commands, access, and ticket pings |
 | `TRANSCRIPT_CHANNEL_ID` | `1539005101941850274` | Server logs channel that receives closed-ticket transcripts and release notices |
+| `LOUNGE_CHANNEL_ID` | `0` | Optional explicit lounge channel ID; `0` finds a text channel named `lounge` |
 | `DELTA_RED` | `0xC8102E` | Embed accent colour |
 
 To add a new ticket category, add an entry to `TICKET_CONFIG` in `config.py`.
@@ -122,6 +126,12 @@ The production implementation in `main.py` consumes it automatically.
 The bot publishes commands only to `GUILD_ID`, clears its former global commands,
 and accepts DM tickets only from members of the authorized server. Other guilds
 remain inert; the bot never automatically leaves a server.
+
+Lounge AutoMod terms are maintained in `automod_terms.json`. Matching is
+case-insensitive and recognizes common number/symbol substitutions. If the server
+has more than one channel named `lounge`, set `LOUNGE_CHANNEL_ID` in Raven to the
+correct channel ID. The bot requires **Manage Messages** in that channel and
+**Send Messages** plus **Embed Links** in the configured logs channel.
 
 ## DM Ticket Flow
 

@@ -14,9 +14,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import subprocess
 import threading
 import time
+import unicodedata
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -41,10 +43,12 @@ from config import (
     DM_TICKET_CATEGORY_MARKER,
     DM_TICKET_CLAIM_MARKER,
     DM_TICKET_OWNER_MARKER,
+    DM_TICKET_SUPPORT_MARKER,
     FOOTER_TEXT,
     GUILD_ID,
     IDENTIFICATION_EMOJI,
     INVITE_URL,
+    LOUNGE_CHANNEL_ID,
     MAILING_ADDRESS,
     MESSAGE_EMOJI,
     RATING_TIMEOUT,
@@ -104,6 +108,10 @@ with MESSAGES_PATH.open(encoding="utf-8") as messages_file:
     _MESSAGES: dict[str, str] = __import__("json").load(messages_file)
 TICKET_CLAIMED_MESSAGE = _MESSAGES["ticket_claimed"]
 
+AUTOMOD_TERMS_PATH = Path(__file__).with_name("automod_terms.json")
+with AUTOMOD_TERMS_PATH.open(encoding="utf-8") as automod_file:
+    AUTOMOD_TERMS: tuple[str, ...] = tuple(__import__("json").load(automod_file))
+
 NON_MEMBER_MESSAGE = """# <:DeltaLogo:1540927958116601980> Delta Air Lines | Direct Messages <:SkyTeamLogo:1540927923618316359>
 
 > <:BArrow:1540951845147639809> **Hey there! It looks like you're currently not in the Delta Air Lines server.**
@@ -127,6 +135,10 @@ This update improves deployment stability without changing the ticket workflow.
 - `/version` now includes uptime and Discord latency for support staff.
 - Assistance dropdown failures now print full exception details to the host console.
 - Leadership and HR `/format` options now include their complete application requirements.
+- Server logs now record member, message, and moderation events.
+- Delta AutoMod removes configured offensive language from #lounge.
+- Added support members can use `/reply`, and ticket actions are consolidated under
+  `/ticket control` and `/ticket admin`.
 
 -# Version format: major.minor.patch."""
 
@@ -364,6 +376,52 @@ def format_uptime(seconds: float) -> str:
     return " ".join(parts)
 
 
+_AUTOMOD_TRANSLATION = str.maketrans({
+    "0": "o",
+    "1": "i",
+    "3": "e",
+    "4": "a",
+    "5": "s",
+    "7": "t",
+    "@": "a",
+    "$": "s",
+})
+
+
+def normalize_automod_text(content: str) -> str:
+    """Normalize common punctuation and substitutions before term matching."""
+    normalized = unicodedata.normalize("NFKC", content).casefold().translate(_AUTOMOD_TRANSLATION)
+    return " ".join(re.findall(r"[a-z]+", normalized))
+
+
+def find_blocked_term(content: str) -> str | None:
+    """Return the configured offensive term found in content, if any."""
+    normalized_text = normalize_automod_text(content)
+    normalized = f" {normalized_text} "
+    tokens = normalized_text.split()
+    for term in AUTOMOD_TERMS:
+        candidate = normalize_automod_text(term)
+        if candidate and f" {candidate} " in normalized:
+            return term
+        # Catch simple punctuation evasion such as "f.u.c.k" without matching
+        # a blocked sequence inside an innocent word such as "class".
+        if " " not in candidate and len(candidate) > 1:
+            width = len(candidate)
+            if any(
+                all(len(token) == 1 for token in tokens[start:start + width])
+                and "".join(tokens[start:start + width]) == candidate
+                for start in range(len(tokens) - width + 1)
+            ):
+                return term
+    return None
+
+
+def safe_log_text(content: str, limit: int = 1000) -> str:
+    """Keep log fields readable and within Discord embed limits."""
+    value = content or "*(no text content)*"
+    return value if len(value) <= limit else f"{value[:limit - 3]}..."
+
+
 def get_ticket_owner_id(channel: discord.TextChannel) -> int | None:
     """Return the ticket creator stored in the channel topic."""
     topic = channel.topic or ""
@@ -407,6 +465,31 @@ def set_topic_value(topic: str, marker: str, value: str | None) -> str:
     if value is not None:
         lines.append(f"{marker} {value}")
     return "\n".join(lines)
+
+
+def get_ticket_support_ids(topic: str) -> set[int]:
+    """Return support members explicitly added to a ticket topic."""
+    value = get_topic_value(topic, DM_TICKET_SUPPORT_MARKER)
+    if value is None:
+        return set()
+    return {int(item) for item in value.split(",") if item.strip().isdigit()}
+
+
+def set_ticket_support_ids(topic: str, member_ids: set[int]) -> str:
+    """Persist explicitly added support members in a restart-safe topic marker."""
+    value = ",".join(str(member_id) for member_id in sorted(member_ids)) or None
+    return set_topic_value(topic, DM_TICKET_SUPPORT_MARKER, value)
+
+
+def is_ticket_channel(channel: discord.TextChannel) -> bool:
+    """Return whether a channel is a live ticket created in the ticket category."""
+    return (
+        channel.category_id == TICKET_CATEGORY_ID
+        and (
+            get_topic_value(channel.topic or "", DM_TICKET_OWNER_MARKER) is not None
+            or get_topic_value(channel.topic or "", DM_TICKET_CATEGORY_MARKER) is not None
+        )
+    )
 
 
 def toggle_ticket_claim(topic: str, member_id: int) -> tuple[str, bool]:
@@ -1482,133 +1565,6 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             ephemeral=True,
         )
 
-    # /tickets — register an existing channel with the ticket system
-    ticket_category_choices = [
-        app_commands.Choice(name=cfg["label"], value=key)
-        for key, cfg in TICKET_CONFIG.items()
-    ]
-
-    @tree.command(name="tickets", description="Add or remove a channel from the ticket system.")
-    @staff_only()
-    @app_commands.describe(
-        channel="The channel to configure.",
-        action="Whether to add or remove the channel.",
-        category="The kind of tickets handled in this channel.",
-    )
-    @app_commands.choices(
-        action=[
-            app_commands.Choice(name="Add", value="add"),
-            app_commands.Choice(name="Remove", value="remove"),
-        ],
-        category=ticket_category_choices,
-    )
-    async def tickets(
-        interaction: discord.Interaction,
-        channel: discord.TextChannel,
-        action: app_commands.Choice[str],
-        category: app_commands.Choice[str],
-    ) -> None:
-        guild = interaction.guild
-        if guild is None:
-            await interaction.response.send_message(
-                embed=error_embed("This command must be used inside a server."),
-                ephemeral=True,
-            )
-            return
-
-        marker_prefix = "Delta ticket category:"
-        topic_lines = [
-            line for line in (channel.topic or "").splitlines()
-            if not line.startswith(marker_prefix)
-        ]
-
-        try:
-            if action.value == "remove":
-                await channel.edit(
-                    topic="\n".join(topic_lines) or None,
-                    reason=f"Removed from ticket system by {interaction.user}",
-                )
-                message = f"{channel.mention} was removed from the ticket system."
-            else:
-                destination = guild.get_channel(TICKET_CATEGORY_ID)
-                if not isinstance(destination, discord.CategoryChannel):
-                    raise ValueError("The configured ticket category could not be found.")
-
-                cfg = TICKET_CONFIG[category.value]
-                staff_role = guild.get_role(STAFF_ROLE_ID)
-                await channel.set_permissions(
-                    guild.default_role,
-                    view_channel=False,
-                    reason=f"Restricted to support by {interaction.user}",
-                )
-                category_role = guild.get_role(cfg["role_id"])
-                if category_role is not None and category_role != staff_role:
-                    await channel.set_permissions(
-                        category_role,
-                        overwrite=None,
-                        reason=f"Restricted to support by {interaction.user}",
-                    )
-                for role in {staff_role} - {None}:
-                    await channel.set_permissions(
-                        role,
-                        view_channel=True,
-                        send_messages=True,
-                        read_message_history=True,
-                        manage_channels=True,
-                        reason=f"Added to ticket system by {interaction.user}",
-                    )
-                topic_lines.append(f"{marker_prefix} {category.value}")
-                await channel.edit(
-                    category=destination,
-                    topic="\n".join(topic_lines),
-                    reason=f"Added to ticket system by {interaction.user}",
-                )
-                await channel.send(
-                    embed=success_embed(
-                        f"This channel now uses the **{cfg['label']}** ticket functions."
-                    ),
-                    view=TicketActionView(),
-                )
-                message = (
-                    f"{channel.mention} was added as a **{cfg['label']}** ticket channel."
-                )
-        except (discord.Forbidden, discord.HTTPException, ValueError) as exc:
-            await interaction.response.send_message(
-                embed=error_embed(f"The ticket channel could not be updated: {exc}"),
-                ephemeral=True,
-            )
-            return
-
-        await interaction.response.send_message(
-            embed=success_embed(message), ephemeral=True
-        )
-
-    # /close
-    @tree.command(name="close", description="Close the current support ticket.")
-    async def close(interaction: discord.Interaction) -> None:
-        channel = interaction.channel
-        member  = interaction.user
-
-        if not isinstance(channel, discord.TextChannel):
-            await interaction.response.send_message(
-                embed=error_embed("This command can only be used inside a ticket channel."),
-                ephemeral=True,
-            )
-            return
-        if not isinstance(member, discord.Member):
-            await interaction.response.send_message(
-                embed=error_embed("Unable to verify your permissions."),
-                ephemeral=True,
-            )
-            return
-        if not can_close_ticket(member, channel):
-            await interaction.response.send_message(
-                embed=error_embed("You do not have permission to close this ticket."),
-                ephemeral=True,
-            )
-            return
-        await interaction.response.send_modal(CloseReasonModal(channel, member))
-
     # /reply
     @tree.command(name="reply", description="Send a reply to the ticket customer's DMs.")
     @staff_only()
@@ -1640,14 +1596,27 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         topic = fresh_channel.topic or ""
         owner_id = get_topic_value(topic, DM_TICKET_OWNER_MARKER)
         claimed_id = get_topic_value(topic, DM_TICKET_CLAIM_MARKER)
+        added_support_ids = get_ticket_support_ids(topic)
+        member_overwrite = fresh_channel.overwrites_for(member)
+        explicitly_added = (
+            member in fresh_channel.overwrites
+            and member_overwrite.view_channel is True
+            and member_overwrite.send_messages is True
+        )
         if owner_id is None:
             await interaction.response.send_message(
                 f"{x_emoji} This channel does not have a ticket customer.", ephemeral=True
             )
             return
-        if claimed_id != str(member.id):
+        if (
+            claimed_id != str(member.id)
+            and member.id not in added_support_ids
+            and not explicitly_added
+        ):
             await interaction.response.send_message(
-                f"{x_emoji} Claim this ticket before using `/reply`.", ephemeral=True
+                f"{x_emoji} Claim this ticket or ask the claimant to add you with "
+                "`/ticket control` before using `/reply`.",
+                ephemeral=True,
             )
             return
 
@@ -1722,195 +1691,296 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         )
         await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-    # /revoke — leadership only: remove a user's access from a ticket channel
-    @tree.command(name="revoke", description="Revoke a user's access to this ticket (leadership only).")
-    @staff_only()
-    @app_commands.describe(user="The member to remove from this ticket.")
-    async def revoke(interaction: discord.Interaction, user: discord.Member) -> None:
+    # /ticket control and /ticket admin — consolidated ticket operations
+    ticket_group = app_commands.Group(name="ticket", description="Manage support tickets.")
+
+    control_choices = [
+        app_commands.Choice(name="Add Customer", value="add_customer"),
+        app_commands.Choice(name="Remove Customer", value="remove_customer"),
+        app_commands.Choice(name="Add Support", value="add_support"),
+        app_commands.Choice(name="Remove Support", value="remove_support"),
+        app_commands.Choice(name="Close Ticket", value="close"),
+    ]
+    admin_choices = [
+        *control_choices,
+        app_commands.Choice(name="Claim for Support", value="claim"),
+        app_commands.Choice(name="Unclaim Ticket", value="unclaim"),
+        app_commands.Choice(name="Punish Member", value="punish"),
+        app_commands.Choice(name="Remove Punishment", value="unpunish"),
+        app_commands.Choice(name="Undo Last Admin Action", value="undo"),
+    ]
+    punishment_choices = [
+        app_commands.Choice(name="Temporary ban", value="temporary ban"),
+        app_commands.Choice(name="Timeout", value="timeout"),
+        app_commands.Choice(name="Permanent ban", value="permanent ban"),
+    ]
+
+    async def current_ticket(
+        interaction: discord.Interaction,
+        *,
+        claimant_only: bool,
+    ) -> tuple[discord.TextChannel, discord.Member] | None:
         channel = interaction.channel
-        if not isinstance(channel, discord.TextChannel):
+        member = interaction.user
+        if not isinstance(channel, discord.TextChannel) or not isinstance(member, discord.Member):
             await interaction.response.send_message(
-                embed=error_embed("This command must be used inside a ticket channel."),
+                embed=error_embed("Use this command inside the ticket you want to control."),
                 ephemeral=True,
             )
-            return
-
-        # Prevent revoking the ticket owner
-        topic = channel.topic or ""
-        if str(user.id) in topic:
-            await interaction.response.send_message(
-                embed=error_embed("You cannot revoke the ticket owner's access."),
-                ephemeral=True,
-            )
-            return
-
+            return None
         try:
-            await channel.set_permissions(user, overwrite=None, reason=f"Access revoked by {interaction.user}")
-        except discord.Forbidden:
+            fresh_channel = await channel.guild.fetch_channel(channel.id)
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
             await interaction.response.send_message(
-                embed=error_embed("I don't have permission to manage this channel's permissions."),
+                embed=error_embed(f"I could not load this ticket: {exc}"),
                 ephemeral=True,
             )
-            return
+            return None
+        if not isinstance(fresh_channel, discord.TextChannel) or not is_ticket_channel(fresh_channel):
+            await interaction.response.send_message(
+                embed=error_embed("This command can only be used in the ticket channel that was created for the customer."),
+                ephemeral=True,
+            )
+            return None
+        if claimant_only and get_topic_value(
+            fresh_channel.topic or "", DM_TICKET_CLAIM_MARKER
+        ) != str(member.id):
+            await interaction.response.send_message(
+                embed=error_embed("Only the support member who claimed this ticket can use `/ticket control`."),
+                ephemeral=True,
+            )
+            return None
+        return fresh_channel, member
 
-        await interaction.response.send_message(
-            embed=success_embed(f"{user.mention}'s access to this ticket has been revoked."),
-            ephemeral=True,
-        )
-        embed = _base_embed(
-            title="<:RArrow:1540951788889575504>  Access Revoked",
-            description=f"{user.mention} has had their access to this ticket removed by {interaction.user.mention}.",
-        )
-        _set_brand_image(embed, DIVIDER_URL)
-        await channel.send(embed=embed)
-
-    ticket_group = app_commands.Group(name="ticket", description="Manage a support ticket.")
-    admin_group = app_commands.Group(name="admin", description="Administrative ticket controls.", parent=ticket_group)
-
-    def selected_ticket(
+    async def add_ticket_customer(
         interaction: discord.Interaction,
-        channel: discord.TextChannel | None,
-    ) -> discord.TextChannel | None:
-        if channel is not None:
-            return channel
-        return interaction.channel if isinstance(interaction.channel, discord.TextChannel) else None
-
-    @ticket_group.command(name="add-customer", description="Add or replace the customer for this ticket.")
-    @staff_only()
-    async def ticket_add_customer(
-        interaction: discord.Interaction,
-        customer: discord.User,
-        channel: discord.TextChannel | None = None,
-    ) -> None:
-        target = selected_ticket(interaction, channel)
-        if target is None:
-            await interaction.response.send_message("Choose a ticket channel.", ephemeral=True)
-            return
-        await target.edit(
-            topic=set_topic_value(target.topic or "", DM_TICKET_OWNER_MARKER, str(customer.id)),
+        channel: discord.TextChannel,
+        customer: discord.Member,
+    ) -> str:
+        await channel.edit(
+            topic=set_topic_value(channel.topic or "", DM_TICKET_OWNER_MARKER, str(customer.id)),
             reason=f"Customer added by {interaction.user}",
         )
         try:
             await customer.send(
-                f"You have been added to Delta Support ticket **#{target.name}**. Reply in this DM to contact the support team."
+                f"You have been added to Delta Support ticket **#{channel.name}**. "
+                "Reply in this DM to contact the support team."
             )
-            delivery = "The customer was notified by DM."
+            delivery = " The customer was notified by DM."
         except (discord.Forbidden, discord.HTTPException):
-            delivery = "The customer was added, but their DMs are closed."
-        await interaction.response.send_message(f"Added {customer.mention}. {delivery}", ephemeral=True)
-        await target.send(f"{interaction.user.mention} added customer {customer.mention} (`{customer.id}`).")
+            delivery = " Their DMs are closed, so they could not be notified."
+        await channel.send(f"{interaction.user.mention} added customer {customer.mention} (`{customer.id}`).")
+        return f"Added {customer.mention} as the ticket customer.{delivery}"
 
-    @ticket_group.command(name="add-support", description="Add another support member to this ticket.")
-    @staff_only()
-    async def ticket_add_support(
+    async def remove_ticket_customer(
         interaction: discord.Interaction,
-        member: discord.Member,
-        channel: discord.TextChannel | None = None,
-    ) -> None:
-        target = selected_ticket(interaction, channel)
-        if target is None or not (is_staff(member) or is_admin(member)):
-            await interaction.response.send_message("Choose a ticket and a support/admin member.", ephemeral=True)
-            return
-        await target.set_permissions(member, view_channel=True, send_messages=True, read_message_history=True)
-        await interaction.response.send_message(f"Added {member.mention} to {target.mention}.", ephemeral=True)
-        await target.send(f"{interaction.user.mention} added support member {member.mention}.")
-
-    @ticket_group.command(name="close", description="Close a ticket and record the reason.")
-    @staff_only()
-    async def ticket_close(
-        interaction: discord.Interaction,
-        channel: discord.TextChannel | None = None,
-    ) -> None:
-        target = selected_ticket(interaction, channel)
-        if target is None or not isinstance(interaction.user, discord.Member):
-            await interaction.response.send_message("Choose a ticket channel.", ephemeral=True)
-            return
-        await interaction.response.send_modal(CloseReasonModal(target, interaction.user))
-
-    @admin_group.command(name="remove", description="Remove a customer or support member from a ticket.")
-    @admin_only()
-    async def admin_remove(
-        interaction: discord.Interaction,
-        member: discord.Member,
-        channel: discord.TextChannel | None = None,
-    ) -> None:
-        target = selected_ticket(interaction, channel)
-        if target is None:
-            await interaction.response.send_message("Choose a ticket channel.", ephemeral=True)
-            return
-        topic = target.topic or ""
-        previous_overwrite = target.overwrites_for(member)
-        interaction.client.admin_undo_actions.append(
-            ("remove", target.id, member.id, topic, previous_overwrite)
+        channel: discord.TextChannel,
+        customer: discord.Member | None,
+    ) -> str:
+        owner_id = get_ticket_owner_id(channel)
+        if owner_id is None:
+            raise ValueError("This ticket does not have a customer to remove.")
+        if customer is not None and customer.id != owner_id:
+            raise ValueError("The selected member is not this ticket's customer.")
+        owner = channel.guild.get_member(owner_id)
+        await channel.edit(
+            topic=set_topic_value(channel.topic or "", DM_TICKET_OWNER_MARKER, None),
+            reason=f"Customer removed by {interaction.user}",
         )
-        if get_topic_value(topic, DM_TICKET_OWNER_MARKER) == str(member.id):
-            topic = set_topic_value(topic, DM_TICKET_OWNER_MARKER, None)
-        if get_topic_value(topic, DM_TICKET_CLAIM_MARKER) == str(member.id):
-            topic = set_topic_value(topic, DM_TICKET_CLAIM_MARKER, None)
-            async for message in target.history(limit=25):
-                if message.author == interaction.client.user and message.components:
-                    await message.edit(view=TicketActionView(claimed=False))
-                    break
-        await target.edit(topic=topic, reason=f"Ticket member removed by {interaction.user}")
-        await target.set_permissions(member, overwrite=None)
-        await interaction.response.send_message(f"Removed {member.mention} from {target.mention}.", ephemeral=True)
-        await target.send(f"{interaction.user.mention} removed {member.mention} from this ticket.")
+        if owner is not None:
+            await channel.set_permissions(owner, overwrite=None)
+        label = owner.mention if owner is not None else f"`{owner_id}`"
+        await channel.send(f"{interaction.user.mention} removed customer {label}.")
+        return f"Removed {label} as the ticket customer."
 
-    @admin_group.command(name="punish", description="Block a user from tickets/support temporarily or permanently.")
-    @admin_only()
-    @app_commands.choices(action=[
-        app_commands.Choice(name="Temporary ban", value="temporary ban"),
-        app_commands.Choice(name="Timeout", value="timeout"),
-        app_commands.Choice(name="Permanent ban", value="permanent ban"),
-    ])
-    async def admin_punish(
+    async def add_ticket_support(
         interaction: discord.Interaction,
-        user: discord.User,
-        action: app_commands.Choice[str],
-        minutes: app_commands.Range[int, 0, 525600] = 60,
+        channel: discord.TextChannel,
+        member: discord.Member,
+    ) -> str:
+        if not (is_staff(member) or is_admin(member)):
+            raise ValueError("The selected member must have the support or admin role.")
+        support_ids = get_ticket_support_ids(channel.topic or "")
+        support_ids.add(member.id)
+        await channel.edit(
+            topic=set_ticket_support_ids(channel.topic or "", support_ids),
+            reason=f"Support member added by {interaction.user}",
+        )
+        await channel.set_permissions(
+            member, view_channel=True, send_messages=True, read_message_history=True
+        )
+        await channel.send(f"{interaction.user.mention} added support member {member.mention}.")
+        return f"Added {member.mention}. They can now use `/reply` in this ticket."
+
+    async def remove_ticket_support(
+        interaction: discord.Interaction,
+        channel: discord.TextChannel,
+        member: discord.Member,
+    ) -> str:
+        topic = channel.topic or ""
+        support_ids = get_ticket_support_ids(topic)
+        claimed_id = get_topic_value(topic, DM_TICKET_CLAIM_MARKER)
+        if member.id not in support_ids and claimed_id != str(member.id):
+            raise ValueError("The selected member is not assigned to this ticket.")
+        support_ids.discard(member.id)
+        topic = set_ticket_support_ids(topic, support_ids)
+        if claimed_id == str(member.id):
+            topic = set_topic_value(topic, DM_TICKET_CLAIM_MARKER, None)
+        await channel.edit(topic=topic, reason=f"Support member removed by {interaction.user}")
+        await channel.set_permissions(member, overwrite=None)
+        await channel.send(f"{interaction.user.mention} removed support member {member.mention}.")
+        return f"Removed {member.mention} from this ticket."
+
+    @ticket_group.command(name="control", description="Run a control action in your claimed ticket.")
+    @staff_only()
+    @app_commands.describe(command="The ticket action to run.", member="Customer or support member for this action.")
+    @app_commands.choices(command=control_choices)
+    async def ticket_control(
+        interaction: discord.Interaction,
+        command: app_commands.Choice[str],
+        member: discord.Member | None = None,
     ) -> None:
-        permanent = action.value == "permanent ban"
-        expires = None if permanent else time.time() + max(1, minutes) * 60
-        previous = interaction.client.ticket_restrictions.get(user.id)
-        interaction.client.admin_undo_actions.append(("punish", user.id, previous))
-        interaction.client.ticket_restrictions[user.id] = (action.value, expires)
-        duration = "permanently" if permanent else f"for {max(1, minutes)} minute(s)"
-        await interaction.response.send_message(f"{user.mention} received a {action.value} {duration}.", ephemeral=True)
-
-    @admin_group.command(name="unpunish", description="Remove a ticket punishment immediately.")
-    @admin_only()
-    async def admin_unpunish(interaction: discord.Interaction, user: discord.User) -> None:
-        previous = interaction.client.ticket_restrictions.get(user.id)
-        interaction.client.admin_undo_actions.append(("punish", user.id, previous))
-        interaction.client.ticket_restrictions.pop(user.id, None)
-        await interaction.response.send_message(f"Removed all ticket restrictions from {user.mention}.", ephemeral=True)
-
-    @admin_group.command(name="undo", description="Undo the most recent admin remove or punishment action.")
-    @admin_only()
-    async def admin_undo(interaction: discord.Interaction) -> None:
-        if not interaction.client.admin_undo_actions:
-            await interaction.response.send_message("There is no recent admin action to undo.", ephemeral=True)
+        selected = await current_ticket(interaction, claimant_only=True)
+        if selected is None:
             return
-        record = interaction.client.admin_undo_actions.pop()
-        if record[0] == "punish":
-            _, user_id, previous = record
-            if previous is None:
-                interaction.client.ticket_restrictions.pop(user_id, None)
+        channel, actor = selected
+        if command.value == "close":
+            await interaction.response.send_modal(CloseReasonModal(channel, actor))
+            return
+        if command.value in {"add_customer", "add_support", "remove_support"} and member is None:
+            await interaction.response.send_message(
+                embed=error_embed("Select a member for that command."), ephemeral=True
+            )
+            return
+        try:
+            if command.value == "add_customer":
+                result = await add_ticket_customer(interaction, channel, member)
+            elif command.value == "remove_customer":
+                result = await remove_ticket_customer(interaction, channel, member)
+            elif command.value == "add_support":
+                result = await add_ticket_support(interaction, channel, member)
             else:
-                interaction.client.ticket_restrictions[user_id] = previous
-            message = f"Restored the previous ticket restriction state for `{user_id}`."
-        else:
-            _, channel_id, member_id, old_topic, old_overwrite = record
-            channel = interaction.client.get_channel(channel_id)
-            guild = interaction.guild
-            member = guild.get_member(member_id) if guild is not None else None
-            if not isinstance(channel, discord.TextChannel) or member is None:
-                await interaction.response.send_message("That action can no longer be undone.", ephemeral=True)
+                result = await remove_ticket_support(interaction, channel, member)
+        except (discord.Forbidden, discord.HTTPException, ValueError) as exc:
+            await interaction.response.send_message(embed=error_embed(str(exc)), ephemeral=True)
+            return
+        await interaction.response.send_message(embed=success_embed(result), ephemeral=True)
+
+    @ticket_group.command(name="admin", description="Run an administrative ticket action.")
+    @admin_only()
+    @app_commands.describe(
+        command="The administrative action to run.",
+        member="Customer or support member for this action.",
+        punishment="Restriction type when using Punish Member.",
+        minutes="Restriction length for a temporary punishment.",
+    )
+    @app_commands.choices(command=admin_choices, punishment=punishment_choices)
+    async def ticket_admin(
+        interaction: discord.Interaction,
+        command: app_commands.Choice[str],
+        member: discord.Member | None = None,
+        punishment: app_commands.Choice[str] | None = None,
+        minutes: app_commands.Range[int, 1, 525600] = 60,
+    ) -> None:
+        if command.value == "undo":
+            if not interaction.client.admin_undo_actions:
+                await interaction.response.send_message(
+                    embed=error_embed("There is no recent admin action to undo."), ephemeral=True
+                )
                 return
-            await channel.edit(topic=old_topic or None, reason=f"Admin action undone by {interaction.user}")
-            await channel.set_permissions(member, overwrite=old_overwrite)
-            message = f"Restored {member.mention} in {channel.mention}."
-        await interaction.response.send_message(message, ephemeral=True)
+            record = interaction.client.admin_undo_actions.pop()
+            if record[0] == "punish":
+                _, user_id, previous = record
+                if previous is None:
+                    interaction.client.ticket_restrictions.pop(user_id, None)
+                else:
+                    interaction.client.ticket_restrictions[user_id] = previous
+                result = f"Restored the previous ticket restriction state for `{user_id}`."
+            else:
+                _, channel_id, old_topic, member_id, old_overwrite = record
+                target = interaction.client.get_channel(channel_id)
+                guild = interaction.guild
+                restored_member = guild.get_member(member_id) if guild and member_id else None
+                if not isinstance(target, discord.TextChannel):
+                    await interaction.response.send_message(
+                        embed=error_embed("That ticket action can no longer be undone."), ephemeral=True
+                    )
+                    return
+                await target.edit(topic=old_topic or None, reason=f"Admin action undone by {interaction.user}")
+                if restored_member is not None and old_overwrite is not None:
+                    await target.set_permissions(restored_member, overwrite=old_overwrite)
+                result = f"Restored the previous state of {target.mention}."
+            await interaction.response.send_message(embed=success_embed(result), ephemeral=True)
+            return
+
+        if command.value in {"punish", "unpunish"}:
+            if member is None:
+                await interaction.response.send_message(
+                    embed=error_embed("Select a member for that command."), ephemeral=True
+                )
+                return
+            previous = interaction.client.ticket_restrictions.get(member.id)
+            if command.value == "unpunish":
+                interaction.client.admin_undo_actions.append(("punish", member.id, previous))
+                interaction.client.ticket_restrictions.pop(member.id, None)
+                result = f"Removed all ticket restrictions from {member.mention}."
+            else:
+                if punishment is None:
+                    await interaction.response.send_message(
+                        embed=error_embed("Select a punishment type."), ephemeral=True
+                    )
+                    return
+                interaction.client.admin_undo_actions.append(("punish", member.id, previous))
+                permanent = punishment.value == "permanent ban"
+                expires = None if permanent else time.time() + minutes * 60
+                interaction.client.ticket_restrictions[member.id] = (punishment.value, expires)
+                duration = "permanently" if permanent else f"for {minutes} minute(s)"
+                result = f"{member.mention} received a {punishment.value} {duration}."
+            await interaction.response.send_message(embed=success_embed(result), ephemeral=True)
+            return
+
+        selected = await current_ticket(interaction, claimant_only=False)
+        if selected is None:
+            return
+        channel, actor = selected
+        if command.value == "close":
+            await interaction.response.send_modal(CloseReasonModal(channel, actor))
+            return
+        if command.value in {"add_customer", "add_support", "remove_support", "claim"} and member is None:
+            await interaction.response.send_message(
+                embed=error_embed("Select a member for that command."), ephemeral=True
+            )
+            return
+
+        old_topic = channel.topic or ""
+        old_overwrite = channel.overwrites_for(member) if member is not None else None
+        interaction.client.admin_undo_actions.append(
+            ("ticket", channel.id, old_topic, member.id if member else None, old_overwrite)
+        )
+        try:
+            if command.value == "add_customer":
+                result = await add_ticket_customer(interaction, channel, member)
+            elif command.value == "remove_customer":
+                result = await remove_ticket_customer(interaction, channel, member)
+            elif command.value == "add_support":
+                result = await add_ticket_support(interaction, channel, member)
+            elif command.value == "remove_support":
+                result = await remove_ticket_support(interaction, channel, member)
+            elif command.value == "claim":
+                if not (is_staff(member) or is_admin(member)):
+                    raise ValueError("The selected member must have the support or admin role.")
+                topic = set_topic_value(channel.topic or "", DM_TICKET_CLAIM_MARKER, str(member.id))
+                await channel.edit(topic=topic, reason=f"Ticket assigned by {interaction.user}")
+                result = f"Assigned this ticket to {member.mention}."
+            else:
+                topic = set_topic_value(channel.topic or "", DM_TICKET_CLAIM_MARKER, None)
+                await channel.edit(topic=topic, reason=f"Ticket unclaimed by {interaction.user}")
+                result = "Removed the current ticket claim."
+        except (discord.Forbidden, discord.HTTPException, ValueError) as exc:
+            interaction.client.admin_undo_actions.pop()
+            await interaction.response.send_message(embed=error_embed(str(exc)), ephemeral=True)
+            return
+        await interaction.response.send_message(embed=success_embed(result), ephemeral=True)
 
     tree.add_command(ticket_group)
 
@@ -1949,6 +2019,7 @@ log = logging.getLogger("delta-helpdesk")
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
+intents.moderation = True
 
 
 class DeltaCommandTree(app_commands.CommandTree):
@@ -1980,6 +2051,7 @@ class DeltaBot(commands.Bot):
         self.admin_undo_actions: list[tuple] = []
         self.processed_dm_messages: set[int] = set()
         self.processed_reply_interactions: set[int] = set()
+        self._automod_deletions: set[int] = set()
         self.started_monotonic = time.monotonic()
 
     async def setup_hook(self) -> None:
@@ -2049,6 +2121,19 @@ class DeltaBot(commands.Bot):
                     label,
                     resource_id,
                 )
+        lounge = (
+            guild.get_channel(LOUNGE_CHANNEL_ID)
+            if LOUNGE_CHANNEL_ID
+            else discord.utils.find(
+                lambda channel: isinstance(channel, discord.TextChannel)
+                and channel.name.casefold() == "lounge",
+                guild.channels,
+            )
+        )
+        if not isinstance(lounge, discord.TextChannel):
+            invalid = True
+            target = str(LOUNGE_CHANNEL_ID) if LOUNGE_CHANNEL_ID else "#lounge"
+            log.warning("Startup validation: AutoMod lounge channel %s was not found.", target)
         for label, role_id in (("staff role", STAFF_ROLE_ID), ("admin role", ADMIN_ROLE_ID)):
             if guild.get_role(role_id) is None:
                 invalid = True
@@ -2105,9 +2190,186 @@ class DeltaBot(commands.Bot):
                 guild.id,
             )
 
+    def _is_lounge(self, channel: discord.abc.GuildChannel | discord.Thread) -> bool:
+        if channel.guild.id != GUILD_ID:
+            return False
+        if LOUNGE_CHANNEL_ID:
+            return channel.id == LOUNGE_CHANNEL_ID
+        return isinstance(channel, discord.TextChannel) and channel.name.casefold() == "lounge"
+
+    async def _send_server_log(
+        self,
+        title: str,
+        description: str,
+        *,
+        color: int = DELTA_BLUE,
+    ) -> None:
+        """Send a server event to the configured logs channel without disrupting it."""
+        channel = self.get_channel(TRANSCRIPT_CHANNEL_ID)
+        if not isinstance(channel, discord.TextChannel):
+            log.warning("Could not write %s log: channel %s is unavailable.", title, TRANSCRIPT_CHANNEL_ID)
+            return
+        embed = discord.Embed(title=title, description=description, color=color)
+        embed.set_footer(text=FOOTER_TEXT)
+        embed.timestamp = discord.utils.utcnow()
+        try:
+            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+            log.warning("Could not write %s log: %s", title, exc)
+
+    async def _moderate_lounge_message(self, message: discord.Message) -> bool:
+        """Delete configured offensive language in #lounge and record the action."""
+        if not isinstance(message.channel, discord.TextChannel) or not self._is_lounge(message.channel):
+            return False
+        blocked_term = find_blocked_term(message.content)
+        if blocked_term is None:
+            return False
+
+        self._automod_deletions.add(message.id)
+        if len(self._automod_deletions) > 10_000:
+            self._automod_deletions.pop()
+        try:
+            await message.delete(reason="Delta AutoMod: offensive language in #lounge")
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+            self._automod_deletions.discard(message.id)
+            log.warning("AutoMod could not delete message %s: %s", message.id, exc)
+            return False
+
+        try:
+            await message.channel.send(
+                f"{message.author.mention}, that message was removed because offensive language "
+                "is not allowed in this channel.",
+                delete_after=8,
+                allowed_mentions=discord.AllowedMentions(users=True),
+            )
+        except (discord.Forbidden, discord.HTTPException):
+            log.warning("AutoMod removed message %s but could not post its warning.", message.id)
+
+        await self._send_server_log(
+            "AutoMod Action",
+            f"**Member:** {message.author} (`{message.author.id}`)\n"
+            f"**Channel:** {message.channel.mention}\n"
+            f"**Matched rule:** `{blocked_term}`\n"
+            f"**Message:** {safe_log_text(message.content)}",
+            color=DELTA_RED,
+        )
+        return True
+
+    async def on_member_join(self, member: discord.Member) -> None:
+        if member.guild.id == GUILD_ID:
+            await self._send_server_log(
+                "Member Joined",
+                f"**Member:** {member.mention} (`{member.id}`)\n"
+                f"**Account created:** {discord.utils.format_dt(member.created_at, 'F')}",
+            )
+
+    async def on_member_remove(self, member: discord.Member) -> None:
+        if member.guild.id == GUILD_ID:
+            await self._send_server_log(
+                "Member Left",
+                f"**Member:** {member} (`{member.id}`)",
+                color=DELTA_RED,
+            )
+
+    async def on_member_ban(self, guild: discord.Guild, user: discord.User) -> None:
+        if guild.id == GUILD_ID:
+            await self._send_server_log(
+                "Moderation — Member Banned",
+                f"**Member:** {user} (`{user.id}`)",
+                color=DELTA_RED,
+            )
+
+    async def on_member_unban(self, guild: discord.Guild, user: discord.User) -> None:
+        if guild.id == GUILD_ID:
+            await self._send_server_log(
+                "Moderation — Member Unbanned",
+                f"**Member:** {user} (`{user.id}`)",
+            )
+
+    async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
+        if after.guild.id != GUILD_ID:
+            return
+        changes: list[str] = []
+        if before.nick != after.nick:
+            changes.append(f"**Nickname:** `{before.nick or before.name}` → `{after.nick or after.name}`")
+        if before.roles != after.roles:
+            before_ids = {role.id for role in before.roles}
+            after_ids = {role.id for role in after.roles}
+            added = [role.mention for role in after.roles if role.id not in before_ids]
+            removed = [role.name for role in before.roles if role.id not in after_ids]
+            if added:
+                changes.append(f"**Roles added:** {', '.join(added)}")
+            if removed:
+                changes.append(f"**Roles removed:** {', '.join(removed)}")
+        if before.timed_out_until != after.timed_out_until:
+            timeout = (
+                discord.utils.format_dt(after.timed_out_until, "F")
+                if after.timed_out_until is not None
+                else "Removed"
+            )
+            changes.append(f"**Timeout:** {timeout}")
+        if changes:
+            await self._send_server_log(
+                "Moderation — Member Updated",
+                f"**Member:** {after.mention} (`{after.id}`)\n" + "\n".join(changes),
+            )
+
+    async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
+        if (
+            before.guild is None
+            or before.guild.id != GUILD_ID
+            or before.author.bot
+            or before.content == after.content
+        ):
+            return
+        if await self._moderate_lounge_message(after):
+            return
+        await self._send_server_log(
+            "Message Edited",
+            f"**Member:** {after.author} (`{after.author.id}`)\n"
+            f"**Channel:** {after.channel.mention}\n"
+            f"**Before:** {safe_log_text(before.content)}\n"
+            f"**After:** {safe_log_text(after.content)}\n"
+            f"[Jump to message]({after.jump_url})",
+        )
+
+    async def on_message_delete(self, message: discord.Message) -> None:
+        if message.id in self._automod_deletions:
+            self._automod_deletions.discard(message.id)
+            return
+        if message.guild is None or message.guild.id != GUILD_ID or message.author.bot:
+            return
+        await self._send_server_log(
+            "Message Deleted",
+            f"**Member:** {message.author} (`{message.author.id}`)\n"
+            f"**Channel:** {message.channel.mention}\n"
+            f"**Message:** {safe_log_text(message.content)}",
+            color=DELTA_RED,
+        )
+
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent) -> None:
+        """Record uncached deletions that do not produce on_message_delete."""
+        if payload.cached_message is not None or payload.guild_id != GUILD_ID:
+            return
+        if payload.message_id in self._automod_deletions:
+            self._automod_deletions.discard(payload.message_id)
+            return
+        channel = self.get_channel(payload.channel_id)
+        channel_text = getattr(channel, "mention", f"`{payload.channel_id}`")
+        await self._send_server_log(
+            "Message Deleted",
+            f"**Message ID:** `{payload.message_id}`\n"
+            f"**Channel:** {channel_text}\n"
+            "**Message:** *(content was not cached)*",
+            color=DELTA_RED,
+        )
+
     async def on_message(self, message: discord.Message) -> None:
         """Relay customer DMs and claimed support-channel replies."""
         if message.author.bot:
+            return
+
+        if message.guild is not None and await self._moderate_lounge_message(message):
             return
 
         if isinstance(message.channel, discord.DMChannel):

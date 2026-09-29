@@ -18,8 +18,11 @@ GUILD_ID = 1538738611988467782
 TICKET_CATEGORY_ID = 1543674278711529562   # All ticket channels live here
 TRANSCRIPT_CHANNEL_ID = 1539005101941850274
 UPDATE_CHANNEL_ID = TRANSCRIPT_CHANNEL_ID
+# Set this in Raven when the lounge channel is renamed or there are duplicate
+# channels named "lounge". A value of 0 falls back to an exact name lookup.
+LOUNGE_CHANNEL_ID = int(os.getenv("LOUNGE_CHANNEL_ID", "0"))
 
-BOT_VERSION = "2.2.1"
+BOT_VERSION = "2.4.0"
 
 # ── Runtime behavior ─────────────────────────────────────────────────────────
 TICKET_CLOSE_DELAY = 5
@@ -28,6 +31,7 @@ DISCORD_RECONNECT_DELAY = 15
 DM_TICKET_OWNER_MARKER = "Delta DM Ticket Owner:"
 DM_TICKET_CATEGORY_MARKER = "Delta Ticket Category:"
 DM_TICKET_CLAIM_MARKER = "Delta Ticket Claimed By:"
+DM_TICKET_SUPPORT_MARKER = "Delta Ticket Support:"
 INVITE_URL = "https://discord.gg/hccQX6nGJw"
 
 # ── Server emoji ─────────────────────────────────────────────────────────────
