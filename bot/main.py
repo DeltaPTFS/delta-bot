@@ -2289,7 +2289,7 @@ class DeltaBot(commands.Bot):
                 if message.id == current.id:
                     continue
                 try:
-                    await message.delete(reason=f"Replaced by Delta Support Bot {BOT_VERSION}")
+                    await message.delete()
                 except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
                     log.warning("Could not remove previous update %s: %s", message.id, exc)
             return
@@ -2304,7 +2304,7 @@ class DeltaBot(commands.Bot):
             # therefore never leaves the logs channel without an announcement.
             for message in release_messages.values():
                 try:
-                    await message.delete(reason=f"Replaced by Delta Support Bot {BOT_VERSION}")
+                    await message.delete()
                 except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
                     log.warning("Could not remove previous update %s: %s", message.id, exc)
             log.info("Posted release update %s to channel %s.", BOT_VERSION, UPDATE_CHANNEL_ID)
