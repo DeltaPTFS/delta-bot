@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import subprocess
 import threading
 import time
@@ -47,6 +48,7 @@ from config import (
     GUILD_ID,
     IDENTIFICATION_EMOJI,
     INVITE_URL,
+    LOUNGE_CHANNEL_ID,
     MAILING_ADDRESS,
     MESSAGE_EMOJI,
     RATING_TIMEOUT,
@@ -140,6 +142,8 @@ This update improves deployment stability without changing the ticket workflow.
 - Guild command sync now replaces stale commands and retries transient Discord errors.
 
 -# Version format: major.minor.patch."""
+
+RELEASE_UPDATE_MARKER = "Delta Support Bot — Update"
 
 # ════════════════════════════════════════════════════════════════════════════════
 # EMBEDS
@@ -386,6 +390,55 @@ def format_uptime(seconds: float) -> str:
         parts.append(f"{minutes}m")
     parts.append(f"{secs}s")
     return " ".join(parts)
+
+
+_AUTOMOD_TRANSLATION = str.maketrans({
+    "0": "o",
+    "1": "i",
+    "3": "e",
+    "4": "a",
+    "5": "s",
+    "7": "t",
+    "@": "a",
+    "$": "s",
+})
+
+
+def normalize_automod_text(content: str) -> str:
+    """Normalize common punctuation and substitutions before term matching."""
+    normalized = unicodedata.normalize("NFKC", content).casefold().translate(_AUTOMOD_TRANSLATION)
+    return " ".join(re.findall(r"[a-z]+", normalized))
+
+
+def find_blocked_term(content: str) -> str | None:
+    """Return the configured offensive term found in content, if any."""
+    normalized_text = normalize_automod_text(content)
+    normalized = f" {normalized_text} "
+    tokens = normalized_text.split()
+    for term in AUTOMOD_TERMS:
+        candidate = normalize_automod_text(term)
+        if candidate and f" {candidate} " in normalized:
+            return term
+        if " " not in candidate and len(candidate) > 1:
+            width = len(candidate)
+            if any(
+                all(len(token) == 1 for token in tokens[start:start + width])
+                and "".join(tokens[start:start + width]) == candidate
+                for start in range(len(tokens) - width + 1)
+            ):
+                return term
+    return None
+
+
+def safe_log_text(content: str, limit: int = 1000) -> str:
+    """Keep log fields readable and within Discord embed limits."""
+    value = content or "*(no text content)*"
+    return value if len(value) <= limit else f"{value[:limit - 3]}..."
+
+
+def is_release_update_message(message: discord.Message, bot_user_id: int) -> bool:
+    """Return whether a message is one of this bot's release announcements."""
+    return message.author.id == bot_user_id and RELEASE_UPDATE_MARKER in message.content
 
 
 def get_ticket_owner_id(channel: discord.TextChannel) -> int | None:
@@ -669,12 +722,12 @@ def attributed_staff_reply_embed(
 async def deliver_support_reply(
     client: discord.Client,
     owner_id: str,
-    content: str,
+    content: discord.Embed,
 ) -> bool:
     """Deliver the anonymous branded reply embed to the ticket customer."""
     try:
         user = client.get_user(int(owner_id)) or await client.fetch_user(int(owner_id))
-        await user.send(content, allowed_mentions=discord.AllowedMentions.none())
+        await user.send(embed=content, allowed_mentions=discord.AllowedMentions.none())
         return True
     except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
         log.warning("Could not relay support message to %s: %s", owner_id, exc)
