@@ -123,19 +123,23 @@ If you'd like to contact our team or create a support ticket, click the **Create
 
 UPDATE_MESSAGE = f"""# <:DeltaLogo:1540927958116601980> Delta Support Bot — Update {BOT_VERSION}
 
-This update keeps the logs channel's release announcement current.
+This update improves deployment stability without changing the ticket workflow.
 
 ## What's Changed
-- The newest update is posted and pinned in the logs channel.
-- The previous update is automatically removed after the new update is ready.
-- Restarting the same version does not post duplicate update messages.
-- Careers tickets are private to the configured careers role.
-- `/ticket admin` replies are private; `/ticket control` replies are visible in the ticket.
-- The Careers role can use `/ticket admin`, but not `/ticket control`.
+- `bot/main.py` is now the only production HelpDesk implementation.
+- Configuration and the version now have one source of truth.
+- Startup logs show the version, Git branch, commit, and detected host.
+- Startup validates the configured guild, ticket category, logs channel, and roles.
+- `/version` now includes uptime and Discord latency for support staff.
+- Assistance dropdown failures now print full exception details to the host console.
+- Leadership and HR `/format` options now include their complete application requirements.
+- Added support members can use `/reply`, and ticket actions are consolidated under
+  `/ticket control` and `/ticket admin`.
+- Customer `/reply` deliveries use the anonymous Delta Support embed again, while
+  the responding member's attributed embed remains in the private support ticket.
+- Guild command sync now replaces stale commands and retries transient Discord errors.
 
 -# Version format: major.minor.patch."""
-
-RELEASE_UPDATE_MARKER = "Delta Support Bot — Update"
 
 # ════════════════════════════════════════════════════════════════════════════════
 # EMBEDS
@@ -384,57 +388,6 @@ def format_uptime(seconds: float) -> str:
     return " ".join(parts)
 
 
-_AUTOMOD_TRANSLATION = str.maketrans({
-    "0": "o",
-    "1": "i",
-    "3": "e",
-    "4": "a",
-    "5": "s",
-    "7": "t",
-    "@": "a",
-    "$": "s",
-})
-
-
-def normalize_automod_text(content: str) -> str:
-    """Normalize common punctuation and substitutions before term matching."""
-    normalized = unicodedata.normalize("NFKC", content).casefold().translate(_AUTOMOD_TRANSLATION)
-    return " ".join(re.findall(r"[a-z]+", normalized))
-
-
-def find_blocked_term(content: str) -> str | None:
-    """Return the configured offensive term found in content, if any."""
-    normalized_text = normalize_automod_text(content)
-    normalized = f" {normalized_text} "
-    tokens = normalized_text.split()
-    for term in AUTOMOD_TERMS:
-        candidate = normalize_automod_text(term)
-        if candidate and f" {candidate} " in normalized:
-            return term
-        # Catch simple punctuation evasion such as "f.u.c.k" without matching
-        # a blocked sequence inside an innocent word such as "class".
-        if " " not in candidate and len(candidate) > 1:
-            width = len(candidate)
-            if any(
-                all(len(token) == 1 for token in tokens[start:start + width])
-                and "".join(tokens[start:start + width]) == candidate
-                for start in range(len(tokens) - width + 1)
-            ):
-                return term
-    return None
-
-
-def safe_log_text(content: str, limit: int = 1000) -> str:
-    """Keep log fields readable and within Discord embed limits."""
-    value = content or "*(no text content)*"
-    return value if len(value) <= limit else f"{value[:limit - 3]}..."
-
-
-def is_release_update_message(message: discord.Message, bot_user_id: int) -> bool:
-    """Return whether a message is one of this bot's release announcements."""
-    return message.author.id == bot_user_id and RELEASE_UPDATE_MARKER in message.content
-
-
 def get_ticket_owner_id(channel: discord.TextChannel) -> int | None:
     """Return the ticket creator stored in the channel topic."""
     topic = channel.topic or ""
@@ -680,6 +633,22 @@ def customer_response_embed(
     )
 
 
+def anonymous_support_reply_embed(
+    content: str,
+    timestamp: datetime | None = None,
+) -> discord.Embed:
+    """Build the branded reply shown in DMs without exposing staff identity."""
+    safe_content = content if len(content) <= 4000 else f"{content[:3997]}..."
+    embed = discord.Embed(
+        description=f"{MESSAGE_EMOJI} **Delta Support Reply**\n\n{safe_content}",
+        color=DELTA_BLUE,
+    )
+    embed.set_author(name="Delta Support")
+    embed.set_footer(text=FOOTER_TEXT)
+    embed.timestamp = timestamp
+    return embed
+
+
 def attributed_staff_reply_embed(
     content: str,
     customer_id: int | str,
@@ -702,7 +671,7 @@ async def deliver_support_reply(
     owner_id: str,
     content: str,
 ) -> bool:
-    """Deliver plain text to the customer while embeds remain staff-only."""
+    """Deliver the anonymous branded reply embed to the ticket customer."""
     try:
         user = client.get_user(int(owner_id)) or await client.fetch_user(int(owner_id))
         await user.send(content, allowed_mentions=discord.AllowedMentions.none())
@@ -1644,7 +1613,8 @@ def register_commands(tree: app_commands.CommandTree) -> None:
 
         await interaction.response.defer(ephemeral=True)
         interaction.client.processed_reply_interactions.add(interaction.id)
-        if not await deliver_support_reply(interaction.client, owner_id, message):
+        customer_embed = anonymous_support_reply_embed(message, interaction.created_at)
+        if not await deliver_support_reply(interaction.client, owner_id, customer_embed):
             interaction.client.processed_reply_interactions.discard(interaction.id)
             await interaction.followup.send(
                 f"{x_emoji} The reply could not be delivered to the customer's DMs.",
@@ -1734,14 +1704,13 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         interaction: discord.Interaction,
         *,
         claimant_only: bool,
-        private_response: bool,
     ) -> tuple[discord.TextChannel, discord.Member] | None:
         channel = interaction.channel
         member = interaction.user
         if not isinstance(channel, discord.TextChannel) or not isinstance(member, discord.Member):
             await interaction.response.send_message(
                 embed=error_embed("Use this command inside the ticket you want to control."),
-                ephemeral=private_response,
+                ephemeral=True,
             )
             return None
         try:
@@ -1749,13 +1718,13 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
             await interaction.response.send_message(
                 embed=error_embed(f"I could not load this ticket: {exc}"),
-                ephemeral=private_response,
+                ephemeral=True,
             )
             return None
         if not isinstance(fresh_channel, discord.TextChannel) or not is_ticket_channel(fresh_channel):
             await interaction.response.send_message(
                 embed=error_embed("This command can only be used in the ticket channel that was created for the customer."),
-                ephemeral=private_response,
+                ephemeral=True,
             )
             return None
         if claimant_only and get_topic_value(
@@ -1763,7 +1732,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         ) != str(member.id):
             await interaction.response.send_message(
                 embed=error_embed("Only the support member who claimed this ticket can use `/ticket control`."),
-                ephemeral=private_response,
+                ephemeral=True,
             )
             return None
         return fresh_channel, member
@@ -1848,7 +1817,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         return f"Removed {member.mention} from this ticket."
 
     @ticket_group.command(name="control", description="Run a control action in your claimed ticket.")
-    @ticket_control_only()
+    @staff_only()
     @app_commands.describe(command="The ticket action to run.", member="Customer or support member for this action.")
     @app_commands.choices(command=control_choices)
     async def ticket_control(
@@ -1856,20 +1825,16 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         command: app_commands.Choice[str],
         member: discord.Member | None = None,
     ) -> None:
-        selected = await current_ticket(
-            interaction, claimant_only=True, private_response=False
-        )
+        selected = await current_ticket(interaction, claimant_only=True)
         if selected is None:
             return
         channel, actor = selected
         if command.value == "close":
-            await interaction.response.send_modal(
-                CloseReasonModal(channel, actor, private_response=False)
-            )
+            await interaction.response.send_modal(CloseReasonModal(channel, actor))
             return
         if command.value in {"add_customer", "add_support", "remove_support"} and member is None:
             await interaction.response.send_message(
-                embed=error_embed("Select a member for that command."), ephemeral=False
+                embed=error_embed("Select a member for that command."), ephemeral=True
             )
             return
         try:
@@ -1882,9 +1847,9 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             else:
                 result = await remove_ticket_support(interaction, channel, member)
         except (discord.Forbidden, discord.HTTPException, ValueError) as exc:
-            await interaction.response.send_message(embed=error_embed(str(exc)), ephemeral=False)
+            await interaction.response.send_message(embed=error_embed(str(exc)), ephemeral=True)
             return
-        await interaction.response.send_message(embed=success_embed(result), ephemeral=False)
+        await interaction.response.send_message(embed=success_embed(result), ephemeral=True)
 
     @ticket_group.command(name="admin", description="Run an administrative ticket action.")
     @admin_only()
@@ -1959,16 +1924,12 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             await interaction.response.send_message(embed=success_embed(result), ephemeral=True)
             return
 
-        selected = await current_ticket(
-            interaction, claimant_only=False, private_response=True
-        )
+        selected = await current_ticket(interaction, claimant_only=False)
         if selected is None:
             return
         channel, actor = selected
         if command.value == "close":
-            await interaction.response.send_modal(
-                CloseReasonModal(channel, actor, private_response=True)
-            )
+            await interaction.response.send_modal(CloseReasonModal(channel, actor))
             return
         if command.value in {"add_customer", "add_support", "remove_support", "claim"} and member is None:
             await interaction.response.send_message(
@@ -2090,12 +2051,44 @@ class DeltaBot(commands.Bot):
         self.add_view(TicketActionView())
         self.add_view(ServerAssistancePanelView(self))
         register_commands(self.tree)
+        await self._sync_application_commands()
+
+    async def _sync_application_commands(self) -> None:
+        """Replace stale commands and retry guild sync for deployment startup."""
         target_guild = discord.Object(id=GUILD_ID)
+        # copy_global_to does not remove obsolete guild commands by itself. Clear
+        # the local guild set first so the next sync exactly matches this release.
+        self.tree.clear_commands(guild=target_guild)
         self.tree.copy_global_to(guild=target_guild)
         self.tree.clear_commands(guild=None)
-        await self.tree.sync()
-        synced = await self.tree.sync(guild=target_guild)
-        log.info("Synced %d application command(s) to guild %s.", len(synced), GUILD_ID)
+        for attempt in range(1, 4):
+            try:
+                await self.tree.sync()
+                synced = await self.tree.sync(guild=target_guild)
+            except discord.HTTPException as exc:
+                if attempt == 3:
+                    log.exception(
+                        "Application command sync failed after %d attempts for guild %s.",
+                        attempt,
+                        GUILD_ID,
+                    )
+                    raise
+                log.warning(
+                    "Application command sync attempt %d failed for guild %s: %s. Retrying.",
+                    attempt,
+                    GUILD_ID,
+                    exc,
+                )
+                await asyncio.sleep(attempt * 3)
+                continue
+            log.info(
+                "Synced %d application command(s) to guild %s on attempt %d: %s",
+                len(synced),
+                GUILD_ID,
+                attempt,
+                ", ".join(command.name for command in synced),
+            )
+            return
 
     async def on_ready(self) -> None:
         global XMARK_EMOJI

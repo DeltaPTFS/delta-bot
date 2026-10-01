@@ -14,7 +14,7 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Duplicate Guard | Prevents users from opening multiple simultaneous tickets |
 | Close Ticket | Persistent button plus `/ticket control` and `/ticket admin`; DMs the user on close |
 | Message Relay | Per-ticket locking suppresses concurrent duplicate events; customer messages and Delta-blue human replies are recorded once |
-| Agent Privacy | Customer DMs receive plain reply text; only the private ticket retains the attributed reply embed |
+| Agent Privacy | Customer DMs receive an anonymous Delta Support embed; only the private ticket identifies the responding member |
 | Ticket Reuse | Repeat creation attempts reconnect the customer to their existing ticket instead of opening a duplicate |
 | Staff Commands | `/reply`, `/format`, and claimant-only `/ticket control` are support role-gated |
 | Admin Commands | `/ticket admin` consolidates assignment, removal, punishment, close, and undo actions |
@@ -24,7 +24,7 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Server Logs | Member joins/leaves, message edits/deletions, and moderation changes are sent to the configured logs channel |
 | Lounge AutoMod | Messages matching configurable curse/offensive terms are removed from `#lounge`, with actions recorded in server logs |
 | Server Safety | Commands and tickets are locked to server `1538738611988467782`, but the bot never removes itself from a server |
-| Release Updates | Posts and pins the newest release in server logs channel `1539005101941850274`, then removes the previous update and any duplicates |
+| Release Updates | Posts and pins each release once in server logs channel `1539005101941850274`; the current release comes from `config.py` |
 
 Versions use `major.minor.patch`. Breaking or especially large releases increase
 the first number, regular feature releases increase the second, and fixes increase
@@ -97,7 +97,7 @@ python main.py
 | Command | Description | Who Can Use |
 |---|---|---|
 | `/panel` | Post the private-ticket Assistance Panel in the current channel | DL Leadership only |
-| `/reply` | Send plain reply text to the customer and retain the attributed embed in the ticket | Claimant or support member added to that ticket |
+| `/reply` | Send an anonymous Delta Support embed and retain the attributed staff embed in the ticket | Claimant or support member added to that ticket |
 | `/format` | Choose one of the prewritten customer notices | Staff only |
 | `/ticket control` | Add/remove customers or support and close the current ticket | Staff member who claimed that ticket |
 | `/ticket admin` | Run consolidated assignment, removal, punishment, close, or undo actions | Admin only |
@@ -120,13 +120,6 @@ do not copy version or Discord IDs back into the entry point.
 
 To add a new ticket category, add an entry to `TICKET_CONFIG` in `config.py`.
 The production implementation in `main.py` consumes it automatically.
-
-Careers tickets are visible only to role `1539005297417519205`; the regular
-leadership/support role is not granted access. Responses from `/ticket admin` are
-ephemeral to the administrator who invoked it, while `/ticket control` responses
-are posted visibly in the current ticket channel. The Careers role is authorized
-for `/ticket admin` and explicitly denied `/ticket control`, even if a member also
-holds the regular support role.
 
 The bot publishes commands only to `GUILD_ID`, clears its former global commands,
 and accepts DM tickets only from members of the authorized server. Other guilds
@@ -176,6 +169,13 @@ After deployment, run `/version` as staff to verify the commit, uptime, and Disc
 latency. Raven only needs the current `DISCORD_TOKEN`; no entry-point change is
 required.
 
+The startup sync clears obsolete guild command definitions, publishes the exact
+current command tree, and retries temporary Discord failures three times. In the
+Raven console, confirm a line beginning with `Synced` lists `panel, version, reply,
+format, ticket`. If that line never appears, verify Raven deployed the commit shown
+by `/version`, restart the service once, and ensure only one service is using the
+production bot token.
+
 ### Render / Railway (alternative hosts)
 
 1. Push your repository to GitHub (make sure `.env` is in `.gitignore`).
@@ -198,7 +198,7 @@ In the deploy logs, verify both of these lines appear:
 
 ```text
 Starting Delta Air Lines HelpDesk <version> | branch=<branch> | commit=<commit> | host=<host>.
-Synced 8 application command(s) to guild 1538738611988467782.
+Synced 5 application command(s) to guild 1538738611988467782 on attempt 1: panel, version, reply, format, ticket
 Delta Air Lines HelpDesk <version> is online | branch=<branch> | commit=<commit> | host=<host>.
 ```
 
