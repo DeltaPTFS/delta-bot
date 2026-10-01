@@ -2266,12 +2266,31 @@ class DeltaBot(commands.Bot):
         if channel is None or channel.guild.id != GUILD_ID or self.user is None:
             return
 
-        try:
-            pinned = await channel.pins()
-            recent = [message async for message in channel.history(limit=200)]
-        except (discord.Forbidden, discord.HTTPException) as exc:
-            log.warning("Could not check existing update announcements: %s", exc)
-            return
+        pinned: list[discord.Message] = []
+        recent: list[discord.Message] = []
+        for attempt in range(1, 3):
+            try:
+                pinned = await channel.pins()
+                recent = [message async for message in channel.history(limit=200)]
+                break
+            except discord.Forbidden as exc:
+                log.warning("Could not check existing update announcements: %s", exc)
+                return
+            except (discord.HTTPException, aiohttp.ClientError, OSError) as exc:
+                if attempt == 2:
+                    log.warning(
+                        "Could not check existing update announcements after %d attempts: %s",
+                        attempt,
+                        exc,
+                    )
+                    return
+                log.warning(
+                    "Temporary Discord connection error while checking release updates "
+                    "(attempt %d/2): %s. Retrying.",
+                    attempt,
+                    exc,
+                )
+                await asyncio.sleep(3)
         release_messages = {
             message.id: message
             for message in (*pinned, *recent)
