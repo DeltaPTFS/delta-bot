@@ -17,6 +17,7 @@ import os
 import subprocess
 import threading
 import time
+import unicodedata
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -104,6 +105,10 @@ MESSAGES_PATH = Path(__file__).with_name("messages.json")
 with MESSAGES_PATH.open(encoding="utf-8") as messages_file:
     _MESSAGES: dict[str, str] = __import__("json").load(messages_file)
 TICKET_CLAIMED_MESSAGE = _MESSAGES["ticket_claimed"]
+
+AUTOMOD_TERMS_PATH = Path(__file__).with_name("automod_terms.json")
+with AUTOMOD_TERMS_PATH.open(encoding="utf-8") as automod_file:
+    AUTOMOD_TERMS: tuple[str, ...] = tuple(__import__("json").load(automod_file))
 
 NON_MEMBER_MESSAGE = """# <:DeltaLogo:1540927958116601980> Delta Air Lines | Direct Messages <:SkyTeamLogo:1540927923618316359>
 
@@ -261,6 +266,19 @@ def is_staff(member: discord.Member) -> bool:
 
 def is_admin(member: discord.Member) -> bool:
     return any(role.id == ADMIN_ROLE_ID for role in member.roles)
+
+
+def ticket_access_role_ids(category_key: str) -> set[int]:
+    """Return the only roles granted access when a ticket channel is created."""
+    configured_role_id = TICKET_CONFIG[category_key]["role_id"]
+    if category_key == "careers":
+        return {configured_role_id}
+    return {configured_role_id, STAFF_ROLE_ID, ADMIN_ROLE_ID}
+
+
+def can_use_ticket_control(member: discord.Member) -> bool:
+    """Keep the Careers/admin role out of the support control command."""
+    return is_staff(member) and not is_admin(member)
 
 
 def delta_status_emoji(guild: discord.Guild | None, success: bool) -> str:
@@ -477,20 +495,13 @@ async def create_dm_ticket_channel(
             read_message_history=True,
         ),
     }
-    # Leadership always gets full admin on every ticket
-    staff_role = guild.get_role(STAFF_ROLE_ID)
-    if staff_role is not None:
-        overwrites[staff_role] = discord.PermissionOverwrite(
-            view_channel=True,
-            send_messages=True,
-            read_message_history=True,
-            manage_channels=True,
-            manage_permissions=True,
-            manage_messages=True,
-        )
-    admin_role = guild.get_role(ADMIN_ROLE_ID)
-    if admin_role is not None:
-        overwrites[admin_role] = discord.PermissionOverwrite(
+    # Careers is deliberately restricted to its configured role. Leadership
+    # retains access to every other ticket category.
+    for role_id in ticket_access_role_ids(category_key):
+        role = guild.get_role(role_id)
+        if role is None:
+            continue
+        overwrites[role] = discord.PermissionOverwrite(
             view_channel=True,
             send_messages=True,
             read_message_history=True,
@@ -658,12 +669,12 @@ def attributed_staff_reply_embed(
 async def deliver_support_reply(
     client: discord.Client,
     owner_id: str,
-    embed: discord.Embed,
+    content: str,
 ) -> bool:
     """Deliver the anonymous branded reply embed to the ticket customer."""
     try:
         user = client.get_user(int(owner_id)) or await client.fetch_user(int(owner_id))
-        await user.send(embed=embed)
+        await user.send(content, allowed_mentions=discord.AllowedMentions.none())
         return True
     except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
         log.warning("Could not relay support message to %s: %s", owner_id, exc)
@@ -691,7 +702,7 @@ async def open_dm_ticket(
         category_key=category_key,
         prefix=cfg["prefix"],
     )
-    mention_ids = [STAFF_ROLE_ID]
+    mention_ids = [cfg["role_id"]]
     mentions = [
         role.mention
         for role_id in dict.fromkeys(mention_ids)
@@ -837,14 +848,21 @@ class CloseReasonModal(discord.ui.Modal, title="Close Ticket — Delta Air Lines
         required=True,
     )
 
-    def __init__(self, channel: discord.TextChannel, closer: discord.Member) -> None:
+    def __init__(
+        self,
+        channel: discord.TextChannel,
+        closer: discord.Member,
+        *,
+        private_response: bool,
+    ) -> None:
         super().__init__()
         self._channel = channel
         self._closer  = closer
+        self._private_response = private_response
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         # Acknowledge the modal immediately
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer(ephemeral=self._private_response)
 
         # Find the ticket owner from the channel topic
         owner_id = get_ticket_owner_id(self._channel)
@@ -882,13 +900,13 @@ class CloseReasonModal(discord.ui.Modal, title="Close Ticket — Delta Air Lines
         if dm_sent:
             await interaction.followup.send(
                 embed=success_embed(f"A rating request was sent by DM. The ticket will close in {TICKET_CLOSE_DELAY} seconds."),
-                ephemeral=True,
+                ephemeral=self._private_response,
             )
         else:
             # DMs disabled — finalize immediately without rating
             await interaction.followup.send(
                 embed=success_embed("Closing in progress — please wait."),
-                ephemeral=True,
+                ephemeral=self._private_response,
             )
         # Closing the channel and expiring the DM rating are independent: the
         # channel still closes after five seconds, while the one DM remains.
@@ -1162,7 +1180,9 @@ class TicketActionView(discord.ui.View):
             )
             return
 
-        await interaction.response.send_modal(CloseReasonModal(channel, member))
+        await interaction.response.send_modal(
+            CloseReasonModal(channel, member, private_response=True)
+        )
 
 
 # Keep old name as alias so existing persistent views still resolve
@@ -1417,6 +1437,22 @@ def admin_only() -> app_commands.check:
     return app_commands.check(predicate)
 
 
+def ticket_control_only() -> app_commands.check:
+    async def predicate(interaction: discord.Interaction) -> bool:
+        member = interaction.user
+        if not isinstance(member, discord.Member) or not can_use_ticket_control(member):
+            return False
+        restriction = getattr(interaction.client, "ticket_restrictions", {}).get(member.id)
+        if restriction is None:
+            return True
+        _, expires_at = restriction
+        if expires_at is None or expires_at > time.time():
+            return False
+        interaction.client.ticket_restrictions.pop(member.id, None)
+        return True
+    return app_commands.check(predicate)
+
+
 def register_commands(tree: app_commands.CommandTree) -> None:
     # Clear commands owned by this module before rebuilding the tree. This makes
     # registration safe if startup is retried or the tree was populated earlier,
@@ -1436,6 +1472,8 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         "ticket",
         "tickets",
         "version",
+        "authentication-control",
+        "economy",
     ):
         tree.remove_command(command_name, type=discord.AppCommandType.chat_input)
 
@@ -1513,7 +1551,10 @@ def register_commands(tree: app_commands.CommandTree) -> None:
     @tree.command(name="reply", description="Send a reply to the ticket customer's DMs.")
     @staff_only()
     @app_commands.describe(message="The message to send to the customer.")
-    async def reply(interaction: discord.Interaction, message: str) -> None:
+    async def reply(
+        interaction: discord.Interaction,
+        message: app_commands.Range[str, 1, 2000],
+    ) -> None:
         channel = interaction.channel
         member = interaction.user
         x_emoji = delta_status_emoji(interaction.guild, success=False)
@@ -1935,11 +1976,20 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         error: app_commands.AppCommandError,
     ) -> None:
         if isinstance(error, app_commands.CheckFailure):
-            await interaction.response.send_message(
-                embed=error_embed(
+            command_name = interaction.command.qualified_name if interaction.command else ""
+            if command_name == "ticket control":
+                message = (
+                    "You do not have permission to use this command.\n"
+                    "`/ticket control` is restricted to the regular support role; "
+                    "Careers administrators must use `/ticket admin`."
+                )
+            else:
+                message = (
                     "You do not have permission to use this command.\n"
                     "This command is restricted to **Delta Air Lines Staff** only."
-                ),
+                )
+            await interaction.response.send_message(
+                embed=error_embed(message),
                 ephemeral=True,
             )
         else:
@@ -1963,6 +2013,7 @@ log = logging.getLogger("delta-helpdesk")
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
+intents.moderation = True
 
 
 class DeltaCommandTree(app_commands.CommandTree):
@@ -2107,7 +2158,7 @@ class DeltaBot(commands.Bot):
             log.info("Startup validation passed for guild %s (%s).", guild.name, guild.id)
 
     async def _post_release_update(self) -> None:
-        """Post this release once to the update/transcript channel."""
+        """Keep only the newest release announcement in the logs channel."""
         channel = self.get_channel(UPDATE_CHANNEL_ID)
         if not isinstance(channel, discord.TextChannel):
             try:
@@ -2119,17 +2170,32 @@ class DeltaBot(commands.Bot):
         if channel is None or channel.guild.id != GUILD_ID or self.user is None:
             return
 
-        marker = f"Update {BOT_VERSION}"
         try:
             pinned = await channel.pins()
             recent = [message async for message in channel.history(limit=200)]
         except (discord.Forbidden, discord.HTTPException) as exc:
             log.warning("Could not check existing update announcements: %s", exc)
             return
-        if any(
-            message.author.id == self.user.id and marker in message.content
+        release_messages = {
+            message.id: message
             for message in (*pinned, *recent)
-        ):
+            if is_release_update_message(message, self.user.id)
+        }
+        current_marker = f"{RELEASE_UPDATE_MARKER} {BOT_VERSION}"
+        current = next(
+            (message for message in release_messages.values() if current_marker in message.content),
+            None,
+        )
+        if current is not None:
+            # A reconnect must not create another copy. It is also a convenient
+            # opportunity to remove stale or duplicate announcements.
+            for message in release_messages.values():
+                if message.id == current.id:
+                    continue
+                try:
+                    await message.delete(reason=f"Replaced by Delta Support Bot {BOT_VERSION}")
+                except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                    log.warning("Could not remove previous update %s: %s", message.id, exc)
             return
 
         try:
@@ -2138,6 +2204,13 @@ class DeltaBot(commands.Bot):
                 await announcement.pin(reason=f"Delta Support Bot release {BOT_VERSION}")
             except (discord.Forbidden, discord.HTTPException):
                 log.warning("Posted update %s but could not pin it.", BOT_VERSION)
+            # Post first, then remove the old message. A temporary send failure
+            # therefore never leaves the logs channel without an announcement.
+            for message in release_messages.values():
+                try:
+                    await message.delete(reason=f"Replaced by Delta Support Bot {BOT_VERSION}")
+                except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                    log.warning("Could not remove previous update %s: %s", message.id, exc)
             log.info("Posted release update %s to channel %s.", BOT_VERSION, UPDATE_CHANNEL_ID)
         except (discord.Forbidden, discord.HTTPException) as exc:
             log.warning("Could not post release update %s: %s", BOT_VERSION, exc)
@@ -2151,9 +2224,186 @@ class DeltaBot(commands.Bot):
                 guild.id,
             )
 
+    def _is_lounge(self, channel: discord.abc.GuildChannel | discord.Thread) -> bool:
+        if channel.guild.id != GUILD_ID:
+            return False
+        if LOUNGE_CHANNEL_ID:
+            return channel.id == LOUNGE_CHANNEL_ID
+        return isinstance(channel, discord.TextChannel) and channel.name.casefold() == "lounge"
+
+    async def _send_server_log(
+        self,
+        title: str,
+        description: str,
+        *,
+        color: int = DELTA_BLUE,
+    ) -> None:
+        """Send a server event to the configured logs channel without disrupting it."""
+        channel = self.get_channel(TRANSCRIPT_CHANNEL_ID)
+        if not isinstance(channel, discord.TextChannel):
+            log.warning("Could not write %s log: channel %s is unavailable.", title, TRANSCRIPT_CHANNEL_ID)
+            return
+        embed = discord.Embed(title=title, description=description, color=color)
+        embed.set_footer(text=FOOTER_TEXT)
+        embed.timestamp = discord.utils.utcnow()
+        try:
+            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+            log.warning("Could not write %s log: %s", title, exc)
+
+    async def _moderate_lounge_message(self, message: discord.Message) -> bool:
+        """Delete configured offensive language in #lounge and record the action."""
+        if not isinstance(message.channel, discord.TextChannel) or not self._is_lounge(message.channel):
+            return False
+        blocked_term = find_blocked_term(message.content)
+        if blocked_term is None:
+            return False
+
+        self._automod_deletions.add(message.id)
+        if len(self._automod_deletions) > 10_000:
+            self._automod_deletions.pop()
+        try:
+            await message.delete(reason="Delta AutoMod: offensive language in #lounge")
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+            self._automod_deletions.discard(message.id)
+            log.warning("AutoMod could not delete message %s: %s", message.id, exc)
+            return False
+
+        try:
+            await message.channel.send(
+                f"{message.author.mention}, that message was removed because offensive language "
+                "is not allowed in this channel.",
+                delete_after=8,
+                allowed_mentions=discord.AllowedMentions(users=True),
+            )
+        except (discord.Forbidden, discord.HTTPException):
+            log.warning("AutoMod removed message %s but could not post its warning.", message.id)
+
+        await self._send_server_log(
+            "AutoMod Action",
+            f"**Member:** {message.author} (`{message.author.id}`)\n"
+            f"**Channel:** {message.channel.mention}\n"
+            f"**Matched rule:** `{blocked_term}`\n"
+            f"**Message:** {safe_log_text(message.content)}",
+            color=DELTA_RED,
+        )
+        return True
+
+    async def on_member_join(self, member: discord.Member) -> None:
+        if member.guild.id == GUILD_ID:
+            await self._send_server_log(
+                "Member Joined",
+                f"**Member:** {member.mention} (`{member.id}`)\n"
+                f"**Account created:** {discord.utils.format_dt(member.created_at, 'F')}",
+            )
+
+    async def on_member_remove(self, member: discord.Member) -> None:
+        if member.guild.id == GUILD_ID:
+            await self._send_server_log(
+                "Member Left",
+                f"**Member:** {member} (`{member.id}`)",
+                color=DELTA_RED,
+            )
+
+    async def on_member_ban(self, guild: discord.Guild, user: discord.User) -> None:
+        if guild.id == GUILD_ID:
+            await self._send_server_log(
+                "Moderation — Member Banned",
+                f"**Member:** {user} (`{user.id}`)",
+                color=DELTA_RED,
+            )
+
+    async def on_member_unban(self, guild: discord.Guild, user: discord.User) -> None:
+        if guild.id == GUILD_ID:
+            await self._send_server_log(
+                "Moderation — Member Unbanned",
+                f"**Member:** {user} (`{user.id}`)",
+            )
+
+    async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
+        if after.guild.id != GUILD_ID:
+            return
+        changes: list[str] = []
+        if before.nick != after.nick:
+            changes.append(f"**Nickname:** `{before.nick or before.name}` → `{after.nick or after.name}`")
+        if before.roles != after.roles:
+            before_ids = {role.id for role in before.roles}
+            after_ids = {role.id for role in after.roles}
+            added = [role.mention for role in after.roles if role.id not in before_ids]
+            removed = [role.name for role in before.roles if role.id not in after_ids]
+            if added:
+                changes.append(f"**Roles added:** {', '.join(added)}")
+            if removed:
+                changes.append(f"**Roles removed:** {', '.join(removed)}")
+        if before.timed_out_until != after.timed_out_until:
+            timeout = (
+                discord.utils.format_dt(after.timed_out_until, "F")
+                if after.timed_out_until is not None
+                else "Removed"
+            )
+            changes.append(f"**Timeout:** {timeout}")
+        if changes:
+            await self._send_server_log(
+                "Moderation — Member Updated",
+                f"**Member:** {after.mention} (`{after.id}`)\n" + "\n".join(changes),
+            )
+
+    async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
+        if (
+            before.guild is None
+            or before.guild.id != GUILD_ID
+            or before.author.bot
+            or before.content == after.content
+        ):
+            return
+        if await self._moderate_lounge_message(after):
+            return
+        await self._send_server_log(
+            "Message Edited",
+            f"**Member:** {after.author} (`{after.author.id}`)\n"
+            f"**Channel:** {after.channel.mention}\n"
+            f"**Before:** {safe_log_text(before.content)}\n"
+            f"**After:** {safe_log_text(after.content)}\n"
+            f"[Jump to message]({after.jump_url})",
+        )
+
+    async def on_message_delete(self, message: discord.Message) -> None:
+        if message.id in self._automod_deletions:
+            self._automod_deletions.discard(message.id)
+            return
+        if message.guild is None or message.guild.id != GUILD_ID or message.author.bot:
+            return
+        await self._send_server_log(
+            "Message Deleted",
+            f"**Member:** {message.author} (`{message.author.id}`)\n"
+            f"**Channel:** {message.channel.mention}\n"
+            f"**Message:** {safe_log_text(message.content)}",
+            color=DELTA_RED,
+        )
+
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent) -> None:
+        """Record uncached deletions that do not produce on_message_delete."""
+        if payload.cached_message is not None or payload.guild_id != GUILD_ID:
+            return
+        if payload.message_id in self._automod_deletions:
+            self._automod_deletions.discard(payload.message_id)
+            return
+        channel = self.get_channel(payload.channel_id)
+        channel_text = getattr(channel, "mention", f"`{payload.channel_id}`")
+        await self._send_server_log(
+            "Message Deleted",
+            f"**Message ID:** `{payload.message_id}`\n"
+            f"**Channel:** {channel_text}\n"
+            "**Message:** *(content was not cached)*",
+            color=DELTA_RED,
+        )
+
     async def on_message(self, message: discord.Message) -> None:
         """Relay customer DMs and claimed support-channel replies."""
         if message.author.bot:
+            return
+
+        if message.guild is not None and await self._moderate_lounge_message(message):
             return
 
         if isinstance(message.channel, discord.DMChannel):

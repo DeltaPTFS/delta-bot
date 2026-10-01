@@ -21,6 +21,8 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Delta Branding | Red (#C8102E), optional server-owned images, and a consistent footer |
 | Claim State | Support can claim and unclaim repeatedly; claim ownership survives bot restarts |
 | Transcripts | Closed-ticket transcripts are posted to the private transcript channel |
+| Server Logs | Member joins/leaves, message edits/deletions, and moderation changes are sent to the configured logs channel |
+| Lounge AutoMod | Messages matching configurable curse/offensive terms are removed from `#lounge`, with actions recorded in server logs |
 | Server Safety | Commands and tickets are locked to server `1538738611988467782`, but the bot never removes itself from a server |
 | Release Updates | Posts and pins each release once in server logs channel `1539005101941850274`; the current release comes from `config.py` |
 
@@ -122,6 +124,12 @@ The production implementation in `main.py` consumes it automatically.
 The bot publishes commands only to `GUILD_ID`, clears its former global commands,
 and accepts DM tickets only from members of the authorized server. Other guilds
 remain inert; the bot never automatically leaves a server.
+
+Lounge AutoMod terms are maintained in `automod_terms.json`. Matching is
+case-insensitive and recognizes common number/symbol substitutions. If the server
+has more than one channel named `lounge`, set `LOUNGE_CHANNEL_ID` in Raven to the
+correct channel ID. The bot requires **Manage Messages** in that channel and
+**Send Messages** plus **Embed Links** in the configured logs channel.
 
 ## DM Ticket Flow
 
