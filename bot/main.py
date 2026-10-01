@@ -1192,6 +1192,21 @@ class TicketActionView(discord.ui.View):
 
         _set_brand_image(status_embed, DIVIDER_URL)
         await fresh_channel.send(embed=status_embed)
+
+        log_title = "Ticket Unclaimed" if unclaiming else "Ticket Claimed"
+        log_description = (
+            f"**Ticket:** {fresh_channel.mention} (`{fresh_channel.id}`)\n"
+            f"**Support:** {member.mention}\n"
+            f"**Support ID:** `{member.id}`"
+        )
+        if owner_id is not None:
+            log_description += f"\n**Customer ID:** `{owner_id}`"
+        await interaction.client._send_server_log(
+            log_title,
+            log_description,
+            color=DELTA_RED if unclaiming else DELTA_BLUE,
+        )
+
         if interaction.message is not None:
             await interaction.message.edit(view=TicketActionView(claimed=not unclaiming))
         if unclaiming:
@@ -2009,10 +2024,38 @@ def register_commands(tree: app_commands.CommandTree) -> None:
                     raise ValueError("The selected member must have the support or admin role.")
                 topic = set_topic_value(channel.topic or "", DM_TICKET_CLAIM_MARKER, str(member.id))
                 await channel.edit(topic=topic, reason=f"Ticket assigned by {interaction.user}")
+                owner_id = get_topic_value(channel.topic or "", DM_TICKET_OWNER_MARKER)
+                log_description = (
+                    f"**Ticket:** {channel.mention} (`{channel.id}`)\n"
+                    f"**Support:** {member.mention}\n"
+                    f"**Support ID:** `{member.id}`\n"
+                    f"**Assigned By:** {interaction.user.mention} (`{interaction.user.id}`)"
+                )
+                if owner_id is not None:
+                    log_description += f"\n**Customer ID:** `{owner_id}`"
+                await interaction.client._send_server_log(
+                    "Ticket Claimed",
+                    log_description,
+                    color=DELTA_BLUE,
+                )
                 result = f"Assigned this ticket to {member.mention}."
             else:
+                previous_claim_id = get_topic_value(channel.topic or "", DM_TICKET_CLAIM_MARKER)
                 topic = set_topic_value(channel.topic or "", DM_TICKET_CLAIM_MARKER, None)
                 await channel.edit(topic=topic, reason=f"Ticket unclaimed by {interaction.user}")
+                owner_id = get_topic_value(channel.topic or "", DM_TICKET_OWNER_MARKER)
+                log_description = (
+                    f"**Ticket:** {channel.mention} (`{channel.id}`)\n"
+                    f"**Support ID:** `{previous_claim_id or 'none'}`\n"
+                    f"**Unclaimed By:** {interaction.user.mention} (`{interaction.user.id}`)"
+                )
+                if owner_id is not None:
+                    log_description += f"\n**Customer ID:** `{owner_id}`"
+                await interaction.client._send_server_log(
+                    "Ticket Unclaimed",
+                    log_description,
+                    color=DELTA_RED,
+                )
                 result = "Removed the current ticket claim."
         except (discord.Forbidden, discord.HTTPException, ValueError) as exc:
             interaction.client.admin_undo_actions.pop()
