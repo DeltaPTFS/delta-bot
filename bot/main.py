@@ -123,25 +123,31 @@ If you'd like to contact our team or create a support ticket, click the **Create
 
 <:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines.**"""
 
-UPDATE_MESSAGE = f"""# <:DeltaLogo:1540927958116601980> Delta Support Bot — Update {BOT_VERSION}
+UPDATE_MESSAGE = f"""# <:DeltaLogo:1540927958116601980> Delta HelpDesk — Update {BOT_VERSION}
 
-This update improves deployment stability without changing the ticket workflow.
+> <:BArrow:1540951845147639809> **System Update**
 
-## What's Changed
-- `bot/main.py` is now the only production HelpDesk implementation.
-- Configuration and the version now have one source of truth.
-- Startup logs show the version, Git branch, commit, and detected host.
-- Startup validates the configured guild, ticket category, logs channel, and roles.
-- `/version` now includes uptime and Discord latency for support staff.
-- Assistance dropdown failures now print full exception details to the host console.
-- Leadership and HR `/format` options now include their complete application requirements.
-- Added support members can use `/reply`, and ticket actions are consolidated under
-  `/ticket control` and `/ticket admin`.
-- Customer `/reply` deliveries use the anonymous Delta Support embed again, while
-  the responding member's attributed embed remains in the private support ticket.
-- Guild command sync now replaces stale commands and retries transient Discord errors.
+The latest HelpDesk update has been successfully deployed and the bot is currently **online and operational**.
 
--# Version format: major.minor.patch."""
+## What's New
+- Added **Ticket Claimed** logging.
+- Added **Ticket Unclaimed** logging.
+- Claim logs now include the **Support Member**.
+- Claim logs now include the **Support ID**.
+- Customer ID is included when available.
+- Admin claim and unclaim actions are also logged.
+- Release update handling was improved to prevent startup errors.
+- Temporary Discord connection interruptions are handled more safely.
+
+## Current Status
+- HelpDesk Bot: **Operational**
+- Slash Commands: **Synced**
+- Ticket System: **Operational**
+- Claim / Unclaim Logging: **Operational**
+- Discord Connection: **Connected**
+
+-# Deployed source: `{deployed_source()}`
+<:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines.**"""
 
 RELEASE_UPDATE_MARKER = "Delta Support Bot — Update"
 
