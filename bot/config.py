@@ -7,19 +7,37 @@ import os
 
 # ── Branding ──────────────────────────────────────────────────────────────────
 DELTA_RED       = 0xC8102E
+DELTA_BLUE      = 0x003087
 FOOTER_TEXT     = "Delta Air Lines • Keep Climbing"
 MAILING_ADDRESS = "P.O. Box 20980, Department 980, Atlanta, GA 30320-2980"
 
-BANNER_URL = os.getenv("BANNER_URL", "")
 DIVIDER_URL = os.getenv("DIVIDER_URL", "")
 
 # ── Guild / Channel IDs ───────────────────────────────────────────────────────
 GUILD_ID = 1538738611988467782
 TICKET_CATEGORY_ID = 1543674278711529562   # All ticket channels live here
-TRANSCRIPT_CHANNEL_ID = 1543674377953087649
+TRANSCRIPT_CHANNEL_ID = 1539005101941850274
 UPDATE_CHANNEL_ID = TRANSCRIPT_CHANNEL_ID
+BOT_VERSION = "2.4.3"
 
-BOT_VERSION = "2.0.2"
+# ── Runtime behavior ─────────────────────────────────────────────────────────
+TICKET_CLOSE_DELAY = 5
+RATING_TIMEOUT = 15 * 24 * 60 * 60
+DISCORD_RECONNECT_DELAY = 15
+DM_TICKET_OWNER_MARKER = "Delta DM Ticket Owner:"
+DM_TICKET_CATEGORY_MARKER = "Delta Ticket Category:"
+DM_TICKET_CLAIM_MARKER = "Delta Ticket Claimed By:"
+DM_TICKET_SUPPORT_MARKER = "Delta Ticket Support:"
+INVITE_URL = "https://discord.gg/hccQX6nGJw"
+
+# ── Server emoji ─────────────────────────────────────────────────────────────
+SUPPORT_EMOJI = "<:Support:1540927430179553321>"
+RIGHT_ARROW_EMOJI = "<:RArrow:1540951788889575504>"
+BLUE_ARROW_EMOJI = "<:BArrow:1540951845147639809>"
+WING_PIN_EMOJI = "<:WingPinLogo:1540927847709802607>"
+MESSAGE_EMOJI = "<:Message:1544506028752769134>"
+IDENTIFICATION_EMOJI = "<:Identification:1544505969575198821>"
+CHECKMARK_EMOJI = "<:CheckMark:1544505870904459264>"
 
 # ── Role IDs ─────────────────────────────────────────────────────────────────
 STAFF_ROLE_ID           = 1539005030189891684  # May use staff-only commands
