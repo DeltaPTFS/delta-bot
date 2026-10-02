@@ -14,7 +14,7 @@ from typing import Any
 
 log = logging.getLogger("delta-helpdesk.interactions")
 
-GREY_R_MENTION = "<@126324830626460871>"
+GREY_R_MENTION = "<@1263248306264608871>"
 RAY_C_MENTION = "<@874702650845843466>"
 
 SUPPORT_INSTRUCTIONS = (
