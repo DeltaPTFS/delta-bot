@@ -1,15 +1,17 @@
 {
-  "title": "Deployment Confirmation & Ticket Logging",
-  "summary": "The HelpDesk deployment logger now keeps a consistent Delta format and posts a fresh confirmation for every new deployed commit.",
+  "title": "Ticket Formats & Support Instructions Update",
+  "summary": "The HelpDesk bot now includes partnership application formats in `/format` and keeps the updated ticket support instructions.",
   "added": [
-    "Ticket claimed and ticket unclaimed audit logs with Support IDs.",
-    "A deployment-specific update message in the logging channel for every new commit."
+    "Added a Partnership Application format to `/format`.",
+    "Added a Partnership Submitted format to `/format`.",
+    "Partnership tickets now ping Grey R. and Ray C. in the actual message content so Discord sends real notifications."
   ],
   "changed": [
-    "Update logs now keep the same visual format while release details come from deployment_notes.json.",
-    "Each update includes the deployed commit ID so leadership can confirm the exact revision running on the host.",
-    "Restarting or reconnecting the same commit will not create duplicate deployment messages.",
-    "Previous deployment update messages remain in the logging channel as release history."
+    "Support staff are now instructed to claim tickets before handling them.",
+    "Support staff are now instructed to use `/reply` when responding to customers.",
+    "Instructions now remind staff to analyze the request and use the correct command/action.",
+    "SkyMiles sign-ups are now clearly directed to the website.",
+    "If the SkyMiles website is down, staff are instructed to ping Grey R."
   ],
   "removed": []
 }
