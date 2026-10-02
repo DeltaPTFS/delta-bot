@@ -123,27 +123,10 @@ If you'd like to contact our team or create a support ticket, click the **Create
 
 <:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines.**"""
 
-UPDATE_MESSAGE = f"""# <:DeltaLogo:1540927958116601980> Delta Support Bot — Update {BOT_VERSION}
+DEPLOYMENT_NOTES_PATH = Path(__file__).with_name("deployment_notes.json")
+RELEASE_UPDATE_MARKER = "Delta HelpDesk — Update"
+DEPLOYMENT_SOURCE_MARKER = "Deployment ID:"
 
-This update improves deployment stability without changing the ticket workflow.
-
-## What's Changed
-- `bot/main.py` is now the only production HelpDesk implementation.
-- Configuration and the version now have one source of truth.
-- Startup logs show the version, Git branch, commit, and detected host.
-- Startup validates the configured guild, ticket category, logs channel, and roles.
-- `/version` now includes uptime and Discord latency for support staff.
-- Assistance dropdown failures now print full exception details to the host console.
-- Leadership and HR `/format` options now include their complete application requirements.
-- Added support members can use `/reply`, and ticket actions are consolidated under
-  `/ticket control` and `/ticket admin`.
-- Customer `/reply` deliveries use the anonymous Delta Support embed again, while
-  the responding member's attributed embed remains in the private support ticket.
-- Guild command sync now replaces stale commands and retries transient Discord errors.
-
--# Version format: major.minor.patch."""
-
-RELEASE_UPDATE_MARKER = "Delta Support Bot — Update"
 
 # ════════════════════════════════════════════════════════════════════════════════
 # EMBEDS
@@ -339,6 +322,53 @@ def deployed_source() -> str:
         None,
     )
     return (value or _git_output("rev-parse", "HEAD") or "unknown")[:12]
+
+
+def build_release_update_message() -> str:
+    """Build the deployment announcement from deployment_notes.json.
+
+    The visual format stays stable while the notes file supplies the content for
+    each deployment. The deployed commit is included so operators can confirm
+    exactly which revision reached the host.
+    """
+    try:
+        with DEPLOYMENT_NOTES_PATH.open(encoding="utf-8") as notes_file:
+            notes = __import__("json").load(notes_file)
+    except (OSError, ValueError, TypeError) as exc:
+        log.warning("Could not load deployment notes: %s", exc)
+        notes = {
+            "title": "System Update",
+            "summary": "A new HelpDesk deployment is online.",
+            "added": [],
+            "changed": [],
+            "removed": [],
+        }
+
+    changes: list[str] = []
+    for item in notes.get("added", []):
+        changes.append(f"- **Added:** {item}")
+    for item in notes.get("changed", []):
+        changes.append(f"- {item}")
+    for item in notes.get("removed", []):
+        changes.append(f"- **Removed:** {item}")
+    if not changes:
+        changes.append("- Deployment completed with no additional release notes.")
+
+    source = deployed_source()
+    return (
+        f"# <:DeltaLogo:1540927958116601980> Delta HelpDesk — Update {BOT_VERSION}\n\n"
+        f"> <:BArrow:1540951845147639809> **{notes.get('title', 'System Update')}**\n\n"
+        f"{notes.get('summary', 'The latest HelpDesk update has been deployed successfully.')}\n\n"
+        "## What's New\n"
+        + "\n".join(changes)
+        + "\n\n## Current Status\n"
+        "- HelpDesk Bot: **Operational**\n"
+        "- Slash Commands: **Synced**\n"
+        "- Ticket System: **Operational**\n"
+        "- Discord Connection: **Connected**\n\n"
+        f"-# {DEPLOYMENT_SOURCE_MARKER} `{source}`\n"
+        "<:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines.**"
+    )
 
 
 def deployed_branch() -> str:
@@ -2254,23 +2284,26 @@ class DeltaBot(commands.Bot):
             log.info("Startup validation passed for guild %s (%s).", guild.name, guild.id)
 
     async def _post_release_update(self) -> None:
-        """Keep only the newest release announcement in the logs channel."""
+        """Post one update log for each deployed commit without duplicating reconnects."""
         channel = self.get_channel(UPDATE_CHANNEL_ID)
         if not isinstance(channel, discord.TextChannel):
             try:
                 fetched = await self.fetch_channel(UPDATE_CHANNEL_ID)
-            except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
                 log.warning("Could not find update channel %s: %s", UPDATE_CHANNEL_ID, exc)
                 return
             channel = fetched if isinstance(fetched, discord.TextChannel) else None
         if channel is None or channel.guild.id != GUILD_ID or self.user is None:
             return
 
-        pinned: list[discord.Message] = []
+        source = deployed_source()
+        deployment_marker = f"{DEPLOYMENT_SOURCE_MARKER} `{source}`"
+
+        # Check recent history so restarting/reconnecting the same deployed commit
+        # does not create another copy. A different commit always gets a new log.
         recent: list[discord.Message] = []
         for attempt in range(1, 3):
             try:
-                pinned = await channel.pins()
                 recent = [message async for message in channel.history(limit=200)]
                 break
             except discord.Forbidden as exc:
@@ -2291,44 +2324,31 @@ class DeltaBot(commands.Bot):
                     exc,
                 )
                 await asyncio.sleep(3)
-        release_messages = {
-            message.id: message
-            for message in (*pinned, *recent)
-            if is_release_update_message(message, self.user.id)
-        }
-        current_marker = f"{RELEASE_UPDATE_MARKER} {BOT_VERSION}"
+
         current = next(
-            (message for message in release_messages.values() if current_marker in message.content),
+            (
+                message
+                for message in recent
+                if is_release_update_message(message, self.user.id)
+                and deployment_marker in message.content
+            ),
             None,
         )
         if current is not None:
-            # A reconnect must not create another copy. It is also a convenient
-            # opportunity to remove stale or duplicate announcements.
-            for message in release_messages.values():
-                if message.id == current.id:
-                    continue
-                try:
-                    await message.delete()
-                except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
-                    log.warning("Could not remove previous update %s: %s", message.id, exc)
+            log.info("Deployment update for %s is already present in channel %s.", source, UPDATE_CHANNEL_ID)
             return
 
         try:
-            announcement = await channel.send(UPDATE_MESSAGE)
-            try:
-                await announcement.pin(reason=f"Delta Support Bot release {BOT_VERSION}")
-            except (discord.Forbidden, discord.HTTPException):
-                log.warning("Posted update %s but could not pin it.", BOT_VERSION)
-            # Post first, then remove the old message. A temporary send failure
-            # therefore never leaves the logs channel without an announcement.
-            for message in release_messages.values():
-                try:
-                    await message.delete()
-                except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
-                    log.warning("Could not remove previous update %s: %s", message.id, exc)
-            log.info("Posted release update %s to channel %s.", BOT_VERSION, UPDATE_CHANNEL_ID)
-        except (discord.Forbidden, discord.HTTPException) as exc:
-            log.warning("Could not post release update %s: %s", BOT_VERSION, exc)
+            announcement = await channel.send(build_release_update_message())
+            log.info(
+                "Posted deployment update %s for HelpDesk %s to channel %s (message %s).",
+                source,
+                BOT_VERSION,
+                UPDATE_CHANNEL_ID,
+                announcement.id,
+            )
+        except (discord.Forbidden, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
+            log.warning("Could not post deployment update %s: %s", source, exc)
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
         """Keep unauthorized guilds inert without ever removing the bot itself."""

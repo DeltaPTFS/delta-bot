@@ -1,13 +1,15 @@
 {
-  "title": "Restored Reply Embeds and Reliable Sync",
-  "summary": "Customer reply embeds are restored and Raven deployments now replace stale guild commands with retry handling.",
-  "added": [],
+  "title": "Deployment Confirmation & Ticket Logging",
+  "summary": "The HelpDesk deployment logger now keeps a consistent Delta format and posts a fresh confirmation for every new deployed commit.",
+  "added": [
+    "Ticket claimed and ticket unclaimed audit logs with Support IDs.",
+    "A deployment-specific update message in the logging channel for every new commit."
+  ],
   "changed": [
-    "Restored the anonymous Delta Support embed sent to customers by /reply.",
-    "Kept the responding member's attributed embed in the private support ticket.",
-    "Guild sync now clears stale command definitions before publishing this release's command set.",
-    "Command sync retries temporary Discord HTTP failures up to three times.",
-    "General public moderation, activity logging, and lounge AutoMod remain removed."
+    "Update logs now keep the same visual format while release details come from deployment_notes.json.",
+    "Each update includes the deployed commit ID so leadership can confirm the exact revision running on the host.",
+    "Restarting or reconnecting the same commit will not create duplicate deployment messages.",
+    "Previous deployment update messages remain in the logging channel as release history."
   ],
   "removed": []
 }
