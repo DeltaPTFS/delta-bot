@@ -1,15 +1,14 @@
 {
-  "title": "Deployment Confirmation & Ticket Logging",
-  "summary": "The HelpDesk deployment logger now keeps a consistent Delta format and posts a fresh confirmation for every new deployed commit.",
+  "title": "Interaction Response Stability",
+  "summary": "The HelpDesk bot now protects slow Discord slash commands from timing out while the requested action continues running.",
   "added": [
-    "Ticket claimed and ticket unclaimed audit logs with Support IDs.",
-    "A deployment-specific update message in the logging channel for every new commit."
+    "Automatic interaction acknowledgement for slow slash commands before Discord's timeout window expires.",
+    "Safe follow-up handling when a command finishes after it has already been acknowledged."
   ],
   "changed": [
-    "Update logs now keep the same visual format while release details come from deployment_notes.json.",
-    "Each update includes the deployed commit ID so leadership can confirm the exact revision running on the host.",
-    "Restarting or reconnecting the same commit will not create duplicate deployment messages.",
-    "Previous deployment update messages remain in the logging channel as release history."
+    "Commands that take longer because of Discord API delays should no longer show 'Delta HelpDesk did not respond in time' before completing.",
+    "Ticket-related commands can finish normally after the auto-acknowledgement instead of failing the visible Discord interaction.",
+    "Ticket close actions are excluded from auto-defer when they need to open the close-reason modal."
   ],
   "removed": []
 }
