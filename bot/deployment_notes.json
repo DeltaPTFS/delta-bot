@@ -1,8 +1,9 @@
 {
-  "title": "Ticket Support Instructions Update",
-  "summary": "The HelpDesk ticket opening message now gives support staff clearer handling instructions and sends real partnership-review pings.",
+  "title": "Ticket Formats & Support Instructions Update",
+  "summary": "The HelpDesk bot now includes partnership application formats in `/format` and keeps the updated ticket support instructions.",
   "added": [
-    "Updated support instructions inside new ticket channels.",
+    "Added a Partnership Application format to `/format`.",
+    "Added a Partnership Submitted format to `/format`.",
     "Partnership tickets now ping Grey R. and Ray C. in the actual message content so Discord sends real notifications."
   ],
   "changed": [
