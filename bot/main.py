@@ -791,6 +791,10 @@ async def open_dm_ticket(
         for role_id in dict.fromkeys(mention_ids)
         if (role := guild.get_role(role_id)) is not None
     ]
+    if category_key == "partnership_requests":
+        # These must be message-content mentions so Discord actually notifies
+        # Grey R. and Ray C. when a partnership ticket is opened.
+        mentions.extend(["<@126324830626460871>", "<@874702650845843466>"])
     await channel.send(" ".join(mentions))
     embed = _base_embed(
         title=f"{cfg['emoji']}  {cfg['label']} | Private DM Support",
@@ -806,9 +810,12 @@ async def open_dm_ticket(
     embed.add_field(
         name="Support Instructions",
         value=(
-            "1. Select **Claim Ticket** before replying.\n"
-            "2. Send replies normally in this channel.\n"
-            f"3. A {CHECKMARK_EMOJI} confirms delivery to the customer."
+            "1. **Claim the ticket** before handling the request.\n"
+            "2. Use **`/reply`** to respond to the customer through the ticket.\n"
+            "3. Analyze the customer's request carefully and use the correct command or action.\n"
+            "4. **SkyMiles sign-ups must be completed on the website.**\n"
+            "5. If the SkyMiles website is down, ping <@126324830626460871>.\n"
+            "6. For **partnership requests**, ping <@126324830626460871> and <@874702650845843466>."
         ),
         inline=False,
     )
