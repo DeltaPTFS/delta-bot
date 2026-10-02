@@ -1,14 +1,16 @@
 {
-  "title": "Interaction Response Stability",
-  "summary": "The HelpDesk bot now protects slow Discord slash commands from timing out while the requested action continues running.",
+  "title": "Ticket Support Instructions Update",
+  "summary": "The HelpDesk ticket opening message now gives support staff clearer handling instructions and sends real partnership-review pings.",
   "added": [
-    "Automatic interaction acknowledgement for slow slash commands before Discord's timeout window expires.",
-    "Safe follow-up handling when a command finishes after it has already been acknowledged."
+    "Updated support instructions inside new ticket channels.",
+    "Partnership tickets now ping Grey R. and Ray C. in the actual message content so Discord sends real notifications."
   ],
   "changed": [
-    "Commands that take longer because of Discord API delays should no longer show 'Delta HelpDesk did not respond in time' before completing.",
-    "Ticket-related commands can finish normally after the auto-acknowledgement instead of failing the visible Discord interaction.",
-    "Ticket close actions are excluded from auto-defer when they need to open the close-reason modal."
+    "Support staff are now instructed to claim tickets before handling them.",
+    "Support staff are now instructed to use `/reply` when responding to customers.",
+    "Instructions now remind staff to analyze the request and use the correct command/action.",
+    "SkyMiles sign-ups are now clearly directed to the website.",
+    "If the SkyMiles website is down, staff are instructed to ping Grey R."
   ],
   "removed": []
 }
