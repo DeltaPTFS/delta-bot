@@ -14,11 +14,23 @@ from typing import Any
 
 log = logging.getLogger("delta-helpdesk.interactions")
 
+GREY_R_MENTION = "<@126324830626460871>"
+RAY_C_MENTION = "<@874702650845843466>"
+
+SUPPORT_INSTRUCTIONS = (
+    "1. Claim the ticket before handling it.\n"
+    "2. Use `/reply` to respond to the customer through the ticket.\n"
+    "3. Analyze the customer request carefully and use the correct command/action.\n"
+    "4. SkyMiles sign-ups must be completed through the website.\n"
+    f"5. If the SkyMiles website is down, ping {GREY_R_MENTION}.\n"
+    f"6. For partnership requests, ping {GREY_R_MENTION} and {RAY_C_MENTION}."
+)
+
 try:
     import discord
     from discord import app_commands
 except Exception as exc:  # pragma: no cover - defensive import hook
-    log.warning("Delta interaction auto-ack patch was not installed: %s", exc)
+    log.warning("Delta runtime patches were not installed: %s", exc)
 else:
     if not getattr(discord.InteractionResponse, "_delta_auto_ack_installed", False):
         _original_send_message = discord.InteractionResponse.send_message
@@ -91,3 +103,64 @@ else:
         discord.InteractionResponse.send_message = _send_message_or_followup
         app_commands.Command._invoke_with_namespace = _invoke_with_auto_defer
         discord.InteractionResponse._delta_auto_ack_installed = True
+
+    if not getattr(discord.TextChannel, "_delta_ticket_instruction_patch_installed", False):
+        _original_text_channel_send = discord.TextChannel.send
+
+        def _is_private_support_ticket_embed(embed: discord.Embed) -> bool:
+            title = embed.title or ""
+            if "Private DM Support" not in title:
+                return False
+            return any((field.name or "").strip() == "Support Instructions" for field in embed.fields)
+
+        def _apply_support_instruction_update(embed: discord.Embed) -> bool:
+            if not _is_private_support_ticket_embed(embed):
+                return False
+            for index, field in enumerate(embed.fields):
+                if (field.name or "").strip() == "Support Instructions":
+                    embed.set_field_at(
+                        index,
+                        name=field.name,
+                        value=SUPPORT_INSTRUCTIONS,
+                        inline=field.inline,
+                    )
+                    return True
+            return False
+
+        async def _send_with_ticket_instruction_patch(
+            self: discord.TextChannel,
+            *args: Any,
+            **kwargs: Any,
+        ) -> Any:
+            embed = kwargs.get("embed")
+            embeds = kwargs.get("embeds")
+            support_embed: discord.Embed | None = None
+
+            if isinstance(embed, discord.Embed) and _apply_support_instruction_update(embed):
+                support_embed = embed
+            elif isinstance(embeds, list):
+                for possible_embed in embeds:
+                    if isinstance(possible_embed, discord.Embed) and _apply_support_instruction_update(possible_embed):
+                        support_embed = possible_embed
+                        break
+
+            if support_embed is not None and "Partner Request" in (support_embed.title or ""):
+                # Mentions inside embeds do not always notify users. For
+                # partnership tickets, place Grey R. and Ray C. in the actual
+                # message content so Discord sends real pings.
+                existing_content = kwargs.get("content")
+                partnership_ping = (
+                    f"{GREY_R_MENTION} {RAY_C_MENTION} "
+                    "Partnership request opened — please review this ticket."
+                )
+                kwargs["content"] = (
+                    f"{existing_content}\n{partnership_ping}"
+                    if existing_content
+                    else partnership_ping
+                )
+                kwargs["allowed_mentions"] = discord.AllowedMentions(users=True, roles=True)
+
+            return await _original_text_channel_send(self, *args, **kwargs)
+
+        discord.TextChannel.send = _send_with_ticket_instruction_patch
+        discord.TextChannel._delta_ticket_instruction_patch_installed = True
