@@ -1,17 +1,15 @@
 {
-  "title": "Ticket Formats & Support Instructions Update",
-  "summary": "The HelpDesk bot now includes partnership application formats in `/format` and keeps the updated ticket support instructions.",
+  "title": "Ticket Command Audit & Reply Control Update",
+  "summary": "The HelpDesk bot now records ticket command activity inside ticket channels and adds a reply-control tool for managing staff-side reply records.",
   "added": [
-    "Added a Partnership Application format to `/format`.",
-    "Added a Partnership Submitted format to `/format`.",
-    "Partnership tickets now ping Grey R. and Ray C. in the actual message content so Discord sends real notifications."
+    "Ticket audit records are now posted for ticket commands used inside ticket channels.",
+    "Ticket claimed and ticket unclaimed actions are recorded inside the ticket.",
+    "Added `/reply-control` so staff can edit or delete HelpDesk reply records inside a ticket."
   ],
   "changed": [
-    "Support staff are now instructed to claim tickets before handling them.",
-    "Support staff are now instructed to use `/reply` when responding to customers.",
-    "Instructions now remind staff to analyze the request and use the correct command/action.",
-    "SkyMiles sign-ups are now clearly directed to the website.",
-    "If the SkyMiles website is down, staff are instructed to ping Grey R."
+    "Audit logs include the action user, customer ID when available, and command options when available.",
+    "Slow interaction auto-acknowledgement remains active for ticket and reply commands.",
+    "Support instructions keep the corrected Grey R. mention."
   ],
   "removed": []
 }
