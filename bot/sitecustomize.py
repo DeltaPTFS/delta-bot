@@ -104,6 +104,106 @@ else:
         app_commands.Command._invoke_with_namespace = _invoke_with_auto_defer
         discord.InteractionResponse._delta_auto_ack_installed = True
 
+    if not getattr(app_commands.CommandTree, "_delta_close_command_patch_installed", False):
+        _original_tree_sync = app_commands.CommandTree.sync
+
+        STAFF_ROLE_ID = 1539005030189891684
+        ADMIN_ROLE_ID = 1539005297417519205
+        DM_TICKET_OWNER_MARKER = "Delta DM Ticket Owner:"
+        DELTA_RED = 0xC8102E
+        DELTA_BLUE = 0x003087
+        FOOTER_TEXT = "Delta Air Lines • Keep Climbing"
+
+        def _member_has_role(member: discord.Member, role_id: int) -> bool:
+            return any(role.id == role_id for role in member.roles)
+
+        def _activity_embed(
+            *,
+            title: str,
+            description: str,
+            color: int = DELTA_BLUE,
+        ) -> discord.Embed:
+            embed = discord.Embed(title=title, description=description, color=color)
+            embed.set_footer(text=FOOTER_TEXT)
+            return embed
+
+        @app_commands.command(name="close", description="Close the current support ticket.")
+        @app_commands.describe(reason="Reason for closing the ticket.")
+        async def _delta_close_command(
+            interaction: discord.Interaction,
+            reason: str = "Closed by staff command.",
+        ) -> None:
+            channel = interaction.channel
+            member = interaction.user
+            if not isinstance(channel, discord.TextChannel) or not isinstance(member, discord.Member):
+                await interaction.response.send_message(
+                    "Use `/close` inside a ticket channel.",
+                    ephemeral=True,
+                )
+                return
+
+            if not (_member_has_role(member, STAFF_ROLE_ID) or _member_has_role(member, ADMIN_ROLE_ID)):
+                await interaction.response.send_message(
+                    "Only Delta support staff or admins can close tickets.",
+                    ephemeral=True,
+                )
+                return
+
+            topic = channel.topic or ""
+            if DM_TICKET_OWNER_MARKER not in topic:
+                await interaction.response.send_message(
+                    "This command can only be used inside a customer ticket channel.",
+                    ephemeral=True,
+                )
+                return
+
+            await interaction.response.send_message(
+                f"Closing this ticket in **5 seconds**. Reason: {reason}",
+                ephemeral=True,
+            )
+            await channel.send(
+                embed=_activity_embed(
+                    title="Ticket Command Activity",
+                    description=(
+                        "**Command:** `/close`\n"
+                        f"**Used By:** {member.mention} (`{member.id}`)\n"
+                        f"**Reason:** {reason}"
+                    ),
+                    color=DELTA_RED,
+                )
+            )
+            await channel.send(
+                embed=_activity_embed(
+                    title="Ticket Closing",
+                    description=(
+                        "This ticket has been marked as **closed** and will be deleted in **5 seconds**.\n\n"
+                        f"**Reason:** {reason}"
+                    ),
+                    color=DELTA_RED,
+                )
+            )
+            await asyncio.sleep(5)
+            try:
+                await channel.delete(reason=f"Ticket closed by {member}: {reason}")
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                log.warning("Could not delete ticket %s with /close: %s", channel.id, exc)
+
+        def _ensure_delta_close_command(tree: app_commands.CommandTree) -> None:
+            existing = tree.get_command("close", type=discord.AppCommandType.chat_input)
+            if existing is None:
+                tree.add_command(_delta_close_command, override=True)
+
+        async def _sync_with_delta_close_command(
+            self: app_commands.CommandTree,
+            *args: Any,
+            **kwargs: Any,
+        ) -> Any:
+            _ensure_delta_close_command(self)
+            return await _original_tree_sync(self, *args, **kwargs)
+
+        app_commands.CommandTree.sync = _sync_with_delta_close_command
+        app_commands.CommandTree._delta_close_command_patch_installed = True
+
     if not getattr(discord.TextChannel, "_delta_ticket_instruction_patch_installed", False):
         _original_text_channel_send = discord.TextChannel.send
 
