@@ -45,9 +45,9 @@ else:
 
     CLAIM_LOCKS: dict[int, asyncio.Lock] = {}
 
-    MODERATION_ROOT_COMMANDS = {"revoke"}
-    MODERATION_TICKET_ADMIN_VALUES = {"punish", "unpunish"}
-    MODERATION_WORDS = ("punish", "unpunish", "ban", "timeout", "moderation", "automod")
+    # Standalone revoke stays removed, but ticket admin punish/unpunish remains
+    # available and is logged by the command audit hook below.
+    REMOVED_ROOT_COMMANDS = {"revoke"}
 
     def _member_has_role(member: discord.Member, role_id: int) -> bool:
         return any(role.id == role_id for role in member.roles)
@@ -312,21 +312,15 @@ else:
     async def _delta_claim_button_callback(interaction: discord.Interaction) -> None:
         await _run_claim_action(interaction, source="Claim Ticket Button")
 
-    async def _block_removed_moderation(
+    async def _block_removed_root_command(
         interaction: discord.Interaction,
         command_name: str,
         namespace: Any,
     ) -> bool:
         root_name = command_name.split()[0]
-        if root_name in MODERATION_ROOT_COMMANDS:
-            await _reply_once(interaction, "This moderation feature has been removed from Delta HelpDesk.")
+        if root_name in REMOVED_ROOT_COMMANDS:
+            await _reply_once(interaction, "This standalone moderation command has been removed. Use `/ticket admin` punishment controls when needed.")
             return True
-
-        selected_command = getattr(getattr(namespace, "command", None), "value", None)
-        if command_name == "ticket admin" and selected_command in MODERATION_TICKET_ADMIN_VALUES:
-            await _reply_once(interaction, "Ticket punishments and moderation actions have been removed.")
-            return True
-
         return False
 
     async def _block_invalid_ticket_admin_claims(
@@ -402,7 +396,7 @@ else:
             namespace: app_commands.Namespace,
         ) -> Any:
             command_name = getattr(self, "qualified_name", getattr(self, "name", "unknown"))
-            if await _block_removed_moderation(interaction, command_name, namespace):
+            if await _block_removed_root_command(interaction, command_name, namespace):
                 return None
             if await _block_invalid_ticket_admin_claims(interaction, command_name, namespace):
                 return None
@@ -487,36 +481,12 @@ else:
         async def _delta_unclaim_command(interaction: discord.Interaction) -> None:
             await _run_claim_action(interaction, unclaim=True, source="/unclaim")
 
-        def _remove_moderation_commands(tree: app_commands.CommandTree) -> None:
-            for command_name in MODERATION_ROOT_COMMANDS:
+        def _remove_standalone_removed_commands(tree: app_commands.CommandTree) -> None:
+            for command_name in REMOVED_ROOT_COMMANDS:
                 tree.remove_command(command_name, type=discord.AppCommandType.chat_input)
 
-            ticket_group = tree.get_command("ticket", type=discord.AppCommandType.chat_input)
-            if ticket_group is None:
-                return
-
-            admin_command = None
-            for command in getattr(ticket_group, "commands", []):
-                if getattr(command, "name", None) == "admin":
-                    admin_command = command
-                    break
-            if admin_command is None:
-                return
-
-            for parameter in getattr(admin_command, "parameters", []):
-                if getattr(parameter, "name", None) != "command":
-                    continue
-                choices = getattr(parameter, "choices", None)
-                if choices is not None:
-                    parameter.choices = [
-                        choice
-                        for choice in choices
-                        if getattr(choice, "value", None) not in MODERATION_TICKET_ADMIN_VALUES
-                        and not any(word in str(getattr(choice, "name", "")).casefold() for word in MODERATION_WORDS)
-                    ]
-
         def _ensure_ticket_commands(tree: app_commands.CommandTree) -> None:
-            _remove_moderation_commands(tree)
+            _remove_standalone_removed_commands(tree)
             for command in (_delta_close_command, _delta_claim_command, _delta_unclaim_command):
                 existing = tree.get_command(command.name, type=discord.AppCommandType.chat_input)
                 if existing is None:
