@@ -1,6 +1,6 @@
 {
-  "title": "Logging Expansion & Moderation Removal Update",
-  "summary": "The HelpDesk bot now removes moderation/punishment controls and expands logging across commands and ticket lifecycle events.",
+  "title": "NEWEST UPDATE — Logging Expansion & Moderation Removal",
+  "summary": "This is the newest HelpDesk update: moderation and punishment controls are removed, while command and ticket lifecycle logging is expanded.",
   "added": [
     "Every slash command now posts a Slash Command Activity log to the configured log channel.",
     "Commands used inside ticket channels also post a Ticket Command Activity record inside that ticket.",
@@ -10,7 +10,8 @@
   "changed": [
     "Existing claim, unclaim, close, and ticket controls remain protected by the latest guards.",
     "Support instructions keep the corrected Grey R. mention: <@1263248306264608871>.",
-    "Ticket and command logging is defensive so logging failures do not block the command itself."
+    "Ticket and command logging is defensive so logging failures do not block the command itself.",
+    "The source validator now allows AutoMod to stay disabled with an empty AutoMod list."
   ],
   "removed": [
     "Removed ticket punishment/moderation controls from `/ticket admin`.",
