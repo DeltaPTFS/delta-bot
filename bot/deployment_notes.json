@@ -1,17 +1,20 @@
 {
-  "title": "Ticket Claim Guard & Claim Command Update",
-  "summary": "The HelpDesk bot now prevents repeated claim/unclaim spam and adds direct claim controls for ticket channels.",
+  "title": "Logging Expansion & Moderation Removal Update",
+  "summary": "The HelpDesk bot now removes moderation/punishment controls and expands logging across commands and ticket lifecycle events.",
   "added": [
-    "Added `/claim` so support staff and admins can claim the current ticket directly.",
-    "Added `/unclaim` so the current claimant or an admin can unclaim the current ticket directly.",
-    "Ticket claim and unclaim actions now post Ticket Command Activity records inside the ticket."
+    "Every slash command now posts a Slash Command Activity log to the configured log channel.",
+    "Commands used inside ticket channels also post a Ticket Command Activity record inside that ticket.",
+    "Ticket creation is now logged with channel, customer ID, and ticket category details.",
+    "Ticket deletion is now logged with channel ID, customer ID, category, and delete reason."
   ],
   "changed": [
-    "The claim button now claims only; pressing it again no longer toggles the ticket back and forth.",
-    "Claiming is blocked when the ticket is already claimed by the same person or another staff member.",
-    "Unclaiming is blocked when the ticket is not currently claimed.",
-    "Existing `/ticket admin` claim and unclaim actions now reject invalid repeat actions.",
-    "Support instructions keep the corrected Grey R. mention: <@1263248306264608871>."
+    "Existing claim, unclaim, close, and ticket controls remain protected by the latest guards.",
+    "Support instructions keep the corrected Grey R. mention: <@1263248306264608871>.",
+    "Ticket and command logging is defensive so logging failures do not block the command itself."
   ],
-  "removed": []
+  "removed": [
+    "Removed ticket punishment/moderation controls from `/ticket admin`.",
+    "Removed the standalone moderation/revoke command from slash command sync.",
+    "Blocked any remaining moderation command paths at runtime."
+  ]
 }
