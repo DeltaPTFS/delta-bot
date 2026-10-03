@@ -104,8 +104,10 @@ def validate_messages() -> None:
 def validate_automod_terms() -> None:
     path = BOT_DIR / "automod_terms.json"
     terms = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(terms, list) or not terms:
-        raise ValueError(f"{path}: expected a non-empty list")
+    if not isinstance(terms, list):
+        raise ValueError(f"{path}: expected a list")
+    if not terms:
+        return
     if not all(isinstance(term, str) and term.strip() for term in terms):
         raise ValueError(f"{path}: every AutoMod term must be a non-empty string")
     normalized = [term.casefold().strip() for term in terms]
@@ -118,4 +120,4 @@ if __name__ == "__main__":
     validate_support_formats()
     validate_messages()
     validate_automod_terms()
-    print("Bot Python syntax, definitions, support formats, and messages are valid.")
+    print("Bot Python syntax, definitions, support formats, messages, and disabled AutoMod config are valid.")

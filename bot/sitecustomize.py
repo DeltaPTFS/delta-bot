@@ -1,9 +1,8 @@
-"""Runtime safety patches for Discord interaction acknowledgement.
+"""Runtime safety patches for Delta HelpDesk.
 
 Python imports ``sitecustomize`` automatically from the script directory before
-``main.py`` runs. Keeping this patch isolated lets the production entry point
-stay focused on bot logic while still protecting every deployment from Discord's
-three-second interaction acknowledgement window.
+``main.py`` runs. This file keeps deployment-safe patches out of the main bot
+entry point while protecting interactions, tickets, and logging.
 """
 
 from __future__ import annotations
@@ -34,13 +33,21 @@ except Exception as exc:  # pragma: no cover - defensive import hook
 else:
     STAFF_ROLE_ID = 1539005030189891684
     ADMIN_ROLE_ID = 1539005297417519205
+    TRANSCRIPT_CHANNEL_ID = 1539005101941850274
+
     DM_TICKET_OWNER_MARKER = "Delta DM Ticket Owner:"
     DM_TICKET_CATEGORY_MARKER = "Delta Ticket Category:"
     DM_TICKET_CLAIM_MARKER = "Delta Ticket Claimed By:"
+
     DELTA_RED = 0xC8102E
     DELTA_BLUE = 0x003087
     FOOTER_TEXT = "Delta Air Lines • Keep Climbing"
+
     CLAIM_LOCKS: dict[int, asyncio.Lock] = {}
+
+    MODERATION_ROOT_COMMANDS = {"revoke"}
+    MODERATION_TICKET_ADMIN_VALUES = {"punish", "unpunish"}
+    MODERATION_WORDS = ("punish", "unpunish", "ban", "timeout", "moderation", "automod")
 
     def _member_has_role(member: discord.Member, role_id: int) -> bool:
         return any(role.id == role_id for role in member.roles)
@@ -80,6 +87,54 @@ else:
         embed.set_footer(text=FOOTER_TEXT)
         return embed
 
+    def _format_namespace_value(value: Any) -> str:
+        if isinstance(value, app_commands.Choice):
+            return f"{value.name} (`{value.value}`)"
+        if isinstance(value, discord.Member):
+            return f"{value.mention} (`{value.id}`)"
+        if isinstance(value, discord.User):
+            return f"{value.mention} (`{value.id}`)"
+        if isinstance(value, discord.Role):
+            return f"{value.mention} (`{value.id}`)"
+        if isinstance(value, discord.TextChannel):
+            return f"{value.mention} (`{value.id}`)"
+        if isinstance(value, discord.Attachment):
+            return f"{value.filename} ({value.url})"
+        return str(value)
+
+    def _namespace_lines(namespace: Any) -> list[str]:
+        lines: list[str] = []
+        raw = getattr(namespace, "__dict__", {})
+        for key, value in raw.items():
+            if key.startswith("_") or key in {"interaction", "self"} or value is None:
+                continue
+            safe = _format_namespace_value(value)
+            if len(safe) > 250:
+                safe = safe[:247] + "..."
+            lines.append(f"**{key}:** {safe}")
+        return lines
+
+    async def _send_to_log_channel(
+        client: discord.Client,
+        *,
+        title: str,
+        description: str,
+        color: int = DELTA_BLUE,
+    ) -> None:
+        channel = client.get_channel(TRANSCRIPT_CHANNEL_ID)
+        if channel is None:
+            try:
+                channel = await client.fetch_channel(TRANSCRIPT_CHANNEL_ID)
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                log.warning("Could not fetch Delta log channel: %s", exc)
+                return
+        if not isinstance(channel, discord.TextChannel):
+            return
+        try:
+            await channel.send(embed=_activity_embed(title=title, description=description, color=color))
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+            log.warning("Could not send Delta log entry: %s", exc)
+
     async def _reply_once(
         interaction: discord.Interaction,
         message: str,
@@ -91,6 +146,52 @@ else:
         else:
             await interaction.response.send_message(message, ephemeral=ephemeral)
 
+    async def _log_slash_command(
+        interaction: discord.Interaction,
+        command_name: str,
+        namespace: Any,
+    ) -> None:
+        user = interaction.user
+        channel = interaction.channel
+        guild = interaction.guild
+
+        description = [
+            f"**Command:** `/{command_name}`",
+            f"**Used By:** {user.mention} (`{user.id}`)",
+        ]
+        if guild is not None:
+            description.append(f"**Server:** {guild.name} (`{guild.id}`)")
+        if isinstance(channel, discord.TextChannel):
+            description.append(f"**Channel:** {channel.mention} (`{channel.id}`)")
+            owner_id = _get_topic_value(channel.topic or "", DM_TICKET_OWNER_MARKER)
+            if owner_id is not None:
+                description.append(f"**Ticket Customer ID:** `{owner_id}`")
+        options = _namespace_lines(namespace)
+        if options:
+            description.append("**Options:**")
+            description.extend(options)
+
+        message = "\n".join(description)
+        await _send_to_log_channel(
+            interaction.client,
+            title="Slash Command Activity",
+            description=message,
+            color=DELTA_BLUE,
+        )
+
+        if isinstance(channel, discord.TextChannel) and _is_ticket_channel(channel):
+            try:
+                await channel.send(
+                    embed=_activity_embed(
+                        title="Ticket Command Activity",
+                        description=message,
+                        color=DELTA_BLUE,
+                    ),
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                log.warning("Could not post ticket command activity: %s", exc)
+
     async def _send_claim_server_log(
         interaction: discord.Interaction,
         *,
@@ -101,8 +202,6 @@ else:
         color: int,
     ) -> None:
         sender = getattr(interaction.client, "_send_server_log", None)
-        if sender is None:
-            return
         description = (
             f"**Ticket:** {channel.mention} (`{channel.id}`)\n"
             f"**Support:** {member.mention}\n"
@@ -110,10 +209,13 @@ else:
         )
         if owner_id is not None:
             description += f"\n**Customer ID:** `{owner_id}`"
-        try:
-            await sender(title, description, color=color)
-        except Exception as exc:  # pragma: no cover - defensive runtime patch
-            log.warning("Could not send claim server log: %s", exc)
+        if sender is not None:
+            try:
+                await sender(title, description, color=color)
+                return
+            except Exception as exc:  # pragma: no cover - defensive runtime patch
+                log.warning("Could not send claim server log through bot helper: %s", exc)
+        await _send_to_log_channel(interaction.client, title=title, description=description, color=color)
 
     async def _run_claim_action(
         interaction: discord.Interaction,
@@ -210,15 +312,22 @@ else:
     async def _delta_claim_button_callback(interaction: discord.Interaction) -> None:
         await _run_claim_action(interaction, source="Claim Ticket Button")
 
-    def _patch_claim_button_view(view: Any) -> None:
-        children = getattr(view, "children", None)
-        if not isinstance(children, list):
-            return
-        for item in children:
-            if getattr(item, "custom_id", None) == "delta:claim_ticket":
-                item.label = "Claim Ticket"
-                item.style = discord.ButtonStyle.primary
-                item.callback = _delta_claim_button_callback
+    async def _block_removed_moderation(
+        interaction: discord.Interaction,
+        command_name: str,
+        namespace: Any,
+    ) -> bool:
+        root_name = command_name.split()[0]
+        if root_name in MODERATION_ROOT_COMMANDS:
+            await _reply_once(interaction, "This moderation feature has been removed from Delta HelpDesk.")
+            return True
+
+        selected_command = getattr(getattr(namespace, "command", None), "value", None)
+        if command_name == "ticket admin" and selected_command in MODERATION_TICKET_ADMIN_VALUES:
+            await _reply_once(interaction, "Ticket punishments and moderation actions have been removed.")
+            return True
+
+        return False
 
     async def _block_invalid_ticket_admin_claims(
         interaction: discord.Interaction,
@@ -267,12 +376,9 @@ else:
             await asyncio.sleep(2.25)
             if interaction.response.is_done():
                 return
-
-            # Modal commands must answer with the modal as the first response.
             selected_command = getattr(getattr(namespace, "command", None), "value", None)
             if command_name in {"ticket control", "ticket admin"} and selected_command == "close":
                 return
-
             try:
                 await interaction.response.defer(ephemeral=True)
                 log.info(
@@ -296,8 +402,16 @@ else:
             namespace: app_commands.Namespace,
         ) -> Any:
             command_name = getattr(self, "qualified_name", getattr(self, "name", "unknown"))
+            if await _block_removed_moderation(interaction, command_name, namespace):
+                return None
             if await _block_invalid_ticket_admin_claims(interaction, command_name, namespace):
                 return None
+
+            try:
+                await _log_slash_command(interaction, command_name, namespace)
+            except Exception as exc:  # pragma: no cover - logging must not break commands
+                log.warning("Could not log slash command %s: %s", command_name, exc)
+
             watchdog = asyncio.create_task(
                 _auto_defer_if_still_pending(interaction, command_name, namespace)
             )
@@ -373,7 +487,36 @@ else:
         async def _delta_unclaim_command(interaction: discord.Interaction) -> None:
             await _run_claim_action(interaction, unclaim=True, source="/unclaim")
 
+        def _remove_moderation_commands(tree: app_commands.CommandTree) -> None:
+            for command_name in MODERATION_ROOT_COMMANDS:
+                tree.remove_command(command_name, type=discord.AppCommandType.chat_input)
+
+            ticket_group = tree.get_command("ticket", type=discord.AppCommandType.chat_input)
+            if ticket_group is None:
+                return
+
+            admin_command = None
+            for command in getattr(ticket_group, "commands", []):
+                if getattr(command, "name", None) == "admin":
+                    admin_command = command
+                    break
+            if admin_command is None:
+                return
+
+            for parameter in getattr(admin_command, "parameters", []):
+                if getattr(parameter, "name", None) != "command":
+                    continue
+                choices = getattr(parameter, "choices", None)
+                if choices is not None:
+                    parameter.choices = [
+                        choice
+                        for choice in choices
+                        if getattr(choice, "value", None) not in MODERATION_TICKET_ADMIN_VALUES
+                        and not any(word in str(getattr(choice, "name", "")).casefold() for word in MODERATION_WORDS)
+                    ]
+
         def _ensure_ticket_commands(tree: app_commands.CommandTree) -> None:
+            _remove_moderation_commands(tree)
             for command in (_delta_close_command, _delta_claim_command, _delta_unclaim_command):
                 existing = tree.get_command(command.name, type=discord.AppCommandType.chat_input)
                 if existing is None:
@@ -405,6 +548,64 @@ else:
         discord.ui.View._scheduled_task = _scheduled_task_with_claim_guard
         discord.ui.View._delta_claim_guard_installed = True
 
+    if not getattr(discord.Guild, "_delta_ticket_create_log_installed", False):
+        _original_create_text_channel = discord.Guild.create_text_channel
+
+        async def _create_text_channel_with_ticket_log(
+            self: discord.Guild,
+            name: str,
+            *args: Any,
+            **kwargs: Any,
+        ) -> Any:
+            channel = await _original_create_text_channel(self, name, *args, **kwargs)
+            if isinstance(channel, discord.TextChannel) and _is_ticket_channel(channel):
+                owner_id = _get_topic_value(channel.topic or "", DM_TICKET_OWNER_MARKER)
+                category_key = _get_topic_value(channel.topic or "", DM_TICKET_CATEGORY_MARKER)
+                await _send_to_log_channel(
+                    self._state._get_client(),
+                    title="Ticket Created",
+                    description=(
+                        f"**Ticket:** {channel.mention} (`{channel.id}`)\n"
+                        f"**Channel Name:** `{channel.name}`\n"
+                        f"**Customer ID:** `{owner_id or 'unknown'}`\n"
+                        f"**Category:** `{category_key or 'unknown'}`"
+                    ),
+                    color=DELTA_BLUE,
+                )
+            return channel
+
+        discord.Guild.create_text_channel = _create_text_channel_with_ticket_log
+        discord.Guild._delta_ticket_create_log_installed = True
+
+    if not getattr(discord.TextChannel, "_delta_ticket_delete_log_installed", False):
+        _original_text_channel_delete = discord.TextChannel.delete
+
+        async def _delete_with_ticket_log(
+            self: discord.TextChannel,
+            *args: Any,
+            **kwargs: Any,
+        ) -> Any:
+            if _is_ticket_channel(self):
+                owner_id = _get_topic_value(self.topic or "", DM_TICKET_OWNER_MARKER)
+                category_key = _get_topic_value(self.topic or "", DM_TICKET_CATEGORY_MARKER)
+                reason = kwargs.get("reason") or "No reason provided."
+                await _send_to_log_channel(
+                    self._state._get_client(),
+                    title="Ticket Deleted",
+                    description=(
+                        f"**Ticket ID:** `{self.id}`\n"
+                        f"**Channel Name:** `{self.name}`\n"
+                        f"**Customer ID:** `{owner_id or 'unknown'}`\n"
+                        f"**Category:** `{category_key or 'unknown'}`\n"
+                        f"**Reason:** {reason}"
+                    ),
+                    color=DELTA_RED,
+                )
+            return await _original_text_channel_delete(self, *args, **kwargs)
+
+        discord.TextChannel.delete = _delete_with_ticket_log
+        discord.TextChannel._delta_ticket_delete_log_installed = True
+
     if not getattr(discord.TextChannel, "_delta_ticket_instruction_patch_installed", False):
         _original_text_channel_send = discord.TextChannel.send
 
@@ -435,8 +636,6 @@ else:
         ) -> Any:
             embed = kwargs.get("embed")
             embeds = kwargs.get("embeds")
-            view = kwargs.get("view")
-            _patch_claim_button_view(view)
             support_embed: discord.Embed | None = None
 
             if isinstance(embed, discord.Embed) and _apply_support_instruction_update(embed):
@@ -448,9 +647,6 @@ else:
                         break
 
             if support_embed is not None and "Partner Request" in (support_embed.title or ""):
-                # Mentions inside embeds do not always notify users. For
-                # partnership tickets, place Grey R. and Ray C. in the actual
-                # message content so Discord sends real pings.
                 existing_content = kwargs.get("content")
                 partnership_ping = (
                     f"{GREY_R_MENTION} {RAY_C_MENTION} "
