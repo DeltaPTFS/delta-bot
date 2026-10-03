@@ -1,21 +1,22 @@
 {
-  "title": "NEWEST UPDATE — Logging Expansion & Moderation Removal",
-  "summary": "This is the newest HelpDesk update: moderation and punishment controls are removed, while command and ticket lifecycle logging is expanded.",
+  "title": "NEWEST UPDATE — Ticket Admin Punishment Logging",
+  "summary": "This is the newest HelpDesk update: `/ticket admin` punishment controls are back and all punishment activity is logged with the rest of the ticket audit trail.",
   "added": [
-    "Every slash command now posts a Slash Command Activity log to the configured log channel.",
-    "Commands used inside ticket channels also post a Ticket Command Activity record inside that ticket.",
-    "Ticket creation is now logged with channel, customer ID, and ticket category details.",
-    "Ticket deletion is now logged with channel ID, customer ID, category, and delete reason."
+    "`/ticket admin` now keeps the Punish Member option.",
+    "`/ticket admin` now keeps the Remove Punishment option.",
+    "Punishment and unpunishment actions are logged through Slash Command Activity.",
+    "Punishment and unpunishment actions used inside ticket channels also post Ticket Command Activity records inside the ticket.",
+    "Ticket creation is logged with channel, customer ID, and category details.",
+    "Ticket deletion is logged with channel ID, customer ID, category, and delete reason."
   ],
   "changed": [
+    "Every slash command continues to post a Slash Command Activity log to the configured log channel.",
+    "Commands used inside ticket channels continue to post a Ticket Command Activity record inside that ticket.",
     "Existing claim, unclaim, close, and ticket controls remain protected by the latest guards.",
     "Support instructions keep the corrected Grey R. mention: <@1263248306264608871>.",
-    "Ticket and command logging is defensive so logging failures do not block the command itself.",
-    "The source validator now allows AutoMod to stay disabled with an empty AutoMod list."
+    "Ticket and command logging is defensive so logging failures do not block the command itself."
   ],
   "removed": [
-    "Removed ticket punishment/moderation controls from `/ticket admin`.",
-    "Removed the standalone moderation/revoke command from slash command sync.",
-    "Blocked any remaining moderation command paths at runtime."
+    "The old standalone `/revoke` command remains removed; use `/ticket admin` punishment controls instead."
   ]
 }
