@@ -1,15 +1,16 @@
 {
-  "title": "Ticket Command Audit & Reply Control Update",
-  "summary": "The HelpDesk bot now records ticket command activity inside ticket channels and adds a reply-control tool for managing staff-side reply records.",
+  "title": "Ticket Command Audit, Reply Control & Close Command Update",
+  "summary": "The HelpDesk bot now records ticket command activity, adds reply-control tools, and adds a direct `/close` command for ticket channels.",
   "added": [
     "Ticket audit records are now posted for ticket commands used inside ticket channels.",
     "Ticket claimed and ticket unclaimed actions are recorded inside the ticket.",
-    "Added `/reply-control` so staff can edit or delete HelpDesk reply records inside a ticket."
+    "Added `/reply-control` so staff can edit or delete HelpDesk reply records inside a ticket.",
+    "Added `/close` so support staff and admins can close the current ticket with a reason."
   ],
   "changed": [
     "Audit logs include the action user, customer ID when available, and command options when available.",
     "Slow interaction auto-acknowledgement remains active for ticket and reply commands.",
-    "Support instructions keep the corrected Grey R. mention."
+    "Support instructions keep the corrected Grey R. mention: <@1263248306264608871>."
   ],
   "removed": []
 }
