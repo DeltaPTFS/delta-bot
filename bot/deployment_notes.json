@@ -1,15 +1,16 @@
 {
-  "title": "Ticket Command Audit, Reply Control & Close Command Update",
-  "summary": "The HelpDesk bot now records ticket command activity, adds reply-control tools, and adds a direct `/close` command for ticket channels.",
+  "title": "Ticket Claim Guard & Claim Command Update",
+  "summary": "The HelpDesk bot now prevents repeated claim/unclaim spam and adds direct claim controls for ticket channels.",
   "added": [
-    "Ticket audit records are now posted for ticket commands used inside ticket channels.",
-    "Ticket claimed and ticket unclaimed actions are recorded inside the ticket.",
-    "Added `/reply-control` so staff can edit or delete HelpDesk reply records inside a ticket.",
-    "Added `/close` so support staff and admins can close the current ticket with a reason."
+    "Added `/claim` so support staff and admins can claim the current ticket directly.",
+    "Added `/unclaim` so the current claimant or an admin can unclaim the current ticket directly.",
+    "Ticket claim and unclaim actions now post Ticket Command Activity records inside the ticket."
   ],
   "changed": [
-    "Audit logs include the action user, customer ID when available, and command options when available.",
-    "Slow interaction auto-acknowledgement remains active for ticket and reply commands.",
+    "The claim button now claims only; pressing it again no longer toggles the ticket back and forth.",
+    "Claiming is blocked when the ticket is already claimed by the same person or another staff member.",
+    "Unclaiming is blocked when the ticket is not currently claimed.",
+    "Existing `/ticket admin` claim and unclaim actions now reject invalid repeat actions.",
     "Support instructions keep the corrected Grey R. mention: <@1263248306264608871>."
   ],
   "removed": []

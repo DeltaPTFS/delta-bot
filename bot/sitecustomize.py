@@ -32,6 +32,217 @@ try:
 except Exception as exc:  # pragma: no cover - defensive import hook
     log.warning("Delta runtime patches were not installed: %s", exc)
 else:
+    STAFF_ROLE_ID = 1539005030189891684
+    ADMIN_ROLE_ID = 1539005297417519205
+    DM_TICKET_OWNER_MARKER = "Delta DM Ticket Owner:"
+    DM_TICKET_CATEGORY_MARKER = "Delta Ticket Category:"
+    DM_TICKET_CLAIM_MARKER = "Delta Ticket Claimed By:"
+    DELTA_RED = 0xC8102E
+    DELTA_BLUE = 0x003087
+    FOOTER_TEXT = "Delta Air Lines • Keep Climbing"
+    CLAIM_LOCKS: dict[int, asyncio.Lock] = {}
+
+    def _member_has_role(member: discord.Member, role_id: int) -> bool:
+        return any(role.id == role_id for role in member.roles)
+
+    def _is_staff_or_admin(member: discord.Member) -> bool:
+        return _member_has_role(member, STAFF_ROLE_ID) or _member_has_role(member, ADMIN_ROLE_ID)
+
+    def _is_admin(member: discord.Member) -> bool:
+        return _member_has_role(member, ADMIN_ROLE_ID)
+
+    def _get_topic_value(topic: str, marker: str) -> str | None:
+        for line in topic.splitlines():
+            if line.startswith(marker):
+                return line.removeprefix(marker).strip() or None
+        return None
+
+    def _set_topic_value(topic: str, marker: str, value: str | None) -> str:
+        lines = [line for line in topic.splitlines() if not line.startswith(marker)]
+        if value is not None:
+            lines.append(f"{marker} {value}")
+        return "\n".join(lines)
+
+    def _is_ticket_channel(channel: discord.TextChannel) -> bool:
+        topic = channel.topic or ""
+        return (
+            _get_topic_value(topic, DM_TICKET_OWNER_MARKER) is not None
+            or _get_topic_value(topic, DM_TICKET_CATEGORY_MARKER) is not None
+        )
+
+    def _activity_embed(
+        *,
+        title: str,
+        description: str,
+        color: int = DELTA_BLUE,
+    ) -> discord.Embed:
+        embed = discord.Embed(title=title, description=description, color=color)
+        embed.set_footer(text=FOOTER_TEXT)
+        return embed
+
+    async def _reply_once(
+        interaction: discord.Interaction,
+        message: str,
+        *,
+        ephemeral: bool = True,
+    ) -> None:
+        if interaction.response.is_done():
+            await interaction.followup.send(message, ephemeral=ephemeral)
+        else:
+            await interaction.response.send_message(message, ephemeral=ephemeral)
+
+    async def _send_claim_server_log(
+        interaction: discord.Interaction,
+        *,
+        title: str,
+        channel: discord.TextChannel,
+        member: discord.Member,
+        owner_id: str | None,
+        color: int,
+    ) -> None:
+        sender = getattr(interaction.client, "_send_server_log", None)
+        if sender is None:
+            return
+        description = (
+            f"**Ticket:** {channel.mention} (`{channel.id}`)\n"
+            f"**Support:** {member.mention}\n"
+            f"**Support ID:** `{member.id}`"
+        )
+        if owner_id is not None:
+            description += f"\n**Customer ID:** `{owner_id}`"
+        try:
+            await sender(title, description, color=color)
+        except Exception as exc:  # pragma: no cover - defensive runtime patch
+            log.warning("Could not send claim server log: %s", exc)
+
+    async def _run_claim_action(
+        interaction: discord.Interaction,
+        *,
+        unclaim: bool = False,
+        source: str = "/claim",
+    ) -> None:
+        channel = interaction.channel
+        member = interaction.user
+        if not isinstance(channel, discord.TextChannel) or not isinstance(member, discord.Member):
+            await _reply_once(interaction, f"Use `{source}` inside a ticket channel.")
+            return
+        if not _is_staff_or_admin(member):
+            await _reply_once(interaction, "Only Delta support staff or admins can claim tickets.")
+            return
+
+        lock = CLAIM_LOCKS.setdefault(channel.id, asyncio.Lock())
+        async with lock:
+            try:
+                fresh_channel = await channel.guild.fetch_channel(channel.id)
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                await _reply_once(interaction, f"I could not refresh this ticket: {exc}")
+                return
+            if not isinstance(fresh_channel, discord.TextChannel) or not _is_ticket_channel(fresh_channel):
+                await _reply_once(interaction, "This command can only be used inside a customer ticket channel.")
+                return
+
+            topic = fresh_channel.topic or ""
+            owner_id = _get_topic_value(topic, DM_TICKET_OWNER_MARKER)
+            claimed_id = _get_topic_value(topic, DM_TICKET_CLAIM_MARKER)
+
+            if unclaim:
+                if claimed_id is None:
+                    await _reply_once(interaction, "This ticket is not currently claimed.")
+                    return
+                if claimed_id != str(member.id) and not _is_admin(member):
+                    await _reply_once(interaction, f"Only <@{claimed_id}> or an admin can unclaim this ticket.")
+                    return
+                new_topic = _set_topic_value(topic, DM_TICKET_CLAIM_MARKER, None)
+                action_word = "unclaimed"
+                title = "Ticket Unclaimed"
+                color = DELTA_RED
+                status = f"This ticket has been unclaimed by {member.mention}."
+            else:
+                if claimed_id == str(member.id):
+                    await _reply_once(interaction, "You already claimed this ticket.")
+                    return
+                if claimed_id is not None:
+                    await _reply_once(interaction, f"This ticket is already claimed by <@{claimed_id}>.")
+                    return
+                new_topic = _set_topic_value(topic, DM_TICKET_CLAIM_MARKER, str(member.id))
+                action_word = "claimed"
+                title = "Ticket Claimed"
+                color = DELTA_BLUE
+                status = f"This ticket has been claimed by {member.mention}."
+
+            try:
+                await fresh_channel.edit(
+                    topic=new_topic,
+                    reason=f"Ticket {action_word} by {member}",
+                )
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                await _reply_once(interaction, f"I could not update this ticket claim: {exc}")
+                return
+
+        await _reply_once(interaction, f"Ticket {action_word} successfully.")
+        await fresh_channel.send(
+            embed=_activity_embed(
+                title="Ticket Command Activity",
+                description=(
+                    f"**Command:** `{source}`\n"
+                    f"**Action:** Ticket {action_word}\n"
+                    f"**Used By:** {member.mention} (`{member.id}`)"
+                ),
+                color=color,
+            )
+        )
+        await fresh_channel.send(
+            embed=_activity_embed(
+                title=title,
+                description=status,
+                color=color,
+            )
+        )
+        await _send_claim_server_log(
+            interaction,
+            title=title,
+            channel=fresh_channel,
+            member=member,
+            owner_id=owner_id,
+            color=color,
+        )
+
+    async def _delta_claim_button_callback(interaction: discord.Interaction) -> None:
+        await _run_claim_action(interaction, source="Claim Ticket Button")
+
+    def _patch_claim_button_view(view: Any) -> None:
+        children = getattr(view, "children", None)
+        if not isinstance(children, list):
+            return
+        for item in children:
+            if getattr(item, "custom_id", None) == "delta:claim_ticket":
+                item.label = "Claim Ticket"
+                item.style = discord.ButtonStyle.primary
+                item.callback = _delta_claim_button_callback
+
+    async def _block_invalid_ticket_admin_claims(
+        interaction: discord.Interaction,
+        command_name: str,
+        namespace: Any,
+    ) -> bool:
+        if command_name != "ticket admin":
+            return False
+        selected_command = getattr(getattr(namespace, "command", None), "value", None)
+        if selected_command not in {"claim", "unclaim"}:
+            return False
+        channel = interaction.channel
+        if not isinstance(channel, discord.TextChannel):
+            return False
+        topic = channel.topic or ""
+        claimed_id = _get_topic_value(topic, DM_TICKET_CLAIM_MARKER)
+        if selected_command == "claim" and claimed_id is not None:
+            await _reply_once(interaction, f"This ticket is already claimed by <@{claimed_id}>.")
+            return True
+        if selected_command == "unclaim" and claimed_id is None:
+            await _reply_once(interaction, "This ticket is not currently claimed.")
+            return True
+        return False
+
     if not getattr(discord.InteractionResponse, "_delta_auto_ack_installed", False):
         _original_send_message = discord.InteractionResponse.send_message
         _original_command_invoke = app_commands.Command._invoke_with_namespace
@@ -41,12 +252,7 @@ else:
             *args: Any,
             **kwargs: Any,
         ) -> Any:
-            """Send normally, or use a follow-up after an automatic defer.
-
-            A slow command may already have been acknowledged by the auto-defer
-            watchdog below. In that case Discord rejects a second initial
-            response, so we transparently send the same payload as a follow-up.
-            """
+            """Send normally, or use a follow-up after an automatic defer."""
             if self.is_done():
                 interaction = getattr(self, "_parent", None)
                 if interaction is not None:
@@ -63,8 +269,6 @@ else:
                 return
 
             # Modal commands must answer with the modal as the first response.
-            # Do not auto-defer ticket close actions, because a deferred
-            # interaction cannot later open Discord's close-reason modal.
             selected_command = getattr(getattr(namespace, "command", None), "value", None)
             if command_name in {"ticket control", "ticket admin"} and selected_command == "close":
                 return
@@ -92,6 +296,8 @@ else:
             namespace: app_commands.Namespace,
         ) -> Any:
             command_name = getattr(self, "qualified_name", getattr(self, "name", "unknown"))
+            if await _block_invalid_ticket_admin_claims(interaction, command_name, namespace):
+                return None
             watchdog = asyncio.create_task(
                 _auto_defer_if_still_pending(interaction, command_name, namespace)
             )
@@ -104,28 +310,8 @@ else:
         app_commands.Command._invoke_with_namespace = _invoke_with_auto_defer
         discord.InteractionResponse._delta_auto_ack_installed = True
 
-    if not getattr(app_commands.CommandTree, "_delta_close_command_patch_installed", False):
+    if not getattr(app_commands.CommandTree, "_delta_ticket_command_patch_installed", False):
         _original_tree_sync = app_commands.CommandTree.sync
-
-        STAFF_ROLE_ID = 1539005030189891684
-        ADMIN_ROLE_ID = 1539005297417519205
-        DM_TICKET_OWNER_MARKER = "Delta DM Ticket Owner:"
-        DELTA_RED = 0xC8102E
-        DELTA_BLUE = 0x003087
-        FOOTER_TEXT = "Delta Air Lines • Keep Climbing"
-
-        def _member_has_role(member: discord.Member, role_id: int) -> bool:
-            return any(role.id == role_id for role in member.roles)
-
-        def _activity_embed(
-            *,
-            title: str,
-            description: str,
-            color: int = DELTA_BLUE,
-        ) -> discord.Embed:
-            embed = discord.Embed(title=title, description=description, color=color)
-            embed.set_footer(text=FOOTER_TEXT)
-            return embed
 
         @app_commands.command(name="close", description="Close the current support ticket.")
         @app_commands.describe(reason="Reason for closing the ticket.")
@@ -136,21 +322,12 @@ else:
             channel = interaction.channel
             member = interaction.user
             if not isinstance(channel, discord.TextChannel) or not isinstance(member, discord.Member):
-                await interaction.response.send_message(
-                    "Use `/close` inside a ticket channel.",
-                    ephemeral=True,
-                )
+                await interaction.response.send_message("Use `/close` inside a ticket channel.", ephemeral=True)
                 return
-
-            if not (_member_has_role(member, STAFF_ROLE_ID) or _member_has_role(member, ADMIN_ROLE_ID)):
-                await interaction.response.send_message(
-                    "Only Delta support staff or admins can close tickets.",
-                    ephemeral=True,
-                )
+            if not _is_staff_or_admin(member):
+                await interaction.response.send_message("Only Delta support staff or admins can close tickets.", ephemeral=True)
                 return
-
-            topic = channel.topic or ""
-            if DM_TICKET_OWNER_MARKER not in topic:
+            if not _is_ticket_channel(channel):
                 await interaction.response.send_message(
                     "This command can only be used inside a customer ticket channel.",
                     ephemeral=True,
@@ -188,21 +365,45 @@ else:
             except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
                 log.warning("Could not delete ticket %s with /close: %s", channel.id, exc)
 
-        def _ensure_delta_close_command(tree: app_commands.CommandTree) -> None:
-            existing = tree.get_command("close", type=discord.AppCommandType.chat_input)
-            if existing is None:
-                tree.add_command(_delta_close_command, override=True)
+        @app_commands.command(name="claim", description="Claim the current support ticket.")
+        async def _delta_claim_command(interaction: discord.Interaction) -> None:
+            await _run_claim_action(interaction, source="/claim")
 
-        async def _sync_with_delta_close_command(
+        @app_commands.command(name="unclaim", description="Unclaim the current support ticket.")
+        async def _delta_unclaim_command(interaction: discord.Interaction) -> None:
+            await _run_claim_action(interaction, unclaim=True, source="/unclaim")
+
+        def _ensure_ticket_commands(tree: app_commands.CommandTree) -> None:
+            for command in (_delta_close_command, _delta_claim_command, _delta_unclaim_command):
+                existing = tree.get_command(command.name, type=discord.AppCommandType.chat_input)
+                if existing is None:
+                    tree.add_command(command, override=True)
+
+        async def _sync_with_ticket_commands(
             self: app_commands.CommandTree,
             *args: Any,
             **kwargs: Any,
         ) -> Any:
-            _ensure_delta_close_command(self)
+            _ensure_ticket_commands(self)
             return await _original_tree_sync(self, *args, **kwargs)
 
-        app_commands.CommandTree.sync = _sync_with_delta_close_command
-        app_commands.CommandTree._delta_close_command_patch_installed = True
+        app_commands.CommandTree.sync = _sync_with_ticket_commands
+        app_commands.CommandTree._delta_ticket_command_patch_installed = True
+
+    if not getattr(discord.ui.View, "_delta_claim_guard_installed", False):
+        _original_view_scheduled_task = discord.ui.View._scheduled_task
+
+        async def _scheduled_task_with_claim_guard(
+            self: discord.ui.View,
+            item: Any,
+            interaction: discord.Interaction,
+        ) -> Any:
+            if getattr(item, "custom_id", None) == "delta:claim_ticket":
+                return await _delta_claim_button_callback(interaction)
+            return await _original_view_scheduled_task(self, item, interaction)
+
+        discord.ui.View._scheduled_task = _scheduled_task_with_claim_guard
+        discord.ui.View._delta_claim_guard_installed = True
 
     if not getattr(discord.TextChannel, "_delta_ticket_instruction_patch_installed", False):
         _original_text_channel_send = discord.TextChannel.send
@@ -234,6 +435,8 @@ else:
         ) -> Any:
             embed = kwargs.get("embed")
             embeds = kwargs.get("embeds")
+            view = kwargs.get("view")
+            _patch_claim_button_view(view)
             support_embed: discord.Embed | None = None
 
             if isinstance(embed, discord.Embed) and _apply_support_instruction_update(embed):
