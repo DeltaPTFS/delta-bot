@@ -1,21 +1,12 @@
 {
-  "title": "NEWEST UPDATE — Ticket Message Controls & Support Access",
-  "summary": "This is the newest HelpDesk update: server logs are ticket-only, ticket customers can be pinged, reply messages can be edited/deleted/restored, and Founders get support ban controls.",
+  "title": "NEWEST UPDATE — Funny Watching Status",
+  "summary": "This update changes the HelpDesk bot activity to the new funny Watching text.",
   "added": [
-    "Added `/ping` to ping the customer who opened the current ticket.",
-    "Added `/message edit` to edit the latest reply sent by the staff member in that ticket.",
-    "Added `/message config` so staff can edit or delete their latest reply record.",
-    "Added `/msg config admin` for Founders to restore deleted replies, edit replies, delete replies, and override normal reply ownership.",
-    "Added `/ticket admin` Ban Support and Unban Support options for Founders only.",
-    "Added reply tracking for staff-side ticket records and customer DM reply messages."
+    "Added the bot activity text: Watching staff forget to claim tickets."
   ],
   "changed": [
-    "The configured server-log channel now filters out non-ticket log messages.",
-    "Ticket logs, ticket command activity, ticket creation, ticket deletion, claim, unclaim, close, punishment, and support-ban logs remain available.",
-    "Founder/Admin role <@&1539005297417519205> can access the new override and support-ban tools.",
-    "Support instructions keep the corrected Grey R. mention: <@1263248306264608871>."
+    "The HelpDesk bot now overrides the old Watching status `Delta Air Lines Support`.",
+    "Existing ticket controls, ticket-only server logs, reply controls, support ban controls, and Founder/Admin access remain unchanged."
   ],
-  "removed": [
-    "Removed non-ticket command activity from the server-log channel."
-  ]
+  "removed": []
 }
