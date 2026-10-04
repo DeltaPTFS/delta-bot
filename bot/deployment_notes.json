@@ -1,6 +1,6 @@
 {
-  "title": "NEWEST UPDATE — Deployment Message Fix",
-  "summary": "This update keeps the funny Watching status and fixes the HelpDesk update announcement so it can post in #server-logs while non-ticket logs remain filtered.",
+  "title": "HelpDesk Version 2.6.2 Update",
+  "summary": "HelpDesk Version 2.6.2 keeps the funny Watching status and fixes the HelpDesk update announcement so it can post in #server-logs while non-ticket logs remain filtered.",
   "added": [
     "Added a deployment update guard so official HelpDesk update messages can post to #server-logs.",
     "Kept the bot activity text: Watching staff forget to claim tickets."
