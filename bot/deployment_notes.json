@@ -1,12 +1,14 @@
 {
-  "title": "NEWEST UPDATE — Funny Watching Status",
-  "summary": "This update changes the HelpDesk bot activity to the new funny Watching text.",
+  "title": "NEWEST UPDATE — Deployment Message Fix",
+  "summary": "This update keeps the funny Watching status and fixes the HelpDesk update announcement so it can post in #server-logs while non-ticket logs remain filtered.",
   "added": [
-    "Added the bot activity text: Watching staff forget to claim tickets."
+    "Added a deployment update guard so official HelpDesk update messages can post to #server-logs.",
+    "Kept the bot activity text: Watching staff forget to claim tickets."
   ],
   "changed": [
-    "The HelpDesk bot now overrides the old Watching status `Delta Air Lines Support`.",
-    "Existing ticket controls, ticket-only server logs, reply controls, support ban controls, and Founder/Admin access remain unchanged."
+    "Deployment announcements are now allowed even with ticket-only server log filtering enabled.",
+    "Regular non-ticket server logs remain filtered out of #server-logs.",
+    "Existing ticket controls, reply controls, support ban controls, and Founder/Admin access remain unchanged."
   ],
   "removed": []
 }
