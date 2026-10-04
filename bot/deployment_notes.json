@@ -1,14 +1,16 @@
 {
-  "title": "NEWEST UPDATE — Deployment Message Fix",
-  "summary": "This update keeps the funny Watching status and fixes the HelpDesk update announcement so it can post in #server-logs while non-ticket logs remain filtered.",
+  "title": "HelpDesk Version 2.6.3 Update",
+  "summary": "HelpDesk Version 2.6.3 is online. This update fixes the deployment announcement so the version update message can post in #server-logs while regular non-ticket logs remain filtered.",
   "added": [
-    "Added a deployment update guard so official HelpDesk update messages can post to #server-logs.",
-    "Kept the bot activity text: Watching staff forget to claim tickets."
+    "Added a safer deployment update path for official HelpDesk version announcements."
   ],
   "changed": [
-    "Deployment announcements are now allowed even with ticket-only server log filtering enabled.",
+    "Official version update announcements are allowed in #server-logs.",
     "Regular non-ticket server logs remain filtered out of #server-logs.",
-    "Existing ticket controls, reply controls, support ban controls, and Founder/Admin access remain unchanged."
+    "Future deployment notes will use the HelpDesk version instead of NEWEST UPDATE wording.",
+    "Existing ticket controls, reply controls, support ban controls, funny Watching status, and Founder/Admin access remain unchanged."
   ],
-  "removed": []
+  "removed": [
+    "Removed NEWEST UPDATE wording from the deployment notes."
+  ]
 }

@@ -19,7 +19,7 @@ TICKET_CATEGORY_ID = 1543674278711529562   # All ticket channels live here
 TRANSCRIPT_CHANNEL_ID = 1539005101941850274
 UPDATE_CHANNEL_ID = TRANSCRIPT_CHANNEL_ID
 LOUNGE_CHANNEL_ID = int(os.getenv("LOUNGE_CHANNEL_ID", "0"))
-BOT_VERSION = "2.6.2"
+BOT_VERSION = "2.6.3"
 
 # ── Runtime behavior ─────────────────────────────────────────────────────────
 TICKET_CLOSE_DELAY = 5
@@ -83,9 +83,11 @@ TICKET_CONFIG: dict[str, dict] = {
 
 # ── Runtime extension patches ────────────────────────────────────────────────
 try:
+    # Load the deployment guard before ticket log filters so release updates are
+    # never swallowed by ticket-only server log filtering.
+    import deployment_update_guard  # noqa: F401
     import runtime_ticket_controls  # noqa: F401
     import presence_status  # noqa: F401
-    import deployment_update_guard  # noqa: F401
 except Exception:
     # The main bot should continue starting even if an optional runtime patch fails.
     pass

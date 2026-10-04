@@ -19,8 +19,8 @@ else:
     UPDATE_CHANNEL_ID = 1539005101941850274
     DEPLOYMENT_MARKERS = (
         "Delta HelpDesk — Update",
+        "HelpDesk Version",
         "Deployment ID:",
-        "NEWEST UPDATE",
     )
 
     if not getattr(discord.TextChannel, "_delta_deployment_update_guard_installed", False):
@@ -37,6 +37,9 @@ else:
             elif isinstance(kwargs.get("content"), str):
                 content = kwargs["content"]
 
+            # The update message is text-based. Keeping this guard loaded before
+            # ticket-only log filters makes the official version announcement
+            # pass through normally while regular non-ticket embeds stay filtered.
             if self.id == UPDATE_CHANNEL_ID and any(marker in content for marker in DEPLOYMENT_MARKERS):
                 return await _previous_send(self, *args, **kwargs)
 
