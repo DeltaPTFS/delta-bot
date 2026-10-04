@@ -1,22 +1,21 @@
 {
-  "title": "NEWEST UPDATE — Ticket Admin Punishment Logging",
-  "summary": "This is the newest HelpDesk update: `/ticket admin` punishment controls are back and all punishment activity is logged with the rest of the ticket audit trail.",
+  "title": "NEWEST UPDATE — Ticket Message Controls & Support Access",
+  "summary": "This is the newest HelpDesk update: server logs are ticket-only, ticket customers can be pinged, reply messages can be edited/deleted/restored, and Founders get support ban controls.",
   "added": [
-    "`/ticket admin` now keeps the Punish Member option.",
-    "`/ticket admin` now keeps the Remove Punishment option.",
-    "Punishment and unpunishment actions are logged through Slash Command Activity.",
-    "Punishment and unpunishment actions used inside ticket channels also post Ticket Command Activity records inside the ticket.",
-    "Ticket creation is logged with channel, customer ID, and category details.",
-    "Ticket deletion is logged with channel ID, customer ID, category, and delete reason."
+    "Added `/ping` to ping the customer who opened the current ticket.",
+    "Added `/message edit` to edit the latest reply sent by the staff member in that ticket.",
+    "Added `/message config` so staff can edit or delete their latest reply record.",
+    "Added `/msg config admin` for Founders to restore deleted replies, edit replies, delete replies, and override normal reply ownership.",
+    "Added `/ticket admin` Ban Support and Unban Support options for Founders only.",
+    "Added reply tracking for staff-side ticket records and customer DM reply messages."
   ],
   "changed": [
-    "Every slash command continues to post a Slash Command Activity log to the configured log channel.",
-    "Commands used inside ticket channels continue to post a Ticket Command Activity record inside that ticket.",
-    "Existing claim, unclaim, close, and ticket controls remain protected by the latest guards.",
-    "Support instructions keep the corrected Grey R. mention: <@1263248306264608871>.",
-    "Ticket and command logging is defensive so logging failures do not block the command itself."
+    "The configured server-log channel now filters out non-ticket log messages.",
+    "Ticket logs, ticket command activity, ticket creation, ticket deletion, claim, unclaim, close, punishment, and support-ban logs remain available.",
+    "Founder/Admin role <@&1539005297417519205> can access the new override and support-ban tools.",
+    "Support instructions keep the corrected Grey R. mention: <@1263248306264608871>."
   ],
   "removed": [
-    "The old standalone `/revoke` command remains removed; use `/ticket admin` punishment controls instead."
+    "Removed non-ticket command activity from the server-log channel."
   ]
 }
