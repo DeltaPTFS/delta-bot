@@ -19,7 +19,7 @@ TICKET_CATEGORY_ID = 1543674278711529562   # All ticket channels live here
 TRANSCRIPT_CHANNEL_ID = 1539005101941850274
 UPDATE_CHANNEL_ID = TRANSCRIPT_CHANNEL_ID
 LOUNGE_CHANNEL_ID = int(os.getenv("LOUNGE_CHANNEL_ID", "0"))
-BOT_VERSION = "2.5.9"
+BOT_VERSION = "2.6.0"
 
 # ── Runtime behavior ─────────────────────────────────────────────────────────
 TICKET_CLOSE_DELAY = 5
@@ -80,3 +80,10 @@ TICKET_CONFIG: dict[str, dict] = {
         "description": "Questions about careers and applications.",
     },
 }
+
+# ── Runtime extension patches ────────────────────────────────────────────────
+try:
+    import runtime_ticket_controls  # noqa: F401
+except Exception:
+    # The main bot should continue starting even if an optional runtime patch fails.
+    pass
