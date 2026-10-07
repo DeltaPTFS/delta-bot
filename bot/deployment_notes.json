@@ -1,16 +1,12 @@
 {
-  "title": "HelpDesk Version 2.6.3 Update",
-  "summary": "HelpDesk Version 2.6.3 is online. This update fixes the deployment announcement so the version update message can post in #server-logs while regular non-ticket logs remain filtered.",
-  "added": [
-    "Added a safer deployment update path for official HelpDesk version announcements."
-  ],
+  "title": "HelpDesk Version 2.6.4 Update",
+  "summary": "HelpDesk Version 2.6.4 is online. This update refreshes the /format Partnership Acceptance message with the finalized External Affairs approval notice and Delta advertisement.",
+  "added": [],
   "changed": [
-    "Official version update announcements are allowed in #server-logs.",
-    "Regular non-ticket server logs remain filtered out of #server-logs.",
-    "Future deployment notes will use the HelpDesk version instead of NEWEST UPDATE wording.",
-    "Existing ticket controls, reply controls, support ban controls, funny Watching status, and Founder/Admin access remain unchanged."
+    "Updated /format Partnership Acceptance with the finalized accepted partnership message.",
+    "Added the full Delta Air Lines | SkyTeam advertisement inside the Partnership Acceptance format.",
+    "Updated the partnership invite link inside the advertisement to https://discord.gg/u8GJF2br2M.",
+    "Kept existing ticket controls, ticket-only server logs, reply controls, support ban controls, funny Watching status, and Founder/Admin access unchanged."
   ],
-  "removed": [
-    "Removed NEWEST UPDATE wording from the deployment notes."
-  ]
+  "removed": []
 }
