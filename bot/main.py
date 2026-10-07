@@ -669,6 +669,8 @@ async def relay_customer_message(message: discord.Message, channel: discord.Text
             if prior.description == embed.description and prior.timestamp == embed.timestamp:
                 return False
         await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        if followup:
+            await channel.send(followup, allowed_mentions=discord.AllowedMentions.none())
 
     # A reaction is only an acknowledgement. If Discord rate-limits or rejects
     # it, the already-delivered support message must not be treated as failed and
@@ -1770,7 +1772,16 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         # the DM and staff-side record. No agent name, mention, avatar, or ID is
         # included in any customer-facing format.
         embed = support_format_embed(format.value)
+        followup = _SUPPORT_FORMAT_DATA[format.value].get("followup")
         delivered = await send_embed_to_ticket_owner(interaction.client, channel, embed)
+        if delivered and followup:
+            owner_id = get_ticket_owner_id(channel)
+            if owner_id is not None:
+                try:
+                    user = interaction.client.get_user(owner_id) or await interaction.client.fetch_user(owner_id)
+                    await user.send(followup, allowed_mentions=discord.AllowedMentions.none())
+                except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                    log.warning("Could not deliver format follow-up to owner %s: %s", owner_id, exc)
         await interaction.response.send_message(
             embed=success_embed(
                 f"The **{format.name}** notice was delivered to the customer's DMs."
