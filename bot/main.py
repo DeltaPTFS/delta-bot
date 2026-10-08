@@ -2611,8 +2611,7 @@ class DeltaBot(commands.Bot):
             if message.author.id not in self._dm_prompted_users:
                 self._dm_prompted_users.add(message.author.id)
                 await message.channel.send(
-                    "<:Support:1540927430179553321> **Choose one assistance category below.**\n"
-                    "Your conversation stays in this DM while Delta Support responds from a private channel.",
+                    PANEL_MESSAGE,
                     view=DMAssistancePanelView(self, message.author.id),
                 )
             return
