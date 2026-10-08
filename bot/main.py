@@ -881,6 +881,13 @@ async def _archive_ticket(
 
     # Send to transcript log channel
     log_channel = guild.get_channel(TRANSCRIPT_CHANNEL_ID)
+    if not isinstance(log_channel, discord.TextChannel):
+        try:
+            fetched = await guild.fetch_channel(TRANSCRIPT_CHANNEL_ID)
+            log_channel = fetched if isinstance(fetched, discord.TextChannel) else None
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
+            log.warning("Could not resolve ticket transcript channel %s: %s", TRANSCRIPT_CHANNEL_ID, exc)
+            log_channel = None
     if isinstance(log_channel, discord.TextChannel):
         stars = WING_PIN_EMOJI * rating if rating else "—"
         log_embed = _base_embed(
@@ -898,7 +905,12 @@ async def _archive_ticket(
             fp=__import__("io").BytesIO(transcript_text.encode()),
             filename=f"transcript-{channel.name}.txt",
         )
-        return await log_channel.send(embed=log_embed, file=file)
+        try:
+            return await log_channel.send(embed=log_embed, file=file)
+        except (discord.Forbidden, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
+            log.warning("Ticket transcript upload failed for %s: %s; retrying without attachment.", channel.id, exc)
+            return await log_channel.send(embed=log_embed)
+    log.warning("Ticket %s closed but transcript channel %s was unavailable.", channel.id, TRANSCRIPT_CHANNEL_ID)
     return None
 
 async def _finalize_ticket(
@@ -912,7 +924,7 @@ async def _finalize_ticket(
     archive_message: discord.Message | None = None
     try:
         archive_message = await _archive_ticket(channel, closer, reason, rating)
-    except (discord.Forbidden, discord.HTTPException) as exc:
+    except (discord.Forbidden, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
         # A transcript/DM failure must not leave a channel stuck open.
         log.warning("Could not fully archive ticket %s: %s", channel.id, exc)
     finally:
@@ -2312,6 +2324,7 @@ class DeltaBot(commands.Bot):
                 return
             channel = fetched if isinstance(fetched, discord.TextChannel) else None
         if channel is None or channel.guild.id != GUILD_ID or self.user is None:
+            log.warning("Update announcement skipped: channel %s unavailable, wrong guild, or bot user not ready.", UPDATE_CHANNEL_ID)
             return
 
         source = deployed_source()
@@ -2357,7 +2370,13 @@ class DeltaBot(commands.Bot):
             return
 
         try:
-            announcement = await channel.send(build_release_update_message())
+            update_text = build_release_update_message()
+            if len(update_text) > 2000:
+                # Discord rejects messages over 2,000 characters. Keep the deployment
+                # marker and status visible while trimming excessively long notes.
+                marker = f"\n-# {deployment_marker}\n<:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines.**"
+                update_text = update_text[: 1990 - len(marker)].rstrip() + "\n…" + marker
+            announcement = await channel.send(update_text)
             log.info(
                 "Posted deployment update %s for HelpDesk %s to channel %s (message %s).",
                 source,
