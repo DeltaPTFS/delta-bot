@@ -82,7 +82,7 @@ PANEL_MESSAGE = """## <:DeltaLogo:1540927958116601980> Contact Us | <:SkyTeamLog
 
 > <:BArrow:1540951845147639809> **Have a question about our airline?** Or interested in **joining our team?** Contact Us and our **Delta Support Team** will offer **24/7 Customer Assistance,** ready to answer and solve **any Inquiry** you may have.
 
-> <:RArrow:1540951788889575504> **Before you begin,** please ensure your **Discord Settings** allow **Direct-Messages** from this **server.**
+> <:RArrow:1540951788889575504> **Please Note:** Your support ticket will be handled directly within this **private DM conversation.** Our **Delta Support Team** will review your inquiry and respond to you here.\n>\n> **There is no need to join another channel or open multiple tickets.** Please provide clear details about your request, remain patient while awaiting assistance, and keep this conversation open until your issue has been resolved.
 
 -# <:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines.**
 
