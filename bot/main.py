@@ -354,6 +354,11 @@ def build_release_update_message() -> str:
     if not changes:
         changes.append("- Deployment completed with no additional release notes.")
 
+    history = notes.get("history", [])
+    previous_updates = "\n\n## Previous Updates\n" + "\n".join(
+        f"- **v{entry.get('version', '?')}** — {entry.get('summary', '')}"
+        for entry in history
+    ) if history else ""
     source = deployed_source()
     return (
         f"# <:DeltaLogo:1540927958116601980> Delta HelpDesk — Update {BOT_VERSION}\n\n"
@@ -361,6 +366,7 @@ def build_release_update_message() -> str:
         f"{notes.get('summary', 'The latest HelpDesk update has been deployed successfully.')}\n\n"
         "## What's New\n"
         + "\n".join(changes)
+        + previous_updates
         + "\n\n## Current Status\n"
         "- HelpDesk Bot: **Operational**\n"
         "- Slash Commands: **Synced**\n"
@@ -2345,8 +2351,8 @@ class DeltaBot(commands.Bot):
                 recent = [message async for message in channel.history(limit=200)]
                 break
             except discord.Forbidden as exc:
-                log.warning("Could not check existing update announcements: %s", exc)
-                return
+                log.warning("Cannot read update history; attempting to post anyway: %s", exc)
+                break
             except (discord.HTTPException, aiohttp.ClientError, OSError) as exc:
                 if attempt == 2:
                     log.warning(
@@ -2354,7 +2360,7 @@ class DeltaBot(commands.Bot):
                         attempt,
                         exc,
                     )
-                    return
+                    break
                 log.warning(
                     "Temporary Discord connection error while checking release updates "
                     "(attempt %d/2): %s. Retrying.",
@@ -2384,6 +2390,9 @@ class DeltaBot(commands.Bot):
                 marker = f"\n-# {deployment_marker}\n<:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines.**"
                 update_text = update_text[: 1990 - len(marker)].rstrip() + "\n…" + marker
             announcement = await channel.send(update_text)
+            if announcement is None:
+                log.error("Update announcement was suppressed by a channel send filter.")
+                return
             log.info(
                 "Posted deployment update %s for HelpDesk %s to channel %s (message %s).",
                 source,
