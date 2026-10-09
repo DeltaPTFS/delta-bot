@@ -1,13 +1,30 @@
 {
-  "title": "HelpDesk 2.6.6 — Ticket Logging Reliability",
-  "summary": "Improved delivery of ticket closure transcripts and deployment update announcements.",
-  "added": [],
-  "changed": [
-    "Fixed update announcements exceeding Discord's 2,000-character message limit while retaining the deployment marker.",
-    "Added a channel fetch fallback when the ticket transcript channel is missing from cache.",
-    "Added a transcript embed fallback when an attachment upload fails.",
-    "Added clearer diagnostic warnings for unavailable log and update channels.",
-    "Updated the /panel and DM support notice to explain private DM-based ticket handling."
+  "title": "HelpDesk 2.6.8 — Release Announcements",
+  "summary": "Improved update delivery and included a recap of earlier versions.",
+  "added": [
+    "Previous version history in release announcements."
   ],
-  "removed": []
+  "changed": [
+    "Continue sending release updates even when Discord channel history cannot be read.",
+    "Report when a channel filter suppresses an announcement."
+  ],
+  "removed": [],
+  "history": [
+    {
+      "version": "2.6.0",
+      "summary": "Ticket message controls, customer pings, Founder support controls, and ticket-only logs."
+    },
+    {
+      "version": "2.6.1–2.6.5",
+      "summary": "Incremental ticket management and support workflow updates."
+    },
+    {
+      "version": "2.6.6",
+      "summary": "Transcript delivery fixes and updated DM panel notice."
+    },
+    {
+      "version": "2.6.7",
+      "summary": "Department-specific support instructions and corrected Grey R. mentions."
+    }
+  ]
 }
