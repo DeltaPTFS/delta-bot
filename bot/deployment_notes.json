@@ -1,14 +1,13 @@
 {
-  "title": "HelpDesk Version 2.6.5 Update",
-  "summary": "HelpDesk Version 2.6.5 is online. Partnership Acceptance now separates the approval notice from the advertisement so partner servers can copy the ad normally.",
+  "title": "HelpDesk 2.6.6 — Ticket Logging Reliability",
+  "summary": "Improved delivery of ticket closure transcripts and deployment update announcements.",
   "added": [],
   "changed": [
-    "Updated /format Partnership Acceptance so the acceptance notice remains a Delta embed.",
-    "The Delta Air Lines | SkyTeam advertisement is now sent immediately below it as a regular Discord message for easy copying.",
-    "The same embed + regular-message layout is delivered to the ticket customer in DMs and mirrored in the ticket channel.",
-    "Kept the existing partnership advertisement text and invite link unchanged."
+    "Fixed update announcements exceeding Discord's 2,000-character message limit while retaining the deployment marker.",
+    "Added a channel fetch fallback when the ticket transcript channel is missing from cache.",
+    "Added a transcript embed fallback when an attachment upload fails.",
+    "Added clearer diagnostic warnings for unavailable log and update channels.",
+    "Updated the /panel and DM support notice to explain private DM-based ticket handling."
   ],
-  "removed": [
-    "Removed the advertisement from inside the Partnership Acceptance embed."
-  ]
+  "removed": []
 }
