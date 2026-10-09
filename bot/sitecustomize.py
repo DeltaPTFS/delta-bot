@@ -17,8 +17,8 @@ GREY_R_MENTION = "<@1263248306264608871>"
 RAY_C_MENTION = "<@874702650845843466>"
 
 BASE_SUPPORT_INSTRUCTIONS = (
-    "1. **Claim the ticket** before handling the request.\\n"
-    "2. Use **`/reply`** to respond to the customer through the ticket.\\n"
+    "1. **Claim the ticket** before handling the request.\n"
+    "2. Use **`/reply`** to respond to the customer through the ticket.\n"
     "3. Analyze the customer's request carefully and use the correct command or action."
 )
 
@@ -26,13 +26,13 @@ def support_instructions_for(title: str) -> str:
     if "General Inquir" in title or "General Support" in title:
         return (
             BASE_SUPPORT_INSTRUCTIONS
-            + "\\n4. **SkyMiles sign-ups must be completed on the website.**"
-            + f"\\n5. If the SkyMiles website is down, ping {GREY_R_MENTION}."
+            + "\n4. **SkyMiles sign-ups must be completed on the website.**"
+            + f"\n5. If the SkyMiles website is down, ping {GREY_R_MENTION}."
         )
     if "Partner Request" in title or "Partnership" in title:
         return (
             BASE_SUPPORT_INSTRUCTIONS
-            + f"\\n4. For **partnership requests**, ping {GREY_R_MENTION} and {RAY_C_MENTION}."
+            + f"\n4. For **partnership requests**, ping {GREY_R_MENTION} and {RAY_C_MENTION}."
         )
     return BASE_SUPPORT_INSTRUCTIONS
 
