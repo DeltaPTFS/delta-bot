@@ -366,7 +366,8 @@ else:
                 title = embed.title or ""
                 description = embed.description or ""
                 ticket_related = title.startswith("Ticket") or "**Ticket" in description or "ticket" in description.casefold()
-                if not ticket_related:
+                release_update = "Delta HelpDesk — Update" in title or "HelpDesk Version" in title or "Deployment ID:" in description
+                if not ticket_related and not release_update:
                     return None
 
             result = await _previous_channel_send(self, *args, **kwargs)
