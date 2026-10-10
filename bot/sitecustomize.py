@@ -239,8 +239,8 @@ else:
         if not isinstance(channel, discord.TextChannel) or not isinstance(member, discord.Member):
             await _reply_once(interaction, f"Use `{source}` inside a ticket channel.")
             return
-        if not _is_staff_or_admin(member):
-            await _reply_once(interaction, "Only Delta support staff or admins can claim tickets.")
+        if not _member_has_role(member, STAFF_ROLE_ID):
+            await _reply_once(interaction, "Only authorized Delta support staff can claim tickets.")
             return
 
         lock = CLAIM_LOCKS.setdefault(channel.id, asyncio.Lock())
@@ -433,56 +433,23 @@ else:
         _original_tree_sync = app_commands.CommandTree.sync
 
         @app_commands.command(name="close", description="Close the current support ticket.")
-        @app_commands.describe(reason="Reason for closing the ticket.")
-        async def _delta_close_command(
-            interaction: discord.Interaction,
-            reason: str = "Closed by staff command.",
-        ) -> None:
+        async def _delta_close_command(interaction: discord.Interaction) -> None:
             channel = interaction.channel
             member = interaction.user
             if not isinstance(channel, discord.TextChannel) or not isinstance(member, discord.Member):
                 await interaction.response.send_message("Use `/close` inside a ticket channel.", ephemeral=True)
                 return
-            if not _is_staff_or_admin(member):
-                await interaction.response.send_message("Only Delta support staff or admins can close tickets.", ephemeral=True)
+            if not _member_has_role(member, STAFF_ROLE_ID):
+                await interaction.response.send_message("Only authorized Delta support staff can close tickets.", ephemeral=True)
                 return
             if not _is_ticket_channel(channel):
-                await interaction.response.send_message(
-                    "This command can only be used inside a customer ticket channel.",
-                    ephemeral=True,
-                )
+                await interaction.response.send_message("This command is only available inside a customer ticket.", ephemeral=True)
                 return
-
-            await interaction.response.send_message(
-                f"Closing this ticket in **5 seconds**. Reason: {reason}",
-                ephemeral=True,
+            # Reuse the exact modal and closure workflow used by the Close Ticket button.
+            import main as helpdesk_main
+            await interaction.response.send_modal(
+                helpdesk_main.CloseReasonModal(channel, member, private_response=True)
             )
-            await channel.send(
-                embed=_activity_embed(
-                    title="Ticket Command Activity",
-                    description=(
-                        "**Command:** `/close`\n"
-                        f"**Used By:** {member.mention} (`{member.id}`)\n"
-                        f"**Reason:** {reason}"
-                    ),
-                    color=DELTA_RED,
-                )
-            )
-            await channel.send(
-                embed=_activity_embed(
-                    title="Ticket Closing",
-                    description=(
-                        "This ticket has been marked as **closed** and will be deleted in **5 seconds**.\n\n"
-                        f"**Reason:** {reason}"
-                    ),
-                    color=DELTA_RED,
-                )
-            )
-            await asyncio.sleep(5)
-            try:
-                await channel.delete(reason=f"Ticket closed by {member}: {reason}")
-            except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
-                log.warning("Could not delete ticket %s with /close: %s", channel.id, exc)
 
         @app_commands.command(name="claim", description="Claim the current support ticket.")
         async def _delta_claim_command(interaction: discord.Interaction) -> None:

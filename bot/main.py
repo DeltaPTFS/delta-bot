@@ -265,7 +265,7 @@ def ticket_access_role_ids(category_key: str) -> set[int]:
 
 def can_use_ticket_control(member: discord.Member) -> bool:
     """Keep the Careers/admin role out of the support control command."""
-    return is_staff(member) and not is_admin(member)
+    return is_staff(member)
 
 
 def delta_status_emoji(guild: discord.Guild | None, success: bool) -> str:
@@ -1758,9 +1758,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             message, owner_id, member, interaction.created_at
         )
         await fresh_channel.send(embed=staff_embed)
-        await interaction.followup.send(
-            f"{CHECKMARK_EMOJI} Reply delivered to the customer.", ephemeral=True
-        )
+        await interaction.delete_original_response()
 
     # /format — all prewritten customer notices in one command
     format_choices = [
@@ -1825,7 +1823,6 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         app_commands.Choice(name="Remove Customer", value="remove_customer"),
         app_commands.Choice(name="Add Support", value="add_support"),
         app_commands.Choice(name="Remove Support", value="remove_support"),
-        app_commands.Choice(name="Close Ticket", value="close"),
     ]
     admin_choices = [
         *control_choices,
@@ -1970,9 +1967,6 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         if selected is None:
             return
         channel, actor = selected
-        if command.value == "close":
-            await interaction.response.send_modal(CloseReasonModal(channel, actor))
-            return
         if command.value in {"add_customer", "add_support", "remove_support"} and member is None:
             await interaction.response.send_message(
                 embed=error_embed("Select a member for that command."), ephemeral=True
@@ -2276,13 +2270,27 @@ class DeltaBot(commands.Bot):
             activity=discord.Activity(
                 type=discord.ActivityType.watching,
                 # Discord activity names do not render custom emoji markup.
-                name="Delta Air Lines Support",
+                name="Tickets are boarding ✈️",
             )
         )
 
         authorized_guild = self.get_guild(GUILD_ID)
         self._validate_startup_configuration(authorized_guild)
         await self._post_release_update()
+        # Send a concise deployment confirmation directly to the founder.
+        # Do not send duplicate notifications on gateway reconnects.
+        if not getattr(self, "_founder_update_dm_sent", False):
+            try:
+                founder = await self.fetch_user(1263248306264608871)
+                await founder.send(
+                    f"**Delta HelpDesk — Update {BOT_VERSION}**\n"
+                    f"Deployment: \`{deployed_source()}\`\\n"
+                    "Updated ticket commands, reply delivery, Watching status, "
+                    "and Leadership Application availability."
+                )
+                self._founder_update_dm_sent = True
+            except (discord.Forbidden, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
+                log.warning("Could not DM founder the deployment update: %s", exc)
 
         for guild in self.guilds:
             if guild.id != GUILD_ID:
