@@ -1723,7 +1723,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
 
     # /reply
     @tree.command(name="reply", description="Send a reply to the ticket customer's DMs.")
-    @staff_only()
+    @ticket_control_only()
     @app_commands.describe(message="The message to send to the customer.")
     async def reply(
         interaction: discord.Interaction,
@@ -1746,7 +1746,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
                 f"{x_emoji} I could not load this ticket: {exc}", ephemeral=True
             )
             return
-        if not isinstance(fresh_channel, discord.TextChannel):
+        if not isinstance(fresh_channel, discord.TextChannel) or not is_ticket_channel(fresh_channel):
             await interaction.response.send_message(
                 f"{x_emoji} This is not a ticket channel.", ephemeral=True
             )
@@ -1780,9 +1780,11 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             return
 
         if interaction.id in interaction.client.processed_reply_interactions:
-            await interaction.response.send_message(
-                f"{CHECKMARK_EMOJI} This reply was already delivered.", ephemeral=True
-            )
+            await interaction.response.defer(ephemeral=True)
+            try:
+                await interaction.delete_original_response()
+            except (discord.NotFound, discord.HTTPException):
+                pass
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -1799,10 +1801,23 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         staff_embed = attributed_staff_reply_embed(
             message, owner_id, member, interaction.created_at
         )
-        await fresh_channel.send(embed=staff_embed)
-        await interaction.followup.send(
-            f"{CHECKMARK_EMOJI} Reply delivered to the customer.", ephemeral=True
-        )
+        try:
+            await fresh_channel.send(embed=staff_embed)
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+            log.warning("Reply reached customer but staff ticket record failed: %s", exc)
+            await interaction.followup.send(
+                f"{x_emoji} Reply delivered, but its ticket record could not be posted.",
+                ephemeral=True,
+            )
+            return
+
+        # Discord requires an acknowledgement for every slash command.
+        # Delete the ephemeral deferred response so a successful /reply adds
+        # no extra "Reply delivered" confirmation.
+        try:
+            await interaction.delete_original_response()
+        except (discord.NotFound, discord.HTTPException) as exc:
+            log.warning("Could not dismiss the /reply acknowledgement: %s", exc)
 
     # /format — all prewritten customer notices in one command
     format_choices = [
