@@ -145,6 +145,9 @@ else:
         if admin_override and not _is_admin(actor):
             await _reply_once(interaction, "Only Founders can use `/msg config admin`.")
             return
+        if not admin_override and not _has_role(actor, STAFF_ROLE_ID):
+            await _reply_once(interaction, "Only members with the Delta Support role can manage ticket replies.")
+            return
         author_id = None if admin_override else actor.id
         if target_member is not None:
             author_id = target_member.id
@@ -259,8 +262,8 @@ else:
             if not isinstance(channel, discord.TextChannel) or not isinstance(actor, discord.Member) or not _is_ticket_channel(channel):
                 await _reply_once(interaction, "Use `/ping` inside a ticket channel.")
                 return
-            if not _is_staff_or_admin(actor):
-                await _reply_once(interaction, "Only support staff or Founders can ping a ticket customer.")
+            if not _has_role(actor, STAFF_ROLE_ID):
+                await _reply_once(interaction, "Only members with the Delta Support role can ping ticket customers.")
                 return
             owner_id = _ticket_owner_id(channel)
             if owner_id is None:
