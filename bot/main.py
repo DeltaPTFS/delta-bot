@@ -1967,7 +1967,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         if selected is None:
             return
         channel, actor = selected
-                if command.value in {"add_customer", "add_support", "remove_support"} and member is None:
+        if command.value in {"add_customer", "add_support", "remove_support"} and member is None:
             await interaction.response.send_message(
                 embed=error_embed("Select a member for that command."), ephemeral=True
             )
