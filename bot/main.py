@@ -1157,16 +1157,11 @@ class TicketActionView(discord.ui.View):
             self.claim_ticket.style = discord.ButtonStyle.secondary
 
     # ── Claim / Unclaim ────────────────────────────────────────────────────────────
-    @discord.ui.button(
-        label="Claim Ticket",
-        emoji=SUPPORT_EMOJI,
-        style=discord.ButtonStyle.primary,
-        custom_id="delta:claim_ticket",
-    )
-    async def claim_ticket(
+    async def _claim_ticket_action(
         self,
         interaction: discord.Interaction,
-        button: discord.ui.Button,
+        *,
+        allow_unclaim: bool,
     ) -> None:
         member = interaction.user
         channel = interaction.channel
@@ -1201,7 +1196,7 @@ class TicketActionView(discord.ui.View):
                     ephemeral=True,
                 )
                 return
-            if not isinstance(fresh_channel, discord.TextChannel):
+            if not isinstance(fresh_channel, discord.TextChannel) or not is_ticket_channel(fresh_channel):
                 await interaction.followup.send(
                     embed=error_embed("This is no longer a valid ticket channel."),
                     ephemeral=True,
@@ -1210,6 +1205,12 @@ class TicketActionView(discord.ui.View):
 
             topic = fresh_channel.topic or ""
             owner_id = get_topic_value(topic, DM_TICKET_OWNER_MARKER)
+            if not allow_unclaim and get_topic_value(topic, DM_TICKET_CLAIM_MARKER) == str(member.id):
+                await interaction.followup.send(
+                    embed=error_embed("You have already claimed this ticket."),
+                    ephemeral=True,
+                )
+                return
             try:
                 new_topic, unclaiming = toggle_ticket_claim(topic, member.id)
             except ValueError as exc:
@@ -1275,6 +1276,19 @@ class TicketActionView(discord.ui.View):
             await interaction.message.edit(view=TicketActionView(claimed=not unclaiming))
         if unclaiming:
             await notify_ticket_owner(interaction.client, owner_id, owner_title, owner_message)
+
+    @discord.ui.button(
+        label="Claim Ticket",
+        emoji=SUPPORT_EMOJI,
+        style=discord.ButtonStyle.primary,
+        custom_id="delta:claim_ticket",
+    )
+    async def claim_ticket(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ) -> None:
+        await self._claim_ticket_action(interaction, allow_unclaim=True)
 
     # ── Close ──────────────────────────────────────────────────────────────────────
     @discord.ui.button(
@@ -1678,6 +1692,33 @@ def register_commands(tree: app_commands.CommandTree) -> None:
                 ),
             ),
             ephemeral=True,
+        )
+
+    @tree.command(name="claim", description="Claim the current support ticket.")
+    @ticket_control_only()
+    async def claim(interaction: discord.Interaction) -> None:
+        # Shared claim lock and audit behavior with the Claim Ticket button.
+        # Unlike the button, /claim never unclaims an existing ticket.
+        await TicketActionView()._claim_ticket_action(interaction, allow_unclaim=False)
+
+    @tree.command(name="close", description="Close the current ticket with a reason.")
+    @ticket_control_only()
+    async def close(interaction: discord.Interaction) -> None:
+        channel = interaction.channel
+        member = interaction.user
+        if (
+            not isinstance(channel, discord.TextChannel)
+            or not isinstance(member, discord.Member)
+            or not is_ticket_channel(channel)
+        ):
+            await interaction.response.send_message(
+                embed=error_embed("Use `/close` inside an active support ticket."),
+                ephemeral=True,
+            )
+            return
+        # This invokes the identical reason modal as the Close Ticket button.
+        await interaction.response.send_modal(
+            CloseReasonModal(channel, member, private_response=True)
         )
 
     # /reply
