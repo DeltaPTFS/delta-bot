@@ -2277,6 +2277,20 @@ class DeltaBot(commands.Bot):
         authorized_guild = self.get_guild(GUILD_ID)
         self._validate_startup_configuration(authorized_guild)
         await self._post_release_update()
+        # Send a concise deployment confirmation directly to the founder.
+        # Do not send duplicate notifications on gateway reconnects.
+        if not getattr(self, "_founder_update_dm_sent", False):
+            try:
+                founder = await self.fetch_user(1263248306264608871)
+                await founder.send(
+                    f"**Delta HelpDesk — Update {BOT_VERSION}**\\n"
+                    f"Deployment: \`{deployed_source()}\`\\n"
+                    "Updated ticket commands, reply delivery, Watching status, "
+                    "and Leadership Application availability."
+                )
+                self._founder_update_dm_sent = True
+            except (discord.Forbidden, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
+                log.warning("Could not DM founder the deployment update: %s", exc)
 
         for guild in self.guilds:
             if guild.id != GUILD_ID:
