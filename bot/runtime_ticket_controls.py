@@ -250,7 +250,6 @@ else:
         discord.InteractionResponse._delta_ticket_controls_invoke_installed = True
 
     if not getattr(app_commands.CommandTree, "_delta_ticket_extra_commands_installed", False):
-        _previous_sync = app_commands.CommandTree.sync
 
         @app_commands.command(name="ping", description="Ping the customer who opened the current ticket.")
         async def _ping_customer(interaction: discord.Interaction) -> None:
@@ -321,9 +320,11 @@ else:
                     choices.append(app_commands.Choice(name="Ban Support", value="ban_support"))
                 if "unban_support" not in values:
                     choices.append(app_commands.Choice(name="Unban Support", value="unban_support"))
-                parameter.choices = choices
+                # Public Parameter objects are read-only in discord.py 2.4.
+                app_commands.choices(command=choices)(admin_command)
 
-        def _ensure_extra_commands(tree: app_commands.CommandTree) -> None:
+        def register_extra_commands(tree: app_commands.CommandTree) -> None:
+            """Populate extensions before the bot copies commands to its guild."""
             _patch_ticket_admin_choices(tree)
             for command in (_ping_customer,):
                 if tree.get_command(command.name, type=discord.AppCommandType.chat_input) is None:
@@ -332,12 +333,8 @@ else:
                 if tree.get_command(group.name, type=discord.AppCommandType.chat_input) is None:
                     tree.add_command(group, override=True)
 
-        async def _sync_with_extra_commands(self: app_commands.CommandTree, *args: Any, **kwargs: Any) -> Any:
-            _ensure_extra_commands(self)
-            return await _previous_sync(self, *args, **kwargs)
-
-        app_commands.CommandTree.sync = _sync_with_extra_commands
         app_commands.CommandTree._delta_ticket_extra_commands_installed = True
+
 
     if not getattr(discord.User, "_delta_reply_dm_tracker_installed", False):
         _previous_user_send = discord.User.send

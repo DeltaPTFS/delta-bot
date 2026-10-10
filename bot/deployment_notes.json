@@ -1,12 +1,13 @@
 {
-  "title": "HelpDesk 2.6.8 — Release Announcements",
-  "summary": "Improved update delivery and included a recap of earlier versions.",
+  "title": "HelpDesk 3.0.1 — Ticket Commands & Update Delivery",
+  "summary": "Standalone ticket commands now sync to the Delta server, and deployment announcements can send again.",
   "added": [
-    "Previous version history in release announcements."
+    "Server-synced /claim, /unclaim, and /close commands using the existing ticket workflow."
   ],
   "changed": [
-    "Continue sending release updates even when Discord channel history cannot be read.",
-    "Report when a channel filter suppresses an announcement."
+    "Register ticket extensions before copying commands to the server and keep global commands cleared.",
+    "Fix the presence error that stopped startup before posting the update message.",
+    "Keep update delivery running if the presence change fails and open close-reason forms before audit logging."
   ],
   "removed": [],
   "history": [

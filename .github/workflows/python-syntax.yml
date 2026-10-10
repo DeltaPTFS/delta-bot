@@ -25,3 +25,5 @@ jobs:
         run: python scripts/validate_bot_sources.py
       - name: Validate reply presentation
         run: python scripts/test_reply_embeds.py
+      - name: Validate ticket commands and startup announcements
+        run: python scripts/test_ticket_startup.py

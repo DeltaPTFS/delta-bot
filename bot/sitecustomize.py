@@ -243,6 +243,10 @@ else:
             await _reply_once(interaction, "Only authorized Delta support staff can claim tickets.")
             return
 
+        # Acknowledge before waiting for another claim or Discord's channel API.
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+
         lock = CLAIM_LOCKS.setdefault(channel.id, asyncio.Lock())
         async with lock:
             try:
@@ -250,7 +254,13 @@ else:
             except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
                 await _reply_once(interaction, f"I could not refresh this ticket: {exc}")
                 return
-            if not isinstance(fresh_channel, discord.TextChannel) or not _is_ticket_channel(fresh_channel):
+            from config import GUILD_ID, TICKET_CATEGORY_ID
+            if (
+                not isinstance(fresh_channel, discord.TextChannel)
+                or fresh_channel.guild.id != GUILD_ID
+                or fresh_channel.category_id != TICKET_CATEGORY_ID
+                or not _is_ticket_channel(fresh_channel)
+            ):
                 await _reply_once(interaction, "This command can only be used inside a customer ticket channel.")
                 return
 
@@ -382,7 +392,9 @@ else:
             if interaction.response.is_done():
                 return
             selected_command = getattr(getattr(namespace, "command", None), "value", None)
-            if command_name in {"ticket control", "ticket admin"} and selected_command == "close":
+            if command_name == "close" or (
+                command_name in {"ticket control", "ticket admin"} and selected_command == "close"
+            ):
                 return
             try:
                 await interaction.response.defer(ephemeral=True)
@@ -412,11 +424,6 @@ else:
             if await _block_invalid_ticket_admin_claims(interaction, command_name, namespace):
                 return None
 
-            try:
-                await _log_slash_command(interaction, command_name, namespace)
-            except Exception as exc:  # pragma: no cover - logging must not break commands
-                log.warning("Could not log slash command %s: %s", command_name, exc)
-
             watchdog = asyncio.create_task(
                 _auto_defer_if_still_pending(interaction, command_name, namespace)
             )
@@ -424,62 +431,15 @@ else:
                 return await _original_command_invoke(self, interaction, namespace)
             finally:
                 watchdog.cancel()
+                # Modal commands must respond before potentially slow audit I/O.
+                try:
+                    await _log_slash_command(interaction, command_name, namespace)
+                except Exception as exc:  # pragma: no cover - logging must not break commands
+                    log.warning("Could not log slash command %s: %s", command_name, exc)
 
         discord.InteractionResponse.send_message = _send_message_or_followup
         app_commands.Command._invoke_with_namespace = _invoke_with_auto_defer
         discord.InteractionResponse._delta_auto_ack_installed = True
-
-    if not getattr(app_commands.CommandTree, "_delta_ticket_command_patch_installed", False):
-        _original_tree_sync = app_commands.CommandTree.sync
-
-        @app_commands.command(name="close", description="Close the current support ticket.")
-        async def _delta_close_command(interaction: discord.Interaction) -> None:
-            channel = interaction.channel
-            member = interaction.user
-            if not isinstance(channel, discord.TextChannel) or not isinstance(member, discord.Member):
-                await interaction.response.send_message("Use `/close` inside a ticket channel.", ephemeral=True)
-                return
-            if not _member_has_role(member, STAFF_ROLE_ID):
-                await interaction.response.send_message("Only authorized Delta support staff can close tickets.", ephemeral=True)
-                return
-            if not _is_ticket_channel(channel):
-                await interaction.response.send_message("This command is only available inside a customer ticket.", ephemeral=True)
-                return
-            # Reuse the exact modal and closure workflow used by the Close Ticket button.
-            import main as helpdesk_main
-            await interaction.response.send_modal(
-                helpdesk_main.CloseReasonModal(channel, member, private_response=True)
-            )
-
-        @app_commands.command(name="claim", description="Claim the current support ticket.")
-        async def _delta_claim_command(interaction: discord.Interaction) -> None:
-            await _run_claim_action(interaction, source="/claim")
-
-        @app_commands.command(name="unclaim", description="Unclaim the current support ticket.")
-        async def _delta_unclaim_command(interaction: discord.Interaction) -> None:
-            await _run_claim_action(interaction, unclaim=True, source="/unclaim")
-
-        def _remove_standalone_removed_commands(tree: app_commands.CommandTree) -> None:
-            for command_name in REMOVED_ROOT_COMMANDS:
-                tree.remove_command(command_name, type=discord.AppCommandType.chat_input)
-
-        def _ensure_ticket_commands(tree: app_commands.CommandTree) -> None:
-            _remove_standalone_removed_commands(tree)
-            for command in (_delta_close_command, _delta_claim_command, _delta_unclaim_command):
-                existing = tree.get_command(command.name, type=discord.AppCommandType.chat_input)
-                if existing is None:
-                    tree.add_command(command, override=True)
-
-        async def _sync_with_ticket_commands(
-            self: app_commands.CommandTree,
-            *args: Any,
-            **kwargs: Any,
-        ) -> Any:
-            _ensure_ticket_commands(self)
-            return await _original_tree_sync(self, *args, **kwargs)
-
-        app_commands.CommandTree.sync = _sync_with_ticket_commands
-        app_commands.CommandTree._delta_ticket_command_patch_installed = True
 
     if not getattr(discord.ui.View, "_delta_claim_guard_installed", False):
         _original_view_scheduled_task = discord.ui.View._scheduled_task

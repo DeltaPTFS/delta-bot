@@ -31,6 +31,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Load interaction helpers explicitly; Python does not discover this local
+# sitecustomize module automatically in every hosting/test startup mode.
+import sitecustomize
+
 from config import (
     ADMIN_ROLE_ID,
     BLUE_ARROW_EMOJI,
@@ -1595,6 +1599,8 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         "hr",
         "leadership",
         "close",
+        "claim",
+        "unclaim",
         "reply",
         "connected",
         "unavailable",
@@ -1608,6 +1614,35 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         "economy",
     ):
         tree.remove_command(command_name, type=discord.AppCommandType.chat_input)
+
+    @tree.command(name="claim", description="Claim the current support ticket.")
+    @ticket_control_only()
+    async def claim(interaction: discord.Interaction) -> None:
+        await sitecustomize._run_claim_action(interaction, source="/claim")
+
+    @tree.command(name="unclaim", description="Release your claim on the current support ticket.")
+    @ticket_control_only()
+    async def unclaim(interaction: discord.Interaction) -> None:
+        await sitecustomize._run_claim_action(interaction, unclaim=True, source="/unclaim")
+
+    @tree.command(name="close", description="Close the current support ticket.")
+    @ticket_control_only()
+    async def close(interaction: discord.Interaction) -> None:
+        channel = interaction.channel
+        member = interaction.user
+        if (
+            not isinstance(channel, discord.TextChannel)
+            or not isinstance(member, discord.Member)
+            or not is_ticket_channel(channel)
+        ):
+            await interaction.response.send_message(
+                embed=error_embed("Use `/close` inside a customer ticket channel."),
+                ephemeral=True,
+            )
+            return
+        await interaction.response.send_modal(
+            CloseReasonModal(channel, member, private_response=True)
+        )
 
     @tree.command(
         name="panel",
@@ -2214,6 +2249,9 @@ class DeltaBot(commands.Bot):
         self.add_view(TicketActionView())
         self.add_view(ServerAssistancePanelView(self))
         register_commands(self.tree)
+        # Extensions must be registered before copy_global_to, not during sync.
+        import runtime_ticket_controls
+        runtime_ticket_controls.register_extra_commands(self.tree)
         await self._sync_application_commands()
 
     async def _sync_application_commands(self) -> None:
@@ -2266,13 +2304,16 @@ class DeltaBot(commands.Bot):
             deployed_source(),
             hosting_environment(),
         )
-        await self.change_presence(
-            activity=discord.Activity(
-                type=discord.ActivityType.watching,
-                # Discord activity names do not render custom emoji markup.
-                name="Tickets are boarding ✈️",
+        try:
+            await self.change_presence(
+                activity=discord.Activity(
+                    type=discord.ActivityType.watching,
+                    # Discord activity names do not render custom emoji markup.
+                    name="Tickets are boarding ✈️",
+                )
             )
-        )
+        except (discord.HTTPException, aiohttp.ClientError, OSError, TypeError) as exc:
+            log.warning("Could not set bot presence; continuing update delivery: %s", exc)
 
         authorized_guild = self.get_guild(GUILD_ID)
         self._validate_startup_configuration(authorized_guild)
@@ -2284,7 +2325,7 @@ class DeltaBot(commands.Bot):
                 founder = await self.fetch_user(1263248306264608871)
                 await founder.send(
                     f"**Delta HelpDesk — Update {BOT_VERSION}**\n"
-                    f"Deployment: \`{deployed_source()}\`\\n"
+                    f"Deployment: `{deployed_source()}`\n"
                     "Updated ticket commands, reply delivery, Watching status, "
                     "and Leadership Application availability."
                 )

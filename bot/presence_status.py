@@ -26,7 +26,6 @@ else:
             *,
             activity: Any = None,
             status: discord.Status | None = None,
-            shard_id: int | None = None,
         ) -> Any:
             if (
                 isinstance(activity, discord.Activity)
@@ -41,7 +40,6 @@ else:
                 self,
                 activity=activity,
                 status=status,
-                shard_id=shard_id,
             )
 
         discord.Client.change_presence = _change_presence_with_delta_status
