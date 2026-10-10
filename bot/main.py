@@ -1887,6 +1887,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
     ]
     admin_choices = [
         *control_choices,
+        app_commands.Choice(name="Close Ticket", value="close"),
         app_commands.Choice(name="Claim for Support", value="claim"),
         app_commands.Choice(name="Unclaim Ticket", value="unclaim"),
         app_commands.Choice(name="Punish Member", value="punish"),
