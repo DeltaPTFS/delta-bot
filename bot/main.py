@@ -265,7 +265,7 @@ def ticket_access_role_ids(category_key: str) -> set[int]:
 
 def can_use_ticket_control(member: discord.Member) -> bool:
     """Keep the Careers/admin role out of the support control command."""
-    return is_staff(member) and not is_admin(member)
+    return is_staff(member)
 
 
 def delta_status_emoji(guild: discord.Guild | None, success: bool) -> str:
@@ -1758,9 +1758,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             message, owner_id, member, interaction.created_at
         )
         await fresh_channel.send(embed=staff_embed)
-        await interaction.followup.send(
-            f"{CHECKMARK_EMOJI} Reply delivered to the customer.", ephemeral=True
-        )
+        await interaction.followup.send("\u200b", ephemeral=True)
 
     # /format — all prewritten customer notices in one command
     format_choices = [
@@ -1970,10 +1968,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         if selected is None:
             return
         channel, actor = selected
-        if command.value == "close":
-            await interaction.response.send_modal(CloseReasonModal(channel, actor))
-            return
-        if command.value in {"add_customer", "add_support", "remove_support"} and member is None:
+                if command.value in {"add_customer", "add_support", "remove_support"} and member is None:
             await interaction.response.send_message(
                 embed=error_embed("Select a member for that command."), ephemeral=True
             )
@@ -2276,7 +2271,7 @@ class DeltaBot(commands.Bot):
             activity=discord.Activity(
                 type=discord.ActivityType.watching,
                 # Discord activity names do not render custom emoji markup.
-                name="Delta Air Lines Support",
+                name="Tickets are boarding ✈️",
             )
         )
 
