@@ -50,6 +50,8 @@ from config import (
     INVITE_URL,
     LOUNGE_CHANNEL_ID,
     MAILING_ADDRESS,
+    OWNER_UPDATE_USER_ID,
+    WATCHING_ACTIVITY_TEXT,
     MESSAGE_EMOJI,
     RATING_TIMEOUT,
     RIGHT_ARROW_EMOJI,
@@ -265,7 +267,7 @@ def ticket_access_role_ids(category_key: str) -> set[int]:
 
 def can_use_ticket_control(member: discord.Member) -> bool:
     """Keep the Careers/admin role out of the support control command."""
-    return is_staff(member) and not is_admin(member)
+    return is_staff(member)
 
 
 def delta_status_emoji(guild: discord.Guild | None, success: bool) -> str:
@@ -612,7 +614,7 @@ async def create_dm_ticket_channel(
 
 
 def can_close_ticket(member: discord.Member, channel: discord.TextChannel) -> bool:
-    return is_staff(member) or is_admin(member) or get_ticket_owner_id(channel) == member.id
+    return is_staff(member) and is_ticket_channel(channel)
 
 
 async def notify_ticket_owner(
@@ -675,8 +677,6 @@ async def relay_customer_message(message: discord.Message, channel: discord.Text
             if prior.description == embed.description and prior.timestamp == embed.timestamp:
                 return False
         await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-        if followup:
-            await channel.send(followup, allowed_mentions=discord.AllowedMentions.none())
 
     # A reaction is only an acknowledgement. If Discord rate-limits or rejects
     # it, the already-delivered support message must not be treated as failed and
@@ -1595,6 +1595,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         "hr",
         "leadership",
         "close",
+        "claim",
         "reply",
         "connected",
         "unavailable",
@@ -1772,7 +1773,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         name="format",
         description="Send a prewritten Delta support notice to this ticket's customer.",
     )
-    @staff_only()
+    @ticket_control_only()
     @app_commands.describe(format="The notice format to send.")
     @app_commands.choices(format=format_choices)
     async def format_notice(
@@ -1816,6 +1817,8 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             ephemeral=True,
         )
         await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        if followup:
+            await channel.send(followup, allowed_mentions=discord.AllowedMentions.none())
 
     # /ticket control and /ticket admin — consolidated ticket operations
     ticket_group = app_commands.Group(name="ticket", description="Manage support tickets.")
@@ -1825,7 +1828,6 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         app_commands.Choice(name="Remove Customer", value="remove_customer"),
         app_commands.Choice(name="Add Support", value="add_support"),
         app_commands.Choice(name="Remove Support", value="remove_support"),
-        app_commands.Choice(name="Close Ticket", value="close"),
     ]
     admin_choices = [
         *control_choices,
@@ -1958,7 +1960,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         return f"Removed {member.mention} from this ticket."
 
     @ticket_group.command(name="control", description="Run a control action in your claimed ticket.")
-    @staff_only()
+    @ticket_control_only()
     @app_commands.describe(command="The ticket action to run.", member="Customer or support member for this action.")
     @app_commands.choices(command=control_choices)
     async def ticket_control(
@@ -1970,9 +1972,6 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         if selected is None:
             return
         channel, actor = selected
-        if command.value == "close":
-            await interaction.response.send_modal(CloseReasonModal(channel, actor))
-            return
         if command.value in {"add_customer", "add_support", "remove_support"} and member is None:
             await interaction.response.send_message(
                 embed=error_embed("Select a member for that command."), ephemeral=True
@@ -2070,7 +2069,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             return
         channel, actor = selected
         if command.value == "close":
-            await interaction.response.send_modal(CloseReasonModal(channel, actor))
+            await interaction.response.send_modal(CloseReasonModal(channel, actor, private_response=True))
             return
         if command.value in {"add_customer", "add_support", "remove_support", "claim"} and member is None:
             await interaction.response.send_message(
@@ -2150,7 +2149,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
                 message = (
                     "You do not have permission to use this command.\n"
                     "`/ticket control` is restricted to the regular support role; "
-                    "Careers administrators must use `/ticket admin`."
+                    "Only members with the Delta Support role can use ticket controls."
                 )
             else:
                 message = (
