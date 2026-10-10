@@ -831,7 +831,7 @@ async def open_dm_ticket(
         )
     embed.add_field(
         name="Support Instructions",
-        value="\\n".join(instructions),
+        value="\n".join(instructions),
         inline=False,
     )
     _set_brand_image(embed, DIVIDER_URL)
