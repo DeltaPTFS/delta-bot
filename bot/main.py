@@ -2283,7 +2283,7 @@ class DeltaBot(commands.Bot):
             try:
                 founder = await self.fetch_user(1263248306264608871)
                 await founder.send(
-                    f"**Delta HelpDesk — Update {BOT_VERSION}**\\n"
+                    f"**Delta HelpDesk — Update {BOT_VERSION}**\n"
                     f"Deployment: \`{deployed_source()}\`\\n"
                     "Updated ticket commands, reply delivery, Watching status, "
                     "and Leadership Application availability."
