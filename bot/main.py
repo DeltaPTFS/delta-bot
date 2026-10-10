@@ -1758,7 +1758,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             message, owner_id, member, interaction.created_at
         )
         await fresh_channel.send(embed=staff_embed)
-        await interaction.followup.send("\u200b", ephemeral=True)
+        await interaction.delete_original_response()
 
     # /format — all prewritten customer notices in one command
     format_choices = [
@@ -1823,7 +1823,6 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         app_commands.Choice(name="Remove Customer", value="remove_customer"),
         app_commands.Choice(name="Add Support", value="add_support"),
         app_commands.Choice(name="Remove Support", value="remove_support"),
-        app_commands.Choice(name="Close Ticket", value="close"),
     ]
     admin_choices = [
         *control_choices,
