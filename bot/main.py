@@ -50,6 +50,8 @@ from config import (
     INVITE_URL,
     LOUNGE_CHANNEL_ID,
     MAILING_ADDRESS,
+    OWNER_UPDATE_USER_ID,
+    WATCHING_ACTIVITY_TEXT,
     MESSAGE_EMOJI,
     RATING_TIMEOUT,
     RIGHT_ARROW_EMOJI,
@@ -265,7 +267,7 @@ def ticket_access_role_ids(category_key: str) -> set[int]:
 
 def can_use_ticket_control(member: discord.Member) -> bool:
     """Keep the Careers/admin role out of the support control command."""
-    return is_staff(member) and not is_admin(member)
+    return is_staff(member)
 
 
 def delta_status_emoji(guild: discord.Guild | None, success: bool) -> str:
@@ -612,7 +614,7 @@ async def create_dm_ticket_channel(
 
 
 def can_close_ticket(member: discord.Member, channel: discord.TextChannel) -> bool:
-    return is_staff(member) or is_admin(member) or get_ticket_owner_id(channel) == member.id
+    return is_staff(member) and is_ticket_channel(channel)
 
 
 async def notify_ticket_owner(
@@ -675,8 +677,6 @@ async def relay_customer_message(message: discord.Message, channel: discord.Text
             if prior.description == embed.description and prior.timestamp == embed.timestamp:
                 return False
         await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-        if followup:
-            await channel.send(followup, allowed_mentions=discord.AllowedMentions.none())
 
     # A reaction is only an acknowledgement. If Discord rate-limits or rejects
     # it, the already-delivered support message must not be treated as failed and
@@ -1157,16 +1157,11 @@ class TicketActionView(discord.ui.View):
             self.claim_ticket.style = discord.ButtonStyle.secondary
 
     # ── Claim / Unclaim ────────────────────────────────────────────────────────────
-    @discord.ui.button(
-        label="Claim Ticket",
-        emoji=SUPPORT_EMOJI,
-        style=discord.ButtonStyle.primary,
-        custom_id="delta:claim_ticket",
-    )
-    async def claim_ticket(
+    async def _claim_ticket_action(
         self,
         interaction: discord.Interaction,
-        button: discord.ui.Button,
+        *,
+        allow_unclaim: bool,
     ) -> None:
         member = interaction.user
         channel = interaction.channel
@@ -1201,7 +1196,7 @@ class TicketActionView(discord.ui.View):
                     ephemeral=True,
                 )
                 return
-            if not isinstance(fresh_channel, discord.TextChannel):
+            if not isinstance(fresh_channel, discord.TextChannel) or not is_ticket_channel(fresh_channel):
                 await interaction.followup.send(
                     embed=error_embed("This is no longer a valid ticket channel."),
                     ephemeral=True,
@@ -1210,6 +1205,12 @@ class TicketActionView(discord.ui.View):
 
             topic = fresh_channel.topic or ""
             owner_id = get_topic_value(topic, DM_TICKET_OWNER_MARKER)
+            if not allow_unclaim and get_topic_value(topic, DM_TICKET_CLAIM_MARKER) == str(member.id):
+                await interaction.followup.send(
+                    embed=error_embed("You have already claimed this ticket."),
+                    ephemeral=True,
+                )
+                return
             try:
                 new_topic, unclaiming = toggle_ticket_claim(topic, member.id)
             except ValueError as exc:
@@ -1275,6 +1276,19 @@ class TicketActionView(discord.ui.View):
             await interaction.message.edit(view=TicketActionView(claimed=not unclaiming))
         if unclaiming:
             await notify_ticket_owner(interaction.client, owner_id, owner_title, owner_message)
+
+    @discord.ui.button(
+        label="Claim Ticket",
+        emoji=SUPPORT_EMOJI,
+        style=discord.ButtonStyle.primary,
+        custom_id="delta:claim_ticket",
+    )
+    async def claim_ticket(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ) -> None:
+        await self._claim_ticket_action(interaction, allow_unclaim=True)
 
     # ── Close ──────────────────────────────────────────────────────────────────────
     @discord.ui.button(
@@ -1595,6 +1609,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         "hr",
         "leadership",
         "close",
+        "claim",
         "reply",
         "connected",
         "unavailable",
@@ -1679,9 +1694,36 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             ephemeral=True,
         )
 
+    @tree.command(name="claim", description="Claim the current support ticket.")
+    @ticket_control_only()
+    async def claim(interaction: discord.Interaction) -> None:
+        # Shared claim lock and audit behavior with the Claim Ticket button.
+        # Unlike the button, /claim never unclaims an existing ticket.
+        await TicketActionView()._claim_ticket_action(interaction, allow_unclaim=False)
+
+    @tree.command(name="close", description="Close the current ticket with a reason.")
+    @ticket_control_only()
+    async def close(interaction: discord.Interaction) -> None:
+        channel = interaction.channel
+        member = interaction.user
+        if (
+            not isinstance(channel, discord.TextChannel)
+            or not isinstance(member, discord.Member)
+            or not is_ticket_channel(channel)
+        ):
+            await interaction.response.send_message(
+                embed=error_embed("Use `/close` inside an active support ticket."),
+                ephemeral=True,
+            )
+            return
+        # This invokes the identical reason modal as the Close Ticket button.
+        await interaction.response.send_modal(
+            CloseReasonModal(channel, member, private_response=True)
+        )
+
     # /reply
     @tree.command(name="reply", description="Send a reply to the ticket customer's DMs.")
-    @staff_only()
+    @ticket_control_only()
     @app_commands.describe(message="The message to send to the customer.")
     async def reply(
         interaction: discord.Interaction,
@@ -1704,7 +1746,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
                 f"{x_emoji} I could not load this ticket: {exc}", ephemeral=True
             )
             return
-        if not isinstance(fresh_channel, discord.TextChannel):
+        if not isinstance(fresh_channel, discord.TextChannel) or not is_ticket_channel(fresh_channel):
             await interaction.response.send_message(
                 f"{x_emoji} This is not a ticket channel.", ephemeral=True
             )
@@ -1738,9 +1780,11 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             return
 
         if interaction.id in interaction.client.processed_reply_interactions:
-            await interaction.response.send_message(
-                f"{CHECKMARK_EMOJI} This reply was already delivered.", ephemeral=True
-            )
+            await interaction.response.defer(ephemeral=True)
+            try:
+                await interaction.delete_original_response()
+            except (discord.NotFound, discord.HTTPException):
+                pass
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -1757,10 +1801,23 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         staff_embed = attributed_staff_reply_embed(
             message, owner_id, member, interaction.created_at
         )
-        await fresh_channel.send(embed=staff_embed)
-        await interaction.followup.send(
-            f"{CHECKMARK_EMOJI} Reply delivered to the customer.", ephemeral=True
-        )
+        try:
+            await fresh_channel.send(embed=staff_embed)
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+            log.warning("Reply reached customer but staff ticket record failed: %s", exc)
+            await interaction.followup.send(
+                f"{x_emoji} Reply delivered, but its ticket record could not be posted.",
+                ephemeral=True,
+            )
+            return
+
+        # Discord requires an acknowledgement for every slash command.
+        # Delete the ephemeral deferred response so a successful /reply adds
+        # no extra "Reply delivered" confirmation.
+        try:
+            await interaction.delete_original_response()
+        except (discord.NotFound, discord.HTTPException) as exc:
+            log.warning("Could not dismiss the /reply acknowledgement: %s", exc)
 
     # /format — all prewritten customer notices in one command
     format_choices = [
@@ -1772,7 +1829,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         name="format",
         description="Send a prewritten Delta support notice to this ticket's customer.",
     )
-    @staff_only()
+    @ticket_control_only()
     @app_commands.describe(format="The notice format to send.")
     @app_commands.choices(format=format_choices)
     async def format_notice(
@@ -1816,6 +1873,8 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             ephemeral=True,
         )
         await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        if followup:
+            await channel.send(followup, allowed_mentions=discord.AllowedMentions.none())
 
     # /ticket control and /ticket admin — consolidated ticket operations
     ticket_group = app_commands.Group(name="ticket", description="Manage support tickets.")
@@ -1825,10 +1884,10 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         app_commands.Choice(name="Remove Customer", value="remove_customer"),
         app_commands.Choice(name="Add Support", value="add_support"),
         app_commands.Choice(name="Remove Support", value="remove_support"),
-        app_commands.Choice(name="Close Ticket", value="close"),
     ]
     admin_choices = [
         *control_choices,
+        app_commands.Choice(name="Close Ticket", value="close"),
         app_commands.Choice(name="Claim for Support", value="claim"),
         app_commands.Choice(name="Unclaim Ticket", value="unclaim"),
         app_commands.Choice(name="Punish Member", value="punish"),
@@ -1958,7 +2017,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         return f"Removed {member.mention} from this ticket."
 
     @ticket_group.command(name="control", description="Run a control action in your claimed ticket.")
-    @staff_only()
+    @ticket_control_only()
     @app_commands.describe(command="The ticket action to run.", member="Customer or support member for this action.")
     @app_commands.choices(command=control_choices)
     async def ticket_control(
@@ -1970,9 +2029,6 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         if selected is None:
             return
         channel, actor = selected
-        if command.value == "close":
-            await interaction.response.send_modal(CloseReasonModal(channel, actor))
-            return
         if command.value in {"add_customer", "add_support", "remove_support"} and member is None:
             await interaction.response.send_message(
                 embed=error_embed("Select a member for that command."), ephemeral=True
@@ -2070,7 +2126,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             return
         channel, actor = selected
         if command.value == "close":
-            await interaction.response.send_modal(CloseReasonModal(channel, actor))
+            await interaction.response.send_modal(CloseReasonModal(channel, actor, private_response=True))
             return
         if command.value in {"add_customer", "add_support", "remove_support", "claim"} and member is None:
             await interaction.response.send_message(
@@ -2150,7 +2206,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
                 message = (
                     "You do not have permission to use this command.\n"
                     "`/ticket control` is restricted to the regular support role; "
-                    "Careers administrators must use `/ticket admin`."
+                    "Only members with the Delta Support role can use ticket controls."
                 )
             else:
                 message = (
@@ -2215,6 +2271,7 @@ class DeltaBot(commands.Bot):
         self.processed_dm_messages: set[int] = set()
         self.processed_reply_interactions: set[int] = set()
         self.started_monotonic = time.monotonic()
+        self._release_dm_notified = False
 
     async def setup_hook(self) -> None:
         self.add_view(TicketActionView())
@@ -2272,16 +2329,21 @@ class DeltaBot(commands.Bot):
             deployed_source(),
             hosting_environment(),
         )
-        await self.change_presence(
-            activity=discord.Activity(
-                type=discord.ActivityType.watching,
-                # Discord activity names do not render custom emoji markup.
-                name="Delta Air Lines Support",
+        try:
+            await self.change_presence(
+                status=discord.Status.online,
+                activity=discord.Activity(
+                    type=discord.ActivityType.watching,
+                    name=WATCHING_ACTIVITY_TEXT,
+                ),
             )
-        )
+        except discord.HTTPException as exc:
+            log.warning("Could not update HelpDesk Watching activity: %s", exc)
 
         authorized_guild = self.get_guild(GUILD_ID)
         self._validate_startup_configuration(authorized_guild)
+        # Deliver the Founder notification independently of server-log filters.
+        await self._notify_release_owner()
         await self._post_release_update()
 
         for guild in self.guilds:
@@ -2325,6 +2387,67 @@ class DeltaBot(commands.Bot):
                 )
         if not invalid:
             log.info("Startup validation passed for guild %s (%s).", guild.name, guild.id)
+
+    async def _notify_release_owner(self) -> None:
+        """Send Founder-only deployment notes in DMs once per version/commit."""
+        if self._release_dm_notified:
+            return
+
+        source = deployed_source()
+        release_marker = f"HelpDesk Version {BOT_VERSION} Update"
+        deployment_marker = f"Deployment ID: `{source}`"
+        try:
+            owner = self.get_user(OWNER_UPDATE_USER_ID) or await self.fetch_user(OWNER_UPDATE_USER_ID)
+            dm_channel = owner.dm_channel or await owner.create_dm()
+
+            # Reconnects and host restarts must not send duplicate updates.
+            try:
+                async for prior in dm_channel.history(limit=30):
+                    if (
+                        self.user is not None
+                        and prior.author.id == self.user.id
+                        and release_marker in prior.content
+                        and deployment_marker in prior.content
+                    ):
+                        self._release_dm_notified = True
+                        log.info("HelpDesk release %s already announced in Founder DMs.", BOT_VERSION)
+                        return
+            except (discord.Forbidden, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
+                log.warning("Could not read Founder DM history: %s", exc)
+
+            try:
+                with DEPLOYMENT_NOTES_PATH.open(encoding="utf-8") as notes_file:
+                    notes = __import__("json").load(notes_file)
+            except (OSError, ValueError, TypeError) as exc:
+                log.warning("Could not load Founder DM release notes: %s", exc)
+                notes = {}
+
+            highlights = (
+                list(notes.get("added", []))
+                + list(notes.get("changed", []))
+                + list(notes.get("removed", []))
+            )
+            summary = "\n".join(f"- {item}" for item in highlights[:8])
+            dm_text = (
+                f"## <:DeltaLogo:1540927958116601980> {release_marker}\n\n"
+                "**Your Delta Air Lines HelpDesk bot is online.**\n\n"
+                f"{notes.get('summary', 'The latest HelpDesk update has been deployed.')}\n\n"
+                f"**Changes**\n{summary or '- Deployment completed.'}\n\n"
+                f"-# {deployment_marker}\n"
+                "Run `/version` in the server to check the live release."
+            )
+            if len(dm_text) > 2000:
+                dm_text = dm_text[: 1940 - len(deployment_marker)] + f"\n-# {deployment_marker}"
+            await dm_channel.send(dm_text, allowed_mentions=discord.AllowedMentions.none())
+            self._release_dm_notified = True
+            log.info("Sent HelpDesk Version %s update to Founder DMs.", BOT_VERSION)
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
+            log.warning(
+                "Could not DM HelpDesk Version %s update to Founder %s: %s",
+                BOT_VERSION,
+                OWNER_UPDATE_USER_ID,
+                exc,
+            )
 
     async def _post_release_update(self) -> None:
         """Post one update log for each deployed commit without duplicating reconnects."""

@@ -93,7 +93,16 @@ assert main.get_ticket_support_ids(topic) == {789}
 bot = main.DeltaBot()
 main.register_commands(bot.tree)
 commands = {command.name: command for command in bot.tree.get_commands()}
-assert set(commands) == {"panel", "version", "reply", "format", "ticket"}
+assert set(commands) == {"panel", "version", "claim", "close", "reply", "format", "ticket"}
 assert {command.name for command in commands["ticket"].commands} == {"control", "admin"}
+
+control = next(command for command in commands["ticket"].commands if command.name == "control")
+admin = next(command for command in commands["ticket"].commands if command.name == "admin")
+control_options = next(param for param in control.parameters if param.name == "command")
+admin_options = next(param for param in admin.parameters if param.name == "command")
+assert "close" not in {choice.value for choice in control_options.choices}
+assert "close" in {choice.value for choice in admin_options.choices}
+assert main.WATCHING_ACTIVITY_TEXT == "staff forget to claim tickets"
+assert main.OWNER_UPDATE_USER_ID == 1263248306264608871
 
 print("Reply privacy, staff attribution, colors, and custom status emojis are valid.")

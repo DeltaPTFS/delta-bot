@@ -19,7 +19,9 @@ TICKET_CATEGORY_ID = 1543674278711529562   # All ticket channels live here
 TRANSCRIPT_CHANNEL_ID = 1539005101941850274
 UPDATE_CHANNEL_ID = TRANSCRIPT_CHANNEL_ID
 LOUNGE_CHANNEL_ID = int(os.getenv("LOUNGE_CHANNEL_ID", "0"))
-BOT_VERSION = "2.6.8"
+BOT_VERSION = "3.0.0"
+OWNER_UPDATE_USER_ID = 1263248306264608871
+WATCHING_ACTIVITY_TEXT = "staff forget to claim tickets"
 
 # ── Runtime behavior ─────────────────────────────────────────────────────────
 TICKET_CLOSE_DELAY = 5
