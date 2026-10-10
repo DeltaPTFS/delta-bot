@@ -2270,6 +2270,7 @@ class DeltaBot(commands.Bot):
         self.processed_dm_messages: set[int] = set()
         self.processed_reply_interactions: set[int] = set()
         self.started_monotonic = time.monotonic()
+        self._release_dm_notified = False
 
     async def setup_hook(self) -> None:
         self.add_view(TicketActionView())
@@ -2327,16 +2328,21 @@ class DeltaBot(commands.Bot):
             deployed_source(),
             hosting_environment(),
         )
-        await self.change_presence(
-            activity=discord.Activity(
-                type=discord.ActivityType.watching,
-                # Discord activity names do not render custom emoji markup.
-                name="Delta Air Lines Support",
+        try:
+            await self.change_presence(
+                status=discord.Status.online,
+                activity=discord.Activity(
+                    type=discord.ActivityType.watching,
+                    name=WATCHING_ACTIVITY_TEXT,
+                ),
             )
-        )
+        except discord.HTTPException as exc:
+            log.warning("Could not update HelpDesk Watching activity: %s", exc)
 
         authorized_guild = self.get_guild(GUILD_ID)
         self._validate_startup_configuration(authorized_guild)
+        # Deliver the Founder notification independently of server-log filters.
+        await self._notify_release_owner()
         await self._post_release_update()
 
         for guild in self.guilds:
@@ -2380,6 +2386,67 @@ class DeltaBot(commands.Bot):
                 )
         if not invalid:
             log.info("Startup validation passed for guild %s (%s).", guild.name, guild.id)
+
+    async def _notify_release_owner(self) -> None:
+        """Send Founder-only deployment notes in DMs once per version/commit."""
+        if self._release_dm_notified:
+            return
+
+        source = deployed_source()
+        release_marker = f"HelpDesk Version {BOT_VERSION} Update"
+        deployment_marker = f"Deployment ID: `{source}`"
+        try:
+            owner = self.get_user(OWNER_UPDATE_USER_ID) or await self.fetch_user(OWNER_UPDATE_USER_ID)
+            dm_channel = owner.dm_channel or await owner.create_dm()
+
+            # Reconnects and host restarts must not send duplicate updates.
+            try:
+                async for prior in dm_channel.history(limit=30):
+                    if (
+                        self.user is not None
+                        and prior.author.id == self.user.id
+                        and release_marker in prior.content
+                        and deployment_marker in prior.content
+                    ):
+                        self._release_dm_notified = True
+                        log.info("HelpDesk release %s already announced in Founder DMs.", BOT_VERSION)
+                        return
+            except (discord.Forbidden, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
+                log.warning("Could not read Founder DM history: %s", exc)
+
+            try:
+                with DEPLOYMENT_NOTES_PATH.open(encoding="utf-8") as notes_file:
+                    notes = __import__("json").load(notes_file)
+            except (OSError, ValueError, TypeError) as exc:
+                log.warning("Could not load Founder DM release notes: %s", exc)
+                notes = {}
+
+            highlights = (
+                list(notes.get("added", []))
+                + list(notes.get("changed", []))
+                + list(notes.get("removed", []))
+            )
+            summary = "\n".join(f"- {item}" for item in highlights[:8])
+            dm_text = (
+                f"## <:DeltaLogo:1540927958116601980> {release_marker}\n\n"
+                "**Your Delta Air Lines HelpDesk bot is online.**\n\n"
+                f"{notes.get('summary', 'The latest HelpDesk update has been deployed.')}\n\n"
+                f"**Changes**\n{summary or '- Deployment completed.'}\n\n"
+                f"-# {deployment_marker}\n"
+                "Run `/version` in the server to check the live release."
+            )
+            if len(dm_text) > 2000:
+                dm_text = dm_text[: 1940 - len(deployment_marker)] + f"\n-# {deployment_marker}"
+            await dm_channel.send(dm_text, allowed_mentions=discord.AllowedMentions.none())
+            self._release_dm_notified = True
+            log.info("Sent HelpDesk Version %s update to Founder DMs.", BOT_VERSION)
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
+            log.warning(
+                "Could not DM HelpDesk Version %s update to Founder %s: %s",
+                BOT_VERSION,
+                OWNER_UPDATE_USER_ID,
+                exc,
+            )
 
     async def _post_release_update(self) -> None:
         """Post one update log for each deployed commit without duplicating reconnects."""
