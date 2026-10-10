@@ -12,7 +12,7 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Assistance Panel | Support or admins can post the plain-text contact panel or upload custom top and bottom banner images with `/panel`; confirmation continues in DMs |
 | Private Tickets | Members stay in DMs while staff work from a hidden relay channel |
 | Duplicate Guard | Prevents users from opening multiple simultaneous tickets |
-| Close Ticket | Persistent button plus `/ticket control` and `/ticket admin`; DMs the user on close |
+| Close Ticket | Persistent button plus `/close`, `/ticket control`, and `/ticket admin`; DMs the user on close |
 | Message Relay | Per-ticket locking suppresses concurrent duplicate events; customer messages and Delta-blue human replies are recorded once |
 | Agent Privacy | Customer DMs receive an anonymous Delta Support embed; only the private ticket identifies the responding member |
 | Ticket Reuse | Repeat creation attempts reconnect the customer to their existing ticket instead of opening a duplicate |
@@ -24,7 +24,7 @@ Built with **discord.py 2.x**, featuring a fully interactive Assistance Panel, p
 | Server Logs | Member joins/leaves, message edits/deletions, and moderation changes are sent to the configured logs channel |
 | Lounge AutoMod | Messages matching configurable curse/offensive terms are removed from `#lounge`, with actions recorded in server logs |
 | Server Safety | Commands and tickets are locked to server `1538738611988467782`, but the bot never removes itself from a server |
-| Release Updates | Posts and pins each release once in server logs channel `1539005101941850274`; the current release comes from `config.py` |
+| Release Updates | Posts each deployed commit once in server logs channel `1539005101941850274`; presence failures do not prevent announcements |
 
 Versions use `major.minor.patch`. Breaking or especially large releases increase
 the first number, regular feature releases increase the second, and fixes increase
@@ -99,6 +99,9 @@ python main.py
 | `/panel` | Post the private-ticket Assistance Panel in the current channel | DL Leadership only |
 | `/reply` | Send an anonymous Delta Support embed and retain the attributed staff embed in the ticket | Claimant or support member added to that ticket |
 | `/format` | Choose one of the prewritten customer notices | Staff only |
+| `/claim` | Claim the current customer ticket without taking another agent's claim | Support role only |
+| `/unclaim` | Release your ticket claim | Claiming support member; support admins can release another claim |
+| `/close` | Open the close-reason form; reuse customer rating, transcript, and deletion workflow | Support role only |
 | `/ticket control` | Add/remove customers or support and close the current ticket | Staff member who claimed that ticket |
 | `/ticket admin` | Run consolidated assignment, removal, punishment, close, or undo actions | Admin only |
 | `/version` | Show version, commit, uptime, and Discord latency | Staff only |

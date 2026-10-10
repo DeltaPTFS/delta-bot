@@ -93,7 +93,7 @@ assert main.get_ticket_support_ids(topic) == {789}
 bot = main.DeltaBot()
 main.register_commands(bot.tree)
 commands = {command.name: command for command in bot.tree.get_commands()}
-assert set(commands) == {"panel", "version", "reply", "format", "ticket"}
+assert set(commands) == {"panel", "version", "reply", "format", "ticket", "claim", "unclaim", "close"}
 assert {command.name for command in commands["ticket"].commands} == {"control", "admin"}
 
 print("Reply privacy, staff attribution, colors, and custom status emojis are valid.")
