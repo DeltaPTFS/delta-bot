@@ -382,7 +382,7 @@ else:
             if interaction.response.is_done():
                 return
             selected_command = getattr(getattr(namespace, "command", None), "value", None)
-            if command_name in {"ticket control", "ticket admin"} and selected_command == "close":
+            if command_name == "close" or (command_name in {"ticket control", "ticket admin"} and selected_command == "close"):
                 return
             try:
                 await interaction.response.defer(ephemeral=True)
