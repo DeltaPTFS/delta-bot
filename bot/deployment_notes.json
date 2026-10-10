@@ -1,14 +1,22 @@
 {
-  "title": "HelpDesk 2.6.8 — Release Announcements",
-  "summary": "Improved update delivery and included a recap of earlier versions.",
+  "title": "HelpDesk Version 3.0.0 Update",
+  "summary": "Major release: streamlined ticket replies, staff-only ticket actions, restored close modal, direct Watching status, updated Leadership applications, and Founder DM deployment notifications.",
   "added": [
-    "Previous version history in release announcements."
+    "Added staff-only /claim to claim an unclaimed ticket without accidentally unclaiming it.",
+    "Added staff-only /close with the same close-reason popup as the Close Ticket button.",
+    "Added deployment update DMs to Grey R. (Discord ID 1263248306264608871), with duplicate safeguards."
   ],
   "changed": [
-    "Continue sending release updates even when Discord channel history cannot be read.",
-    "Report when a channel filter suppresses an announcement."
+    "Successful /reply commands now silently dismiss the slash-command acknowledgement; failures still report an error.",
+    "Ticket claim/close buttons, /ticket control, /reply, /ping, /message edit, /message config, and /format now require the Delta Support role.",
+    "Removed Close Ticket from /ticket control but preserved Founder-only administrative close.",
+    "Set the Watching activity directly to 'staff forget to claim tickets'.",
+    "Updated Leadership Application role availability without changing the CV, statement, or application questions.",
+    "Fixed customer DM relay failing on an undefined follow-up variable and restored the regular-message partnership advertisement in ticket mirrors."
   ],
-  "removed": [],
+  "removed": [
+    "Removed success-confirmation messages after normal /reply delivery."
+  ],
   "history": [
     {
       "version": "2.6.0",
