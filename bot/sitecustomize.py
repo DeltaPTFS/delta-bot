@@ -190,19 +190,6 @@ else:
             color=DELTA_BLUE,
         )
 
-        if isinstance(channel, discord.TextChannel) and _is_ticket_channel(channel):
-            try:
-                await channel.send(
-                    embed=_activity_embed(
-                        title="Ticket Command Activity",
-                        description=message,
-                        color=DELTA_BLUE,
-                    ),
-                    allowed_mentions=discord.AllowedMentions.none(),
-                )
-            except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
-                log.warning("Could not post ticket command activity: %s", exc)
-
     async def _send_claim_server_log(
         interaction: discord.Interaction,
         *,
@@ -303,17 +290,6 @@ else:
                 return
 
         await _reply_once(interaction, f"Ticket {action_word} successfully.")
-        await fresh_channel.send(
-            embed=_activity_embed(
-                title="Ticket Command Activity",
-                description=(
-                    f"**Command:** `{source}`\n"
-                    f"**Action:** Ticket {action_word}\n"
-                    f"**Used By:** {member.mention} (`{member.id}`)"
-                ),
-                color=color,
-            )
-        )
         await fresh_channel.send(
             embed=_activity_embed(
                 title=title,
