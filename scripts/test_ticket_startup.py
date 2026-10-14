@@ -96,6 +96,46 @@ class StartupTests(unittest.IsolatedAsyncioTestCase):
         choices = next(parameter.choices for parameter in admin.parameters if parameter.name == "command")
         self.assertTrue({"ban_support", "unban_support"}.issubset({choice.value for choice in choices}))
 
+    async def test_customer_dm_reply_has_no_redundant_delta_support_author(self):
+        embed = main.anonymous_support_reply_embed("We received your message.")
+        self.assertIsNone(embed.author)
+        self.assertIn("Delta Support Reply", embed.description)
+        self.assertIn("We received your message.", embed.description)
+        self.assertEqual(embed.footer.text, main.FOOTER_TEXT)
+
+    async def test_relayed_customer_message_gets_checkmark_reaction(self):
+        message = MagicMock(spec=discord.Message)
+        message.id = 987654
+        message.content = "Can you help with my ticket?"
+        message.attachments = []
+        message.created_at = main.datetime.now().astimezone()
+        message.author.id = 789
+        message.author.display_avatar.url = "https://cdn.discordapp.com/embed/avatars/0.png"
+        message.add_reaction = AsyncMock()
+
+        delivered = await main.relay_customer_message(message, self.channel)
+
+        self.assertTrue(delivered)
+        self.channel.send.assert_awaited_once()
+        self.assertIn(message.content, self.channel.send.call_args.kwargs["embed"].description)
+        message.add_reaction.assert_awaited_once_with(main.CHECKMARK_EMOJI)
+
+    async def test_reaction_failure_does_not_duplicate_delivered_dm(self):
+        message = MagicMock(spec=discord.Message)
+        message.id = 987655
+        message.content = "Another question"
+        message.attachments = []
+        message.created_at = main.datetime.now().astimezone()
+        message.author.id = 789
+        message.author.display_avatar.url = "https://cdn.discordapp.com/embed/avatars/0.png"
+        message.add_reaction = AsyncMock(side_effect=forbidden())
+
+        delivered = await main.relay_customer_message(message, self.channel)
+
+        self.assertTrue(delivered)
+        self.channel.send.assert_awaited_once()
+        message.add_reaction.assert_awaited_once_with(main.CHECKMARK_EMOJI)
+
     async def test_registration_is_repeatable(self):
         main.register_commands(self.bot.tree)
         runtime_ticket_controls.register_extra_commands(self.bot.tree)
