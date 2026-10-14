@@ -1,19 +1,24 @@
 {
-  "title": "DM Reply Acknowledgements & Cleaner Support Replies",
-  "summary": "Customer DM replies now receive a CheckMark acknowledgement after successful forwarding, and support replies have a cleaner appearance.",
+  "title": "Ticket Closure Logs & Rating Transcripts",
+  "summary": "Closed support tickets now create a detailed #server-logs report with the closing reason, customer rating, and downloadable conversation transcript.",
   "added": [
-    "A <:CheckMark:1544505870904459264> reaction appears beneath a customer's original DM only after the message is successfully relayed to the support ticket."
+    "Post each ticket's closure reason, customer, closing staff member, rating status, and complete text transcript to #server-logs.",
+    "Update the archived log and transcript attachment when a customer submits their rating after the ticket is closed."
   ],
   "changed": [
-    "Removed the extra **Delta Support** label above the **Delta Support Reply** embed while keeping the reply title, message and footer.",
-    "Fixed a relay interruption so customer DMs reach the ticket before the acknowledgement is added.",
-    "Ticket-channel messages remain staff-only discussion and do **not** receive automatic checkmark reactions."
+    "Locate #server-logs by its channel name, or use SERVER_LOG_CHANNEL_ID when the channel ID is provided.",
+    "Mark ratings as awaiting customer feedback until the 15-day rating window ends; keep the ticket deletion countdown unchanged.",
+    "Retain the legacy transcript archive as a fallback when #server-logs is unavailable."
   ],
   "removed": [],
   "history": [
     {
+      "version": "3.0.2",
+      "summary": "CheckMark acknowledgements for successful customer DMs and cleaner support reply embeds."
+    },
+    {
       "version": "3.0.1",
-      "summary": "Ticket command sync and deployment announcement reliability."
+      "summary": "Ticket commands and release announcement delivery fixes."
     }
   ]
 }
