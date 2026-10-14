@@ -17,6 +17,9 @@ DIVIDER_URL = os.getenv("DIVIDER_URL", "")
 GUILD_ID = 1538738611988467782
 TICKET_CATEGORY_ID = 1543674278711529562   # All ticket channels live here
 TRANSCRIPT_CHANNEL_ID = 1539005101941850274
+# Set this to the #server-logs ID for reliable lookup even if its name changes.
+# When unset, the bot locates a channel literally named 'server-logs'.
+SERVER_LOG_CHANNEL_ID = int(os.getenv("SERVER_LOG_CHANNEL_ID", "0"))
 UPDATE_CHANNEL_ID = TRANSCRIPT_CHANNEL_ID
 LOUNGE_CHANNEL_ID = int(os.getenv("LOUNGE_CHANNEL_ID", "0"))
 BOT_VERSION = "3.0.2"
