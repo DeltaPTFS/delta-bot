@@ -293,6 +293,40 @@ class StartupTests(unittest.IsolatedAsyncioTestCase):
         self.bot.ws.change_presence.assert_awaited_once_with(activity=activity, status="online")
         self.bot.ws = None
 
+    async def test_release_flag_requires_explicit_finalization_and_matching_version(self):
+        import json
+        from unittest.mock import mock_open
+
+        incomplete = json.dumps({
+            "release_version": main.BOT_VERSION,
+            "announce_on_final_deployment": False,
+        })
+        with patch.object(
+            main, "DEPLOYMENT_NOTES_PATH",
+            SimpleNamespace(open=mock_open(read_data=incomplete)),
+        ):
+            self.assertFalse(main.release_announcement_ready())
+
+        stale = json.dumps({
+            "release_version": "0.0.0",
+            "announce_on_final_deployment": True,
+        })
+        with patch.object(
+            main, "DEPLOYMENT_NOTES_PATH",
+            SimpleNamespace(open=mock_open(read_data=stale)),
+        ):
+            self.assertFalse(main.release_announcement_ready())
+
+        finalized = json.dumps({
+            "release_version": main.BOT_VERSION,
+            "announce_on_final_deployment": True,
+        })
+        with patch.object(
+            main, "DEPLOYMENT_NOTES_PATH",
+            SimpleNamespace(open=mock_open(read_data=finalized)),
+        ):
+            self.assertTrue(main.release_announcement_ready())
+
     async def test_unfinalized_deployment_never_announces_or_dms_founder(self):
         self.bot.change_presence = AsyncMock(side_effect=TypeError("presence failed"))
         self.bot.get_channel = MagicMock(return_value=self.channel)
