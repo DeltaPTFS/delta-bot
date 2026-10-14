@@ -293,33 +293,56 @@ class StartupTests(unittest.IsolatedAsyncioTestCase):
         self.bot.ws.change_presence.assert_awaited_once_with(activity=activity, status="online")
         self.bot.ws = None
 
-    async def test_ready_posts_announcement_even_if_presence_fails(self):
-        self.bot.change_presence = AsyncMock(side_effect=TypeError("broken presence"))
+    async def test_unfinalized_deployment_never_announces_or_dms_founder(self):
+        self.bot.change_presence = AsyncMock(side_effect=TypeError("presence failed"))
+        self.bot.get_channel = MagicMock(return_value=self.channel)
+        self.bot.fetch_user = AsyncMock()
+        with patch.object(main, "release_announcement_ready", return_value=False):
+            await self.bot.on_ready()
+            self.assertFalse(await self.bot._post_release_update())
+        self.channel.send.assert_not_awaited()
+        self.bot.fetch_user.assert_not_awaited()
+        self.assertFalse(hasattr(self.bot, "_release_announcement_task"))
+
+    async def test_finalized_release_waits_and_announces_once_even_on_reconnect(self):
+        self.bot.change_presence = AsyncMock(side_effect=TypeError("presence failed"))
         self.bot.get_channel = MagicMock(return_value=self.channel)
         self.bot.fetch_user = AsyncMock(return_value=SimpleNamespace(send=AsyncMock()))
-        await self.bot.on_ready()
+        with patch.object(main, "release_announcement_ready", return_value=True), patch.object(
+            main, "RELEASE_ANNOUNCEMENT_DELAY_SECONDS", 0
+        ):
+            await self.bot.on_ready()
+            await self.bot._release_announcement_task
+            await self.bot.on_ready()
         self.channel.send.assert_awaited_once()
-        self.assertIn("Delta HelpDesk — Update", self.channel.send.call_args.args[0])
         self.assertIn(f"Update {main.BOT_VERSION}", self.channel.send.call_args.args[0])
+        self.bot.fetch_user.assert_awaited_once()
         self.bot.fetch_user.return_value.send.assert_awaited_once()
 
-    async def test_release_skips_existing_deployment(self):
-        existing = SimpleNamespace(author=self.bot.user, content=main.build_release_update_message())
+    async def test_release_skips_existing_version_even_with_another_commit_sha(self):
+        old_message = main.build_release_update_message().replace(
+            f"Deployment ID: `{main.deployed_source()}`", "Deployment ID: `older-sha12`"
+        )
+        existing = SimpleNamespace(author=self.bot.user, content=old_message)
         self.channel.history.side_effect = lambda **kwargs: history([existing])
         self.bot.get_channel = MagicMock(return_value=self.channel)
-        await self.bot._post_release_update()
+        with patch.object(main, "release_announcement_ready", return_value=True):
+            self.assertFalse(await self.bot._post_release_update())
         self.channel.send.assert_not_awaited()
 
-    async def test_release_posts_despite_missing_history_permission(self):
+    async def test_release_fails_closed_when_history_cannot_be_read(self):
         self.channel.history.side_effect = lambda **kwargs: history(failure=forbidden())
         self.bot.get_channel = MagicMock(return_value=self.channel)
-        await self.bot._post_release_update()
-        self.channel.send.assert_awaited_once()
+        with patch.object(main, "release_announcement_ready", return_value=True):
+            self.assertFalse(await self.bot._post_release_update())
+        self.channel.send.assert_not_awaited()
 
-    async def test_release_keeps_message_limit_and_deployment_marker(self):
+    async def test_release_keeps_message_limit_and_final_deployment_marker(self):
         self.bot.get_channel = MagicMock(return_value=self.channel)
-        with patch.object(main, "build_release_update_message", return_value="x" * 5000):
-            await self.bot._post_release_update()
+        with patch.object(main, "release_announcement_ready", return_value=True), patch.object(
+            main, "build_release_update_message", return_value="x" * 5000
+        ):
+            self.assertTrue(await self.bot._post_release_update())
         content = self.channel.send.call_args.args[0]
         self.assertLessEqual(len(content), 2000)
         self.assertIn(f"Deployment ID: `{main.deployed_source()}`", content)
