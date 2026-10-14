@@ -56,6 +56,7 @@ from config import (
     MAILING_ADDRESS,
     MESSAGE_EMOJI,
     RATING_TIMEOUT,
+    RELEASE_ANNOUNCEMENT_DELAY_SECONDS,
     SERVER_LOG_CHANNEL_ID,
     RIGHT_ARROW_EMOJI,
     STAFF_ROLE_ID,
@@ -327,6 +328,24 @@ def deployed_source() -> str:
         None,
     )
     return (value or _git_output("rev-parse", "HEAD") or "unknown")[:12]
+
+
+def release_announcement_ready() -> bool:
+    """Only an explicitly finalized release is allowed to announce.
+
+    Ordinary pushes and version bumps must remain silent until the release
+    notes are finalized in the last commit of the release.
+    """
+    try:
+        with DEPLOYMENT_NOTES_PATH.open(encoding="utf-8") as notes_file:
+            notes = __import__("json").load(notes_file)
+    except (OSError, ValueError, TypeError) as exc:
+        log.warning("Cannot read release readiness; announcement withheld: %s", exc)
+        return False
+    return (
+        notes.get("announce_on_final_deployment") is True
+        and notes.get("release_version") == BOT_VERSION
+    )
 
 
 def build_release_update_message() -> str:
@@ -2385,22 +2404,16 @@ class DeltaBot(commands.Bot):
 
         authorized_guild = self.get_guild(GUILD_ID)
         self._validate_startup_configuration(authorized_guild)
-        await self._post_release_update()
-        # Send a concise deployment confirmation directly to the founder.
-        # Do not send duplicate notifications on gateway reconnects.
-        if not getattr(self, "_founder_update_dm_sent", False):
-            try:
-                founder = await self.fetch_user(1263248306264608871)
-                await founder.send(
-                    f"**Delta HelpDesk — Update {BOT_VERSION}**\n"
-                    f"Deployment: `{deployed_source()}`\n"
-                    "Customer DMs receive a CheckMark only after successful "
-                    "forwarding; reply embeds no longer show the extra Delta Support "
-                    "label. Ticket-channel messages receive no automatic reactions."
+        # A push is not necessarily the last deployment of this release.
+        # Schedule only the finalized version, and never reschedule on reconnect.
+        if release_announcement_ready():
+            if getattr(self, "_release_announcement_scheduled_version", None) != BOT_VERSION:
+                self._release_announcement_scheduled_version = BOT_VERSION
+                self._release_announcement_task = asyncio.create_task(
+                    self._announce_final_release()
                 )
-                self._founder_update_dm_sent = True
-            except (discord.Forbidden, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
-                log.warning("Could not DM founder the deployment update: %s", exc)
+        else:
+            log.info("HelpDesk v%s release is not finalized; no announcement.", BOT_VERSION)
 
         for guild in self.guilds:
             if guild.id != GUILD_ID:
@@ -2444,82 +2457,100 @@ class DeltaBot(commands.Bot):
         if not invalid:
             log.info("Startup validation passed for guild %s (%s).", guild.name, guild.id)
 
-    async def _post_release_update(self) -> None:
-        """Post one update log for each deployed commit without duplicating reconnects."""
-        channel = self.get_channel(UPDATE_CHANNEL_ID)
+    async def _announce_final_release(self) -> None:
+        """Allow the final deployment to settle before announcing the release."""
+        await asyncio.sleep(RELEASE_ANNOUNCEMENT_DELAY_SECONDS)
+        if not release_announcement_ready():
+            return
+        if not await self._post_release_update():
+            return
+
+        # The founder gets the confirmation only when an actual finalized
+        # announcement has been posted, not once for every pushed commit.
+        try:
+            founder = await self.fetch_user(1263248306264608871)
+            await founder.send(
+                f"**Delta HelpDesk — Update {BOT_VERSION}**\n"
+                f"Deployment: `{deployed_source()}`\n"
+                "Final release is live. One update was posted to #server-logs."
+            )
+        except (discord.Forbidden, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
+            log.warning("Could not DM the finalized release to founder: %s", exc)
+
+    async def _post_release_update(self) -> bool:
+        """Post at most one announcement per finalized HelpDesk version."""
+        if not release_announcement_ready():
+            log.info("Skipping intermediate commit %s (HelpDesk %s).", deployed_source(), BOT_VERSION)
+            return False
+
+        guild = self.get_guild(GUILD_ID)
+        channel = await _resolve_ticket_close_logs(guild) if isinstance(guild, discord.Guild) else None
+        if not isinstance(channel, discord.TextChannel):
+            channel = self.get_channel(UPDATE_CHANNEL_ID)
         if not isinstance(channel, discord.TextChannel):
             try:
                 fetched = await self.fetch_channel(UPDATE_CHANNEL_ID)
             except (discord.Forbidden, discord.NotFound, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
-                log.warning("Could not find update channel %s: %s", UPDATE_CHANNEL_ID, exc)
-                return
+                log.warning("Cannot find #server-logs for release announcement: %s", exc)
+                return False
             channel = fetched if isinstance(fetched, discord.TextChannel) else None
         if channel is None or channel.guild.id != GUILD_ID or self.user is None:
-            log.warning("Update announcement skipped: channel %s unavailable, wrong guild, or bot user not ready.", UPDATE_CHANNEL_ID)
-            return
+            log.warning("Release announcement skipped: no authorized logs channel or bot not ready.")
+            return False
 
         source = deployed_source()
         deployment_marker = f"{DEPLOYMENT_SOURCE_MARKER} `{source}`"
-
-        # Check recent history so restarting/reconnecting the same deployed commit
-        # does not create another copy. A different commit always gets a new log.
+        version_pattern = re.compile(
+            r"Delta HelpDesk — Update " + re.escape(BOT_VERSION) + r"(?![\d.])"
+        )
+        # Do not post anything if we cannot inspect previous announcements.
+        # Prior code posted blindly when history was unavailable.
         recent: list[discord.Message] = []
+        history_read = False
         for attempt in range(1, 3):
             try:
-                recent = [message async for message in channel.history(limit=200)]
+                recent = [message async for message in channel.history(limit=500)]
+                history_read = True
                 break
             except discord.Forbidden as exc:
-                log.warning("Cannot read update history; attempting to post anyway: %s", exc)
-                break
+                log.warning("No permission to read release history; announcement withheld: %s", exc)
+                return False
             except (discord.HTTPException, aiohttp.ClientError, OSError) as exc:
                 if attempt == 2:
-                    log.warning(
-                        "Could not check existing update announcements after %d attempts: %s",
-                        attempt,
-                        exc,
-                    )
-                    break
-                log.warning(
-                    "Temporary Discord connection error while checking release updates "
-                    "(attempt %d/2): %s. Retrying.",
-                    attempt,
-                    exc,
-                )
+                    log.warning("Cannot confirm past release announcements; withheld: %s", exc)
+                    return False
                 await asyncio.sleep(3)
 
-        current = next(
-            (
-                message
-                for message in recent
-                if is_release_update_message(message, self.user.id)
-                and deployment_marker in message.content
-            ),
-            None,
-        )
-        if current is not None:
-            log.info("Deployment update for %s is already present in channel %s.", source, UPDATE_CHANNEL_ID)
-            return
+        if not history_read:
+            return False
+        if any(
+            is_release_update_message(message, self.user.id)
+            and version_pattern.search(message.content)
+            for message in recent
+        ):
+            log.info("HelpDesk v%s already announced; no duplicate.", BOT_VERSION)
+            return False
 
+        if not release_announcement_ready():
+            return False
         try:
             update_text = build_release_update_message()
             if len(update_text) > 2000:
-                # Discord rejects messages over 2,000 characters. Keep the deployment
-                # marker and status visible while trimming excessively long notes.
-                marker = f"\n-# {deployment_marker}\n<:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines.**"
+                marker = (
+                    f"\n-# {deployment_marker}\n"
+                    "<:WingPinLogo:1540927847709802607> **Keep Climbing, Delta Air Lines.**"
+                )
                 update_text = update_text[: 1990 - len(marker)].rstrip() + "\n…" + marker
             announcement = await channel.send(update_text)
             if announcement is None:
-                log.error("Update announcement was suppressed by a channel send filter.")
-                return
-            log.info(
-                "Posted deployment update %s for HelpDesk %s to channel %s (message %s).",
-                source,
-                BOT_VERSION,
-                UPDATE_CHANNEL_ID,
-                announcement.id,
-            )
+                log.error("Final release announcement was suppressed by a log filter.")
+                return False
+            log.info("Posted finalized HelpDesk %s (commit %s) to channel %s: message %s.",
+                     BOT_VERSION, source, channel.id, announcement.id)
+            return True
         except (discord.Forbidden, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
-            log.warning("Could not post deployment update %s: %s", source, exc)
+            log.warning("Finalized HelpDesk release announcement failed: %s", exc)
+            return False
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
         """Keep unauthorized guilds inert without ever removing the bot itself."""
