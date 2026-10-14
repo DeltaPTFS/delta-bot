@@ -22,7 +22,7 @@ TRANSCRIPT_CHANNEL_ID = 1539005101941850274
 SERVER_LOG_CHANNEL_ID = int(os.getenv("SERVER_LOG_CHANNEL_ID", "0"))
 UPDATE_CHANNEL_ID = TRANSCRIPT_CHANNEL_ID
 LOUNGE_CHANNEL_ID = int(os.getenv("LOUNGE_CHANNEL_ID", "0"))
-BOT_VERSION = "3.0.2"
+BOT_VERSION = "3.0.3"
 
 # ── Runtime behavior ─────────────────────────────────────────────────────────
 TICKET_CLOSE_DELAY = 5
