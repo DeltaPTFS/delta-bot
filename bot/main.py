@@ -56,6 +56,7 @@ from config import (
     MAILING_ADDRESS,
     MESSAGE_EMOJI,
     RATING_TIMEOUT,
+    SERVER_LOG_CHANNEL_ID,
     RIGHT_ARROW_EMOJI,
     STAFF_ROLE_ID,
     SUPPORT_EMOJI,
@@ -869,11 +870,45 @@ async def generate_transcript(channel: discord.TextChannel) -> str:
     return "\n".join(lines)
 
 
+async def _resolve_ticket_close_logs(guild: discord.Guild) -> discord.TextChannel | None:
+    """Prefer #server-logs for closure reports; preserve the legacy transcript archive if missing."""
+    channel: discord.abc.GuildChannel | None = None
+    if SERVER_LOG_CHANNEL_ID:
+        channel = guild.get_channel(SERVER_LOG_CHANNEL_ID)
+        if not isinstance(channel, discord.TextChannel):
+            try:
+                channel = await guild.fetch_channel(SERVER_LOG_CHANNEL_ID)
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
+                log.warning("Cannot access configured #server-logs channel %s: %s", SERVER_LOG_CHANNEL_ID, exc)
+                channel = None
+    if not isinstance(channel, discord.TextChannel):
+        channel = next(
+            (candidate for candidate in guild.text_channels
+             if candidate.name.casefold() == "server-logs"),
+            None,
+        )
+    if isinstance(channel, discord.TextChannel):
+        return channel
+
+    log.warning("#server-logs unavailable in guild %s; attempting legacy transcript archive %s.",
+                guild.id, TRANSCRIPT_CHANNEL_ID)
+    channel = guild.get_channel(TRANSCRIPT_CHANNEL_ID)
+    if isinstance(channel, discord.TextChannel):
+        return channel
+    try:
+        fetched = await guild.fetch_channel(TRANSCRIPT_CHANNEL_ID)
+        return fetched if isinstance(fetched, discord.TextChannel) else None
+    except (discord.Forbidden, discord.NotFound, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
+        log.warning("No ticket closure archive channel available: %s", exc)
+        return None
+
+
 async def _archive_ticket(
     channel: discord.TextChannel,
     closer: discord.Member,
     reason: str,
     rating: int | None,
+    transcript_record: dict[str, str] | None = None,
 ) -> discord.Message | None:
     """Generate and log the ticket transcript before deletion."""
     guild = channel.guild
@@ -884,7 +919,7 @@ async def _archive_ticket(
 
     # Generate transcript text
     transcript_text = await generate_transcript(channel)
-    rating_line = f"{rating} / 5 {WING_PIN_EMOJI}" if rating is not None else "No rating given"
+    rating_line = f"{rating} / 5 {WING_PIN_EMOJI}" if rating is not None else "Awaiting customer rating (up to 15 days)"
     transcript_text += (
         f"\n\n═══════════════════════════════════════════════════════"
         f"\n  CLOSE REASON : {reason}"
@@ -893,38 +928,49 @@ async def _archive_ticket(
         f"\n═══════════════════════════════════════════════════════"
     )
 
-    # Send to transcript log channel
-    log_channel = guild.get_channel(TRANSCRIPT_CHANNEL_ID)
-    if not isinstance(log_channel, discord.TextChannel):
-        try:
-            fetched = await guild.fetch_channel(TRANSCRIPT_CHANNEL_ID)
-            log_channel = fetched if isinstance(fetched, discord.TextChannel) else None
-        except (discord.Forbidden, discord.NotFound, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
-            log.warning("Could not resolve ticket transcript channel %s: %s", TRANSCRIPT_CHANNEL_ID, exc)
-            log_channel = None
+    # Keep the archived transcript text for a rating submitted after the ticket disappears.
+    filename = f"transcript-{channel.name}.txt"
+    if transcript_record is not None:
+        transcript_record["text"] = transcript_text
+        transcript_record["filename"] = filename
+
+    # Send one closure report and the full transcript attachment to #server-logs.
+    log_channel = await _resolve_ticket_close_logs(guild)
     if isinstance(log_channel, discord.TextChannel):
         stars = WING_PIN_EMOJI * rating if rating else "—"
         log_embed = _base_embed(
-            title="<:Support:1540927430179553321>  Ticket Transcript",
+            title=f"{CHECKMARK_EMOJI}  Ticket Closed | Transcript",
             description=(
-                f"**Channel:** #{channel.name}\n"
-                f"**Opened by:** {owner.mention if owner else 'Unknown'}\n"
+                f"**Ticket:** #{channel.name} (`{channel.id}`)\n"
+                f"**Customer:** {owner.mention if owner else (f'<@{owner_id}>' if owner_id else 'Unknown')}\n"
                 f"**Closed by:** {closer.mention}\n"
-                f"**Reason:** {reason}\n"
-                f"**Rating:** {stars} ({rating_line})"
+                f"**Closure Reason:** {reason}\n"
+                f"**Rating:** {stars} ({rating_line})\n"
+                f"**Transcript:** Attached below as `{filename}`."
             ),
         )
         _set_brand_image(log_embed, DIVIDER_URL)
         file = discord.File(
-            fp=__import__("io").BytesIO(transcript_text.encode()),
-            filename=f"transcript-{channel.name}.txt",
+            fp=__import__("io").BytesIO(transcript_text.encode("utf-8")),
+            filename=filename,
         )
         try:
-            return await log_channel.send(embed=log_embed, file=file)
+            return await log_channel.send(
+                embed=log_embed, file=file,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
         except (discord.Forbidden, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
-            log.warning("Ticket transcript upload failed for %s: %s; retrying without attachment.", channel.id, exc)
-            return await log_channel.send(embed=log_embed)
-    log.warning("Ticket %s closed but transcript channel %s was unavailable.", channel.id, TRANSCRIPT_CHANNEL_ID)
+            log.warning("Ticket transcript upload failed for %s: %s; retrying closure report without attachment.",
+                        channel.id, exc)
+            # The reason and rating must still be logged if the attachment cannot be uploaded.
+            log_embed.description = (log_embed.description or "").replace(
+                f"**Transcript:** Attached below as `{filename}`.",
+                "**Transcript:** Attachment unavailable; see bot logs for the upload error.",
+            )
+            return await log_channel.send(
+                embed=log_embed, allowed_mentions=discord.AllowedMentions.none(),
+            )
+    log.warning("Ticket %s closed but #server-logs and transcript archive were unavailable.", channel.id)
     return None
 
 async def _finalize_ticket(
@@ -933,11 +979,12 @@ async def _finalize_ticket(
     reason: str,
     rating: int | None,
     close_deadline: float | None = None,
+    transcript_record: dict[str, str] | None = None,
 ) -> discord.Message | None:
     """Archive a ticket when possible, but always attempt to delete it."""
     archive_message: discord.Message | None = None
     try:
-        archive_message = await _archive_ticket(channel, closer, reason, rating)
+        archive_message = await _archive_ticket(channel, closer, reason, rating, transcript_record)
     except (discord.Forbidden, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
         # A transcript/DM failure must not leave a channel stuck open.
         log.warning("Could not fully archive ticket %s: %s", channel.id, exc)
@@ -1034,6 +1081,7 @@ class CloseReasonModal(discord.ui.Modal, title="Close Ticket — Delta Air Lines
             self._closer,
             self.reason.value,
             rating=view.rating,
+            transcript_record=view.archive_transcript,
         )
 
 
@@ -1059,6 +1107,7 @@ class RatingView(discord.ui.View):
         self.rating: int | None = None
         self.message: discord.Message | None = None
         self.archive_message: discord.Message | None = None
+        self.archive_transcript: dict[str, str] = {}
 
         for label, value, style in self.STARS:
             button: discord.ui.Button = discord.ui.Button(
@@ -1126,6 +1175,27 @@ class RatingView(discord.ui.View):
         else:
             lines.append(rating_line)
         embed.description = "\n".join(lines)
+
+        # Rewrite the rating within the attached transcript as well, when possible.
+        transcript = self.archive_transcript.get("text")
+        if transcript:
+            updated = re.sub(
+                r"(?m)^  RATING       :.*$",
+                f"  RATING       : {stars} / 5 {WING_PIN_EMOJI}",
+                transcript,
+                count=1,
+            )
+            filename = self.archive_transcript.get("filename", "ticket-transcript.txt")
+            file = discord.File(
+                fp=__import__("io").BytesIO(updated.encode("utf-8")),
+                filename=filename,
+            )
+            try:
+                await self.archive_message.edit(embed=embed, attachments=[file])
+                self.archive_transcript["text"] = updated
+                return
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
+                log.warning("Could not replace archived ticket transcript with new rating: %s", exc)
         try:
             await self.archive_message.edit(embed=embed)
         except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
