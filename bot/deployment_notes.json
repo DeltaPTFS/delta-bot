@@ -1,24 +1,30 @@
 {
-  "title": "Ticket Closure Logs & Rating Transcripts",
-  "summary": "Closed support tickets now create a detailed #server-logs report with the closing reason, customer rating, and downloadable conversation transcript.",
+  "title": "Final-Deployment Release Announcements",
+  "summary": "HelpDesk updates now announce only once a release is complete, rather than sending the same message after every small deployment.",
   "added": [
-    "Post each ticket's closure reason, customer, closing staff member, rating status, and complete text transcript to #server-logs.",
-    "Update the archived log and transcript attachment when a customer submits their rating after the ticket is closed."
+    "Release announcements are explicitly finalized in deployment notes on the last update commit and then wait three minutes for the deployment to stabilize.",
+    "Check #server-logs for an existing announcement of the same version before sending any new message."
   ],
   "changed": [
-    "Locate #server-logs by its channel name, or use SERVER_LOG_CHANNEL_ID when the channel ID is provided.",
-    "Mark ratings as awaiting customer feedback until the 15-day rating window ends; keep the ticket deletion countdown unchanged.",
-    "Retain the legacy transcript archive as a fallback when #server-logs is unavailable."
+    "Intermediate code pushes and automatic redeployments no longer trigger update messages or founder DMs.",
+    "Repeated deployments of the same version do not generate repeat release announcements.",
+    "Release announcements are withheld if the bot cannot read the log history, instead of risking duplicate messages."
   ],
   "removed": [],
   "history": [
     {
+      "version": "3.0.3",
+      "summary": "Ticket closure reasons, customer ratings, and downloadable transcripts in #server-logs."
+    },
+    {
       "version": "3.0.2",
-      "summary": "CheckMark acknowledgements for successful customer DMs and cleaner support reply embeds."
+      "summary": "CheckMark reactions on relayed customer DMs and cleaner HelpDesk replies."
     },
     {
       "version": "3.0.1",
-      "summary": "Ticket commands and release announcement delivery fixes."
+      "summary": "Ticket command sync and deployment notification reliability."
     }
-  ]
+  ],
+  "release_version": "3.0.4",
+  "announce_on_final_deployment": false
 }
