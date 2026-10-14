@@ -22,7 +22,10 @@ TRANSCRIPT_CHANNEL_ID = 1539005101941850274
 SERVER_LOG_CHANNEL_ID = int(os.getenv("SERVER_LOG_CHANNEL_ID", "0"))
 UPDATE_CHANNEL_ID = TRANSCRIPT_CHANNEL_ID
 LOUNGE_CHANNEL_ID = int(os.getenv("LOUNGE_CHANNEL_ID", "0"))
-BOT_VERSION = "3.0.3"
+BOT_VERSION = "3.0.4"
+# Finalized release announcements wait for the deployment to stabilize; ordinary pushes stay silent.
+RELEASE_ANNOUNCEMENT_DELAY_SECONDS = max(0, int(os.getenv("RELEASE_ANNOUNCEMENT_DELAY_SECONDS", "180")))
+
 
 # ── Runtime behavior ─────────────────────────────────────────────────────────
 TICKET_CLOSE_DELAY = 5
