@@ -98,7 +98,7 @@ class StartupTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_customer_dm_reply_has_no_redundant_delta_support_author(self):
         embed = main.anonymous_support_reply_embed("We received your message.")
-        self.assertIsNone(embed.author)
+        self.assertIsNone(getattr(embed.author, "name", None))
         self.assertIn("Delta Support Reply", embed.description)
         self.assertIn("We received your message.", embed.description)
         self.assertEqual(embed.footer.text, main.FOOTER_TEXT)
