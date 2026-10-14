@@ -1,31 +1,19 @@
 {
-  "title": "HelpDesk 3.0.1 — Ticket Commands & Update Delivery",
-  "summary": "Standalone ticket commands now sync to the Delta server, and deployment announcements can send again.",
+  "title": "DM Reply Acknowledgements & Cleaner Support Replies",
+  "summary": "Customer DM replies now receive a CheckMark acknowledgement after successful forwarding, and support replies have a cleaner appearance.",
   "added": [
-    "Server-synced /claim, /unclaim, and /close commands using the existing ticket workflow."
+    "A <:CheckMark:1544505870904459264> reaction appears beneath a customer's original DM only after the message is successfully relayed to the support ticket."
   ],
   "changed": [
-    "Register ticket extensions before copying commands to the server and keep global commands cleared.",
-    "Fix the presence error that stopped startup before posting the update message.",
-    "Keep update delivery running if the presence change fails and open close-reason forms before audit logging."
+    "Removed the extra **Delta Support** label above the **Delta Support Reply** embed while keeping the reply title, message and footer.",
+    "Fixed a relay interruption so customer DMs reach the ticket before the acknowledgement is added.",
+    "Ticket-channel messages remain staff-only discussion and do **not** receive automatic checkmark reactions."
   ],
   "removed": [],
   "history": [
     {
-      "version": "2.6.0",
-      "summary": "Ticket message controls, customer pings, Founder support controls, and ticket-only logs."
-    },
-    {
-      "version": "2.6.1–2.6.5",
-      "summary": "Incremental ticket management and support workflow updates."
-    },
-    {
-      "version": "2.6.6",
-      "summary": "Transcript delivery fixes and updated DM panel notice."
-    },
-    {
-      "version": "2.6.7",
-      "summary": "Department-specific support instructions and corrected Grey R. mentions."
+      "version": "3.0.1",
+      "summary": "Ticket command sync and deployment announcement reliability."
     }
   ]
 }
