@@ -159,6 +159,63 @@ class StartupTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("do **not** receive automatic checkmark reactions", update)
         self.assertIn("Delta Support Reply", update)
 
+    async def test_ticket_closure_archive_resolves_server_logs_by_name(self):
+        log_channel = MagicMock(spec=discord.TextChannel)
+        log_channel.name = "server-logs"
+        log_channel.id = 555123
+        self.channel.guild.text_channels = [log_channel]
+        with patch.object(main, "SERVER_LOG_CHANNEL_ID", 0):
+            target = await main._resolve_ticket_close_logs(self.channel.guild)
+        self.assertIs(target, log_channel)
+
+    async def test_ticket_close_report_includes_reason_rating_and_transcript(self):
+        log_channel = MagicMock(spec=discord.TextChannel)
+        log_channel.name = "server-logs"
+        log_channel.id = 555123
+        log_channel.send = AsyncMock(return_value=SimpleNamespace(id=1234))
+        self.channel.guild.text_channels = [log_channel]
+        self.channel.guild.get_member.return_value = SimpleNamespace(mention="<@789>")
+        self.channel.history.side_effect = lambda **kwargs: history()
+        record = {}
+        with patch.object(main, "SERVER_LOG_CHANNEL_ID", 0):
+            archive = await main._archive_ticket(
+                self.channel, self.member, "Issue resolved after assistance", 4, record
+            )
+        self.assertEqual(archive.id, 1234)
+        log_channel.send.assert_awaited_once()
+        sent = log_channel.send.call_args.kwargs
+        self.assertIn("Ticket Closed", sent["embed"].title)
+        self.assertIn("Issue resolved after assistance", sent["embed"].description)
+        self.assertIn("**Rating:**", sent["embed"].description)
+        self.assertIn("4 / 5", sent["embed"].description)
+        self.assertIn("transcript-", sent["file"].filename)
+        transcript = sent["file"].fp.getvalue().decode("utf-8")
+        self.assertIn("CLOSE REASON : Issue resolved after assistance", transcript)
+        self.assertIn("RATING       : 4 / 5", transcript)
+        self.assertEqual(record["text"], transcript)
+        self.assertEqual(sent["allowed_mentions"].everyone, False)
+
+    async def test_late_customer_rating_updates_report_and_transcript(self):
+        view = main.RatingView(owner_id=789)
+        report = discord.Embed(description=(
+            "**Closure Reason:** Issue resolved\\n"
+            "**Rating:** — (Awaiting customer rating (up to 15 days))"
+        ))
+        record_message = SimpleNamespace(embeds=[report], edit=AsyncMock())
+        view.archive_message = record_message
+        view.archive_transcript = {
+            "text": "  CLOSE REASON : Issue resolved\\n"
+                    "  RATING       : Awaiting customer rating (up to 15 days)\\n",
+            "filename": "transcript-test.txt",
+        }
+        await view._update_archived_rating(5)
+        record_message.edit.assert_awaited_once()
+        sent = record_message.edit.call_args.kwargs
+        self.assertIn("5 / 5", sent["embed"].description)
+        updated_text = sent["attachments"][0].fp.getvalue().decode("utf-8")
+        self.assertIn("RATING       : 5 / 5", updated_text)
+        self.assertIn("CLOSE REASON : Issue resolved", updated_text)
+
     async def test_registration_is_repeatable(self):
         main.register_commands(self.bot.tree)
         runtime_ticket_controls.register_extra_commands(self.bot.tree)
