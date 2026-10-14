@@ -679,8 +679,6 @@ async def relay_customer_message(message: discord.Message, channel: discord.Text
             if prior.description == embed.description and prior.timestamp == embed.timestamp:
                 return False
         await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-        if followup:
-            await channel.send(followup, allowed_mentions=discord.AllowedMentions.none())
 
     # A reaction is only an acknowledgement. If Discord rate-limits or rejects
     # it, the already-delivered support message must not be treated as failed and
@@ -738,7 +736,6 @@ def anonymous_support_reply_embed(
         description=f"{MESSAGE_EMOJI} **Delta Support Reply**\n\n{safe_content}",
         color=DELTA_BLUE,
     )
-    embed.set_author(name="Delta Support")
     embed.set_footer(text=FOOTER_TEXT)
     embed.timestamp = timestamp
     return embed
