@@ -26,5 +26,5 @@
     }
   ],
   "release_version": "3.0.4",
-  "announce_on_final_deployment": false
+  "announce_on_final_deployment": true
 }
