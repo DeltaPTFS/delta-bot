@@ -34,7 +34,6 @@ load_dotenv()
 # Load interaction helpers explicitly; Python does not discover this local
 # sitecustomize module automatically in every hosting/test startup mode.
 import sitecustomize
-from skymiles_panel import publish_skymiles
 
 from config import (
     ADMIN_ROLE_ID,
@@ -1695,40 +1694,6 @@ def register_commands(tree: app_commands.CommandTree) -> None:
         await interaction.followup.send(
             embed=success_embed("The private DM Assistance Panel was posted successfully."),
             ephemeral=True,
-        )
-
-    @tree.command(
-        name="skymiles",
-        description="Post the SkyMiles sign-up announcement and website button.",
-    )
-    @staff_only()
-    @app_commands.describe(
-        top_banner="Optional image displayed above the sign-up information.",
-        bottom_banner="Optional image displayed below the information and above the button.",
-    )
-    async def skymiles(
-        interaction: discord.Interaction,
-        top_banner: discord.Attachment | None = None,
-        bottom_banner: discord.Attachment | None = None,
-    ) -> None:
-        if not isinstance(interaction.channel, discord.TextChannel):
-            await interaction.response.send_message(
-                "Use this command in a server text channel.", ephemeral=True
-            )
-            return
-        await interaction.response.defer(ephemeral=True)
-        try:
-            await publish_skymiles(
-                interaction.channel, top_banner=top_banner, bottom_banner=bottom_banner
-            )
-        except (discord.HTTPException, ValueError) as exc:
-            await interaction.followup.send(
-                embed=error_embed(f"Could not post SkyMiles sign-up: {str(exc)[:200]}"),
-                ephemeral=True,
-            )
-            return
-        await interaction.followup.send(
-            embed=success_embed("SkyMiles sign-up announcement posted."), ephemeral=True
         )
 
     @tree.command(name="version", description="Show the running HelpDesk status and release.")
