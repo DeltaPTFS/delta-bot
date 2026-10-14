@@ -136,6 +136,29 @@ class StartupTests(unittest.IsolatedAsyncioTestCase):
         self.channel.send.assert_awaited_once()
         message.add_reaction.assert_awaited_once_with(main.CHECKMARK_EMOJI)
 
+    async def test_ticket_channel_messages_do_not_get_checkmark_reactions(self):
+        # Only a customer's original DM should be acknowledged. Staff messages
+        # within the ticket channel remain untouched.
+        ticket_message = MagicMock(spec=discord.Message)
+        ticket_message.author.bot = False
+        ticket_message.channel = self.channel
+        ticket_message.guild = self.channel.guild
+        ticket_message.add_reaction = AsyncMock()
+        self.bot._moderate_lounge_message = AsyncMock(return_value=False)
+
+        await self.bot.on_message(ticket_message)
+
+        ticket_message.add_reaction.assert_not_awaited()
+        self.channel.send.assert_not_awaited()
+
+    async def test_release_notes_specify_dm_only_reactions(self):
+        update = main.build_release_update_message()
+        self.assertIn("Delta HelpDesk — Update", update)
+        self.assertIn("CheckMark", update)
+        self.assertIn("original DM", update)
+        self.assertIn("do **not** receive automatic checkmark reactions", update)
+        self.assertIn("Delta Support Reply", update)
+
     async def test_registration_is_repeatable(self):
         main.register_commands(self.bot.tree)
         runtime_ticket_controls.register_extra_commands(self.bot.tree)
