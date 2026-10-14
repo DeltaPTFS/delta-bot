@@ -2324,8 +2324,9 @@ class DeltaBot(commands.Bot):
                 await founder.send(
                     f"**Delta HelpDesk — Update {BOT_VERSION}**\n"
                     f"Deployment: `{deployed_source()}`\n"
-                    "Updated ticket commands, reply delivery, Watching status, "
-                    "and Leadership Application availability."
+                    "Customer DMs receive a CheckMark only after successful "
+                    "forwarding; reply embeds no longer show the extra Delta Support "
+                    "label. Ticket-channel messages receive no automatic reactions."
                 )
                 self._founder_update_dm_sent = True
             except (discord.Forbidden, discord.HTTPException, aiohttp.ClientError, OSError) as exc:
