@@ -198,14 +198,14 @@ class StartupTests(unittest.IsolatedAsyncioTestCase):
     async def test_late_customer_rating_updates_report_and_transcript(self):
         view = main.RatingView(owner_id=789)
         report = discord.Embed(description=(
-            "**Closure Reason:** Issue resolved\\n"
+            "**Closure Reason:** Issue resolved\n"
             "**Rating:** — (Awaiting customer rating (up to 15 days))"
         ))
         record_message = SimpleNamespace(embeds=[report], edit=AsyncMock())
         view.archive_message = record_message
         view.archive_transcript = {
-            "text": "  CLOSE REASON : Issue resolved\\n"
-                    "  RATING       : Awaiting customer rating (up to 15 days)\\n",
+            "text": "  CLOSE REASON : Issue resolved\n"
+                    "  RATING       : Awaiting customer rating (up to 15 days)\n",
             "filename": "transcript-test.txt",
         }
         await view._update_archived_rating(5)
