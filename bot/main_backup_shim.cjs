@@ -11,6 +11,43 @@ const mainRequire = createRequire(path.join(process.cwd(), "package.json"));
 const discord = mainRequire("discord.js");
 const { ApplicationCommandManager, Client, Events } = discord;
 
+
+// Keep the source checkout unmodified, but never send a deployment-update
+// announcement merely because someone enabled the emergency backup. Release
+// notices are coordinated by HelpDesk's final-deployment guard instead.
+const fs = require("node:fs");
+const Module = require("node:module");
+const originalJsLoader = Module._extensions[".js"];
+const sourceEntry = path.resolve(process.cwd(), "src/index.js");
+const startupNotice = [
+  "  for (const guild of readyClient.guilds.cache.values()) {",
+  "    await postReplaceableUpdate(guild, { createOnly: true })",
+  "      .catch((error) => console.error(",
+].join("\n");
+Module._extensions[".js"] = function loadBackupModule(module, filename) {
+  if (path.resolve(filename) !== sourceEntry) return originalJsLoader(module, filename);
+  let source = fs.readFileSync(filename, "utf8");
+  if (!source.includes(startupNotice)) {
+    throw new Error("Main bot changed its startup notice: review before enabling backup.");
+  }
+  source = source.replace(
+    "  for (const guild of readyClient.guilds.cache.values()) {\n" +
+    "    await postReplaceableUpdate(guild, { createOnly: true })\n" +
+    "      .catch((error) => console.error(\`Could not post update for \${guild.id}:\`, error));\n" +
+    "  }\n",
+    "  // HelpDesk backup: never announce a new main-bot release on activation.\n"
+  );
+  // Optional duplicate-log prevention when HelpDesk already handles server logs.
+  if (process.env.MAIN_BACKUP_SKIP_DUPLICATE_LOGS !== "0") {
+    source = source.replace(
+      "async function sendServerLog(guild, embed, pingLeadership = false) {\n",
+      "async function sendServerLog(guild, embed, pingLeadership = false) {\n" +
+      "  if (process.env.MAIN_BACKUP_ACTIVE === '1') return;\n"
+    );
+  }
+  module._compile(source, filename);
+};
+
 const aliases = Object.freeze({
   "format": "main-format",
   "skymiles": "main-skymiles",
