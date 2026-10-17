@@ -60,6 +60,7 @@ class MainBackup:
         self._watch_task: asyncio.Task | None = None
         self._ready: asyncio.Event | None = None
         self._start_error = ""
+        self._registered = False
         self._enabled = self._load_enabled()
 
     def _load_enabled(self) -> bool:
@@ -102,6 +103,7 @@ class MainBackup:
         async for raw in process.stdout:
             message = raw.decode("utf-8", errors="replace").rstrip()
             if READY_MESSAGE in message:
+                self._registered = True
                 if self._ready is not None:
                     self._ready.set()
             if "Discord command registration failed:" in message:
@@ -123,6 +125,7 @@ class MainBackup:
         shim = Path(__file__).resolve().with_name("main_backup_shim.cjs")
         self._ready = asyncio.Event()
         self._start_error = ""
+        self._registered = False
         try:
             self.process = await asyncio.create_subprocess_exec(
                 "node", "--require", str(shim), "src/index.js",
@@ -131,8 +134,8 @@ class MainBackup:
             )
             self._stdout_task = asyncio.create_task(self._read_output(self.process))
             await asyncio.wait_for(self._ready.wait(), timeout=90)
-            if self._start_error or self.process.returncode is not None:
-                raise RuntimeError(self._start_error or "Main bot process stopped during startup.")
+            if self._start_error or not self._registered or self.process.returncode is not None:
+                raise RuntimeError(self._start_error or "Main bot did not finish registering its commands.")
         except Exception:
             await self._terminate()
             raise
@@ -234,28 +237,27 @@ def register_commands(tree: app_commands.CommandTree, backup: MainBackup) -> Non
                 or any(role.id == ADMIN_ROLE_ID for role in member.roles))
 
     @main.command(name="enable", description="Activate the main Delta bot on HelpDesk")
-    @app_commands.check(authorized)
     async def enable(interaction: discord.Interaction) -> None:
+        if not await authorized(interaction):
+            await interaction.response.send_message("Only Delta administrators can manage the backup.", ephemeral=True)
+            return
         await interaction.response.defer(ephemeral=True, thinking=True)
         await interaction.followup.send(await backup.enable(), ephemeral=True)
 
     @main.command(name="disable", description="Stop the main Delta backup and keep HelpDesk running")
-    @app_commands.check(authorized)
     async def disable(interaction: discord.Interaction) -> None:
+        if not await authorized(interaction):
+            await interaction.response.send_message("Only Delta administrators can manage the backup.", ephemeral=True)
+            return
         await interaction.response.defer(ephemeral=True, thinking=True)
         await interaction.followup.send(await backup.disable(), ephemeral=True)
 
     @main.command(name="status", description="Check if the emergency Delta backup is active")
-    @app_commands.check(authorized)
     async def status(interaction: discord.Interaction) -> None:
+        if not await authorized(interaction):
+            await interaction.response.send_message("Only Delta administrators can manage the backup.", ephemeral=True)
+            return
         await interaction.response.send_message(backup.status(), ephemeral=True)
-
-    @delta.error
-    async def group_error(interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
-        if interaction.response.is_done():
-            await interaction.followup.send("You need Delta administrative access to use this.", ephemeral=True)
-        else:
-            await interaction.response.send_message("You need Delta administrative access to use this.", ephemeral=True)
 
     delta.add_command(main)
     tree.add_command(delta)
