@@ -2339,7 +2339,13 @@ class DeltaBot(commands.Bot):
         # Extensions must be registered before copy_global_to, not during sync.
         import runtime_ticket_controls
         runtime_ticket_controls.register_extra_commands(self.tree)
+        # The backup is a separate Node process and stays off unless enabled.
+        # Register its owner-only controls before the existing HelpDesk sync.
+        import main_backup
+        self.main_backup = main_backup.MainBackup(self)
+        main_backup.register_commands(self.tree, self.main_backup)
         await self._sync_application_commands()
+        await self.main_backup.restore_on_start()
 
     async def _sync_application_commands(self) -> None:
         """Replace stale commands and retry guild sync for deployment startup."""
