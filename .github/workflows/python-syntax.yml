@@ -17,6 +17,8 @@ jobs:
         run: pip install -r requirements.txt
       - name: Validate Python syntax
         run: python -m compileall -q bot
+      - name: Validate main-bot fallback shim
+        run: node --check bot/main_backup_shim.cjs
       - name: Validate support formats
         run: python -m json.tool bot/support_formats.json >/dev/null
       - name: Validate bot messages
