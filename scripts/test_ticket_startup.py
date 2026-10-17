@@ -89,9 +89,12 @@ class StartupTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(synced[0], (None, set()))
         self.assertEqual(synced[1], (main.GUILD_ID, {
             "panel", "version", "reply", "format", "ticket",
-            "claim", "unclaim", "close", "ping", "message", "msg",
+            "claim", "unclaim", "close", "ping", "message", "msg", "delta",
         }))
         self.assertEqual(self.bot.tree.get_commands(), [])
+        delta = self.bot.tree.get_command("delta", guild=discord.Object(id=main.GUILD_ID))
+        main_control = delta.get_command("main")
+        self.assertEqual({command.name for command in main_control.commands}, {"enable", "disable", "status"})
         admin = self.bot.tree.get_command("ticket", guild=discord.Object(id=main.GUILD_ID)).get_command("admin")
         choices = next(parameter.choices for parameter in admin.parameters if parameter.name == "command")
         self.assertTrue({"ban_support", "unban_support"}.issubset({choice.value for choice in choices}))
