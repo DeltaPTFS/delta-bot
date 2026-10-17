@@ -154,13 +154,13 @@ class StartupTests(unittest.IsolatedAsyncioTestCase):
         ticket_message.add_reaction.assert_not_awaited()
         self.channel.send.assert_not_awaited()
 
-    async def test_release_notes_specify_dm_only_reactions(self):
+    async def test_release_notes_reflect_final_deployment_policy(self):
         update = main.build_release_update_message()
         self.assertIn("Delta HelpDesk — Update", update)
-        self.assertIn("CheckMark", update)
-        self.assertIn("original DM", update)
-        self.assertIn("do **not** receive automatic checkmark reactions", update)
-        self.assertIn("Delta Support Reply", update)
+        self.assertIn("Final-Deployment Release Announcements", update)
+        self.assertIn("only once", update)
+        self.assertIn("#server-logs", update)
+        self.assertIn("Deployment ID:", update)
 
     async def test_ticket_closure_archive_resolves_server_logs_by_name(self):
         log_channel = MagicMock(spec=discord.TextChannel)
