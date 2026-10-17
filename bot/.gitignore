@@ -28,3 +28,6 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Runtime-only Delta main-bot checkout and persisted toggle
+.main_backup/
