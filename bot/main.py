@@ -2396,7 +2396,7 @@ class DeltaBot(commands.Bot):
                 activity=discord.Activity(
                     type=discord.ActivityType.watching,
                     # Discord activity names do not render custom emoji markup.
-                    name="Tickets are boarding ✈️",
+                    name="Staff not claim their tickets smh🎃✈️",
                 )
             )
         except (discord.HTTPException, aiohttp.ClientError, OSError, TypeError) as exc:
