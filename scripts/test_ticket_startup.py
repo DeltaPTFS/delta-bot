@@ -89,9 +89,12 @@ class StartupTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(synced[0], (None, set()))
         self.assertEqual(synced[1], (main.GUILD_ID, {
             "panel", "version", "reply", "format", "ticket",
-            "claim", "unclaim", "close", "ping", "message", "msg",
+            "claim", "unclaim", "close", "ping", "message", "msg", "delta",
         }))
         self.assertEqual(self.bot.tree.get_commands(), [])
+        delta = self.bot.tree.get_command("delta", guild=discord.Object(id=main.GUILD_ID))
+        main_control = delta.get_command("main")
+        self.assertEqual({command.name for command in main_control.commands}, {"enable", "disable", "status"})
         admin = self.bot.tree.get_command("ticket", guild=discord.Object(id=main.GUILD_ID)).get_command("admin")
         choices = next(parameter.choices for parameter in admin.parameters if parameter.name == "command")
         self.assertTrue({"ban_support", "unban_support"}.issubset({choice.value for choice in choices}))
@@ -151,13 +154,13 @@ class StartupTests(unittest.IsolatedAsyncioTestCase):
         ticket_message.add_reaction.assert_not_awaited()
         self.channel.send.assert_not_awaited()
 
-    async def test_release_notes_specify_dm_only_reactions(self):
+    async def test_release_notes_reflect_final_deployment_policy(self):
         update = main.build_release_update_message()
         self.assertIn("Delta HelpDesk — Update", update)
-        self.assertIn("CheckMark", update)
-        self.assertIn("original DM", update)
-        self.assertIn("do **not** receive automatic checkmark reactions", update)
-        self.assertIn("Delta Support Reply", update)
+        self.assertIn("Final-Deployment Release Announcements", update)
+        self.assertIn("only once", update)
+        self.assertIn("#server-logs", update)
+        self.assertIn("Deployment ID:", update)
 
     async def test_ticket_closure_archive_resolves_server_logs_by_name(self):
         log_channel = MagicMock(spec=discord.TextChannel)
