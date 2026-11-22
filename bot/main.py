@@ -83,6 +83,8 @@ XMARK_EMOJI                = "❌"
 # posted and then create duplicate embeds.
 CUSTOMER_RELAY_LOCKS: dict[int, asyncio.Lock] = {}
 
+DELTA_AD_MESSAGE = "## Delta Air Lines | SkyTeam\n\n-# 1021 N Outer Loop Rd, East Point, GA, 30344.\n\n> **Delta Air Lines,** based in [**Atlanta Georgia**](https://cdn.discordapp.com/attachments/888866871615574047/1541640215003795577/Delta_Airlines_Skipping_Class_1.png?ex=6a8e53d5&is=6a8d0255&hm=9c8bbca2a41879a3b587d4e5d74da57a7e4836a6e8810bbef912ca305dd3cfc2&) is **one** of the **largest airlines** in the **world.** With **over [5,000](https://cdn.discordapp.com/attachments/888866871615574047/1541640215829942303/Delta_Airlines_Skipping_Class.png?ex=6a8e53d5&is=6a8d0255&hm=d71e7ec744e953c758d36359954e7bc5d17d283432e6518063626ebb8dbb305f&) flights** operated daily. Positing itself as a **[premium focused global airline,](https://cdn.discordapp.com/attachments/1539005076436291685/1540977285128130680/Delta_Airlines_Banner_Bottom.png?ex=6a8de4ae&is=6a8c932e&hm=11e8e1128bf7f39587326d06955556507f4ce9c6f174573db9cb92a516c67784&)** Delta Air Lines aims at providing the **best experience possible** for all our customers. **From Expansion** to more than **300 destinations served** across the **globe,** come see what we can offer for [**yourself.**](https://discord.gg/u8GJF2br2M)"
+
 PANEL_MESSAGE = """## <:DeltaLogo:1540927958116601980> Contact Us | <:SkyTeamLogo:1540927923618316359>
 -# <:Blank:1540951736062312529> <:Connection:1540927881683669013>  1021 N Outer Loop Rd, East Point, GA, 30344.
 
@@ -1681,6 +1683,7 @@ def register_commands(tree: app_commands.CommandTree) -> None:
     # instead of letting CommandAlreadyRegistered terminate the deployment.
     for command_name in (
         "assistance",
+        "ad",
         "panel",
         "hr",
         "leadership",
@@ -1781,6 +1784,30 @@ def register_commands(tree: app_commands.CommandTree) -> None:
             embed=success_embed("The private DM Assistance Panel was posted successfully."),
             ephemeral=True,
         )
+
+    @tree.command(name="ad", description="Post the Delta Air Lines advertisement as a regular message.")
+    @staff_only()
+    async def ad(interaction: discord.Interaction) -> None:
+        channel = interaction.channel
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message(
+                "This command must be used in a server text channel.", ephemeral=True
+            )
+            return
+        await interaction.response.defer(ephemeral=True)
+        try:
+            await channel.send(
+                DELTA_AD_MESSAGE,
+                allowed_mentions=discord.AllowedMentions.none(),
+                suppress_embeds=True,
+            )
+        except (discord.Forbidden, discord.HTTPException) as exc:
+            log.warning("Could not post /ad in channel %s: %s", channel.id, exc)
+            await interaction.followup.send(
+                "I couldn't post the ad here. Check my Send Messages permission.", ephemeral=True
+            )
+            return
+        await interaction.followup.send("Advertisement posted.", ephemeral=True)
 
     @tree.command(name="version", description="Show the running HelpDesk status and release.")
     @staff_only()
