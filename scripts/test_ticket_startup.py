@@ -88,13 +88,23 @@ class StartupTests(unittest.IsolatedAsyncioTestCase):
             await self.bot.setup_hook()
         self.assertEqual(synced[0], (None, set()))
         self.assertEqual(synced[1], (main.GUILD_ID, {
-            "panel", "version", "reply", "format", "ticket",
+            "ad", "panel", "version", "reply", "format", "ticket",
             "claim", "unclaim", "close", "ping", "message", "msg",
         }))
         self.assertEqual(self.bot.tree.get_commands(), [])
         admin = self.bot.tree.get_command("ticket", guild=discord.Object(id=main.GUILD_ID)).get_command("admin")
         choices = next(parameter.choices for parameter in admin.parameters if parameter.name == "command")
         self.assertTrue({"ban_support", "unban_support"}.issubset({choice.value for choice in choices}))
+
+    async def test_ad_posts_plain_text_without_embeds(self):
+        await self.bot.tree.get_command("ad").callback(self.interaction)
+        self.channel.send.assert_awaited_once()
+        sent = self.channel.send.call_args
+        self.assertEqual(sent.args, (main.DELTA_AD_MESSAGE,))
+        self.assertNotIn("embed", sent.kwargs)
+        self.assertNotIn("embeds", sent.kwargs)
+        self.assertTrue(sent.kwargs["suppress_embeds"])
+        self.interaction.response.defer.assert_awaited_once_with(ephemeral=True)
 
     async def test_customer_dm_reply_has_no_redundant_delta_support_author(self):
         embed = main.anonymous_support_reply_embed("We received your message.")
