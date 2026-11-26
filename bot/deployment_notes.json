@@ -1,17 +1,21 @@
 {
-  "title": "Final-Deployment Release Announcements",
-  "summary": "HelpDesk updates now announce only once a release is complete, rather than sending the same message after every small deployment.",
+  "title": "Unified Website & HelpDesk Release Notices",
+  "summary": "Production website and finalized HelpDesk releases now share the designated Discord update channel.",
   "added": [
-    "Release announcements are explicitly finalized in deployment notes on the last update commit and then wait three minutes for the deployment to stabilize.",
-    "Check #server-logs for an existing announcement of the same version before sending any new message."
+    "Monitor the production Delta Roblox website for a new deployment commit and post a release notice.",
+    "Include the website release summary, commit and direct website link."
   ],
   "changed": [
-    "Intermediate code pushes and automatic redeployments no longer trigger update messages or founder DMs.",
-    "Repeated deployments of the same version do not generate repeat release announcements.",
-    "Release announcements are withheld if the bot cannot read the log history, instead of risking duplicate messages."
+    "Send finalized HelpDesk notices only to channel 1539005101941850274.",
+    "Keep intermediate commits, previews and repeated checks silent.",
+    "Existing ticket behavior is unchanged: CheckMark reactions remain on the original DM; ticket-channel messages do **not** receive automatic checkmark reactions. Customer responses retain the Delta Support Reply format."
   ],
   "removed": [],
   "history": [
+    {
+      "version": "3.0.4",
+      "summary": "HelpDesk updates now announce only once a release is complete, rather than sending the same message after every small deployment."
+    },
     {
       "version": "3.0.3",
       "summary": "Ticket closure reasons, customer ratings, and downloadable transcripts in #server-logs."
@@ -25,6 +29,6 @@
       "summary": "Ticket command sync and deployment notification reliability."
     }
   ],
-  "release_version": "3.0.4",
+  "release_version": "3.0.5",
   "announce_on_final_deployment": true
 }

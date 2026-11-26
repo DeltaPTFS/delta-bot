@@ -20,9 +20,9 @@ TRANSCRIPT_CHANNEL_ID = 1539005101941850274
 # Set this to the #server-logs ID for reliable lookup even if its name changes.
 # When unset, the bot locates a channel literally named 'server-logs'.
 SERVER_LOG_CHANNEL_ID = int(os.getenv("SERVER_LOG_CHANNEL_ID", "0"))
-UPDATE_CHANNEL_ID = TRANSCRIPT_CHANNEL_ID
+UPDATE_CHANNEL_ID = 1539005101941850274  # Fixed release-notification destination
 LOUNGE_CHANNEL_ID = int(os.getenv("LOUNGE_CHANNEL_ID", "0"))
-BOT_VERSION = "3.0.4"
+BOT_VERSION = "3.0.5"
 # Finalized release announcements wait for the deployment to stabilize; ordinary pushes stay silent.
 RELEASE_ANNOUNCEMENT_DELAY_SECONDS = max(0, int(os.getenv("RELEASE_ANNOUNCEMENT_DELAY_SECONDS", "180")))
 
