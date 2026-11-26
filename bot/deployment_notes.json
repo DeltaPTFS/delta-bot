@@ -7,7 +7,8 @@
   ],
   "changed": [
     "Send finalized HelpDesk notices only to channel 1539005101941850274.",
-    "Keep intermediate commits, previews and repeated checks silent."
+    "Keep intermediate commits, previews and repeated checks silent.",
+    "Existing ticket behavior is unchanged: CheckMark reactions remain on the original DM; ticket-channel messages do **not** receive automatic checkmark reactions. Customer responses retain the Delta Support Reply format."
   ],
   "removed": [],
   "history": [
