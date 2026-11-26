@@ -15,6 +15,6 @@ When beginning the next update, change the version and release notes in your wor
 Previously sent duplicate announcements are not deleted by this release policy. Deployment ID is retained in the one official version announcement for debugging.
 
 
-## Website releases
+## Service boundary
 
-The regular Delta bot checks `https://roblox-delta-web.vercel.app/release-info` every five minutes. Only a successful production deployment with a valid Git commit SHA qualifies. The notifier checks recent channel history before sending and ignores already-announced commits. Website and HelpDesk updates use the same channel. Vercel preview builds and ordinary Git pushes are not announced. The bot must be online with View Channel, Read Message History and Send Messages permissions. A website deployment that is superseded between polling cycles may not receive its own notice.
+`delta-bot` is HelpDesk only. It must not poll, publish, sync, authenticate for, or otherwise operate the Roblox Delta website. Website releases and website integrations belong to `DeltaPTFS/deltaptfs-bot`. HelpDesk posts only its own finalized release notices to channel `1539005101941850274`.

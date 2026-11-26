@@ -1,17 +1,19 @@
 {
-  "title": "Unified Website & HelpDesk Release Notices",
-  "summary": "Production website and finalized HelpDesk releases now share the designated Discord update channel.",
-  "added": [
-    "Monitor the production Delta Roblox website for a new deployment commit and post a release notice.",
-    "Include the website release summary, commit and direct website link."
-  ],
+  "title": "HelpDesk Service Separation",
+  "summary": "HelpDesk is dedicated to support and ticket operations; website release monitoring is owned by deltaptfs-bot.",
+  "added": [],
   "changed": [
-    "Send finalized HelpDesk notices only to channel 1539005101941850274.",
-    "Keep intermediate commits, previews and repeated checks silent.",
+    "Finalized HelpDesk release notices continue in channel 1539005101941850274.",
     "Existing ticket behavior is unchanged: CheckMark reactions remain on the original DM; ticket-channel messages do **not** receive automatic checkmark reactions. Customer responses retain the Delta Support Reply format."
   ],
-  "removed": [],
+  "removed": [
+    "Removed website deployment polling from HelpDesk."
+  ],
   "history": [
+    {
+      "version": "3.0.5",
+      "summary": "Fixed HelpDesk release notification channel."
+    },
     {
       "version": "3.0.4",
       "summary": "HelpDesk updates now announce only once a release is complete, rather than sending the same message after every small deployment."
@@ -29,6 +31,6 @@
       "summary": "Ticket command sync and deployment notification reliability."
     }
   ],
-  "release_version": "3.0.5",
+  "release_version": "3.0.6",
   "announce_on_final_deployment": true
 }

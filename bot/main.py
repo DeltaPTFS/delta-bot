@@ -2431,11 +2431,6 @@ class DeltaBot(commands.Bot):
 
         authorized_guild = self.get_guild(GUILD_ID)
         self._validate_startup_configuration(authorized_guild)
-        # Website and HelpDesk release notices share the explicitly configured channel.
-        from website_release import monitor_website_releases
-        task = getattr(self, "_website_release_task", None)
-        if self.is_ready() and (task is None or task.done()):
-            self._website_release_task = asyncio.create_task(monitor_website_releases(self))
         # A push is not necessarily the last deployment of this release.
         # Schedule only the finalized version, and never reschedule on reconnect.
         if release_announcement_ready():
