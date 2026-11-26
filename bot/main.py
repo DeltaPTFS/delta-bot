@@ -2431,6 +2431,11 @@ class DeltaBot(commands.Bot):
 
         authorized_guild = self.get_guild(GUILD_ID)
         self._validate_startup_configuration(authorized_guild)
+        # Website and HelpDesk release notices share the explicitly configured channel.
+        from website_release import monitor_website_releases
+        task = getattr(self, "_website_release_task", None)
+        if task is None or task.done():
+            self._website_release_task = asyncio.create_task(monitor_website_releases(self))
         # A push is not necessarily the last deployment of this release.
         # Schedule only the finalized version, and never reschedule on reconnect.
         if release_announcement_ready():
@@ -2510,10 +2515,7 @@ class DeltaBot(commands.Bot):
             log.info("Skipping intermediate commit %s (HelpDesk %s).", deployed_source(), BOT_VERSION)
             return False
 
-        guild = self.get_guild(GUILD_ID)
-        channel = await _resolve_ticket_close_logs(guild) if isinstance(guild, discord.Guild) else None
-        if not isinstance(channel, discord.TextChannel):
-            channel = self.get_channel(UPDATE_CHANNEL_ID)
+        channel = self.get_channel(UPDATE_CHANNEL_ID)
         if not isinstance(channel, discord.TextChannel):
             try:
                 fetched = await self.fetch_channel(UPDATE_CHANNEL_ID)
